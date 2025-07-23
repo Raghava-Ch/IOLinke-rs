@@ -29,6 +29,41 @@ pub enum IoLinkMode {
     Com3 = 3,
 }
 
+/// All the timers used in IO-Link
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Timer {
+    /// See Table 42 – Wake-up procedure and retry characteristics
+    Tdsio
+}
+
+/// All the master commands used in IO-Link
+/// See Table B.2 – Types of MasterCommands
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MasterCommand {
+    ///MasterCommand = 0x5A
+    INACTIVE,
+    ///MasterCommand = 0x97
+    STARTUP,
+    ///MasterCommand = 0x9A
+    PREOPERATE,
+    ///MasterCommand = 0x99
+    OPERATE,
+    ///MasterCommand = 0x5A
+    FALLBACK,
+}
+
+/// All the message handler information type
+/// See 7.2.2.6
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MHInfo {
+    /// lost communication)
+    COMlost,
+    /// unexpected M-sequence type detected
+    IllegalMessagetype,
+    /// Checksum error detected
+    ChecksumMismatch,
+}
+
 /// Physical layer status
 /// See IO-Link v1.1.4 Section 5.2.3
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,6 +178,11 @@ pub enum IoLinkError {
     HardwareError,
     /// Protocol error
     ProtocolError,
+    
+    /// Cycle Error, This is a custom error type
+    CycleError,
+    /// Invalid Event Error, This is a custom error type
+    InvalidEvent,
 }
 
 /// Result type for IO-Link operations
@@ -160,21 +200,6 @@ pub struct DeviceIdentification {
     pub function_id: u16,
     /// Reserved field
     pub reserved: u8,
-}
-
-/// Master command types
-/// See IO-Link v1.1.4 Section 7.3.3
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum MasterCommand {
-    /// Master command
-    MasterCommand = 0x00,
-    /// Parameter request
-    ParameterRequest = 0x01,
-    /// Direct parameter 1
-    DirectParameter1 = 0x02,
-    /// Direct parameter 2
-    DirectParameter2 = 0x03,
 }
 
 /// Device status word
