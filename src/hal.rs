@@ -6,13 +6,6 @@
 use crate::types::{IoLinkError, IoLinkMode, IoLinkResult, PhysicalLayerStatus};
 use embedded_hal::digital::{InputPin, OutputPin};
 
-/// All the timers used in IO-Link
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Timer {
-    /// See Table 42 – Wake-up procedure and retry characteristics
-    Tdsio
-}
-
 /// Physical Layer trait for low-level UART/PHY access
 /// See IO-Link v1.1.4 Section 5.2 and Figure 13
 pub trait PhysicalLayer {
