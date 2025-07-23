@@ -1,0 +1,47 @@
+[package]
+name = "iolink_device_stack"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "IO-Link Device/Slave stack implementation compliant with IO-Link Specification v1.1.4"
+license = "GPL-3"
+repository = "https://github.com/your-org/iolink_device_stack"
+readme = "README.md"
+keywords = ["iolink", "embedded", "no-std", "device", "slave"]
+categories = ["embedded", "no-std"]
+
+[dependencies]
+smlang = "0.8"
+heapless = "0.8"
+embedded-hal = "1.0"
+cstr_core = "0.2"
+log = "0.4"
+nom = { version = "7.1", default-features = false }
+nb = "1.1"
+
+[dependencies.cortex-m]
+version = "0.7"
+optional = true
+
+[dependencies.panic-halt]
+version = "0.2"
+optional = true
+
+[features]
+default = []
+std = []
+cortex-m = ["dep:cortex-m"]
+panic-halt = ["dep:panic-halt"]
+
+[build-dependencies]
+# cbindgen = "0.27"
+
+[[example]]
+name = "basic_device"
+required-features = ["panic-halt"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
