@@ -148,8 +148,7 @@ cargo test --features mock-hal
 
 Licensed under either of
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT License ([LICENSE-MIT](LICENSE-MIT))
+- GPL-3.0
 
 at your option.
 

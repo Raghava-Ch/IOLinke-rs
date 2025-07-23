@@ -3,11 +3,11 @@ name = "iolink_device_stack"
 version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
-description = "IO-Link Device/Slave stack implementation compliant with IO-Link Specification v1.1.4"
+description = "IO-Link Device stack implementation compliant with IO-Link Specification v1.1.4"
 license = "GPL-3"
 repository = "https://github.com/your-org/iolink_device_stack"
 readme = "README.md"
-keywords = ["iolink", "embedded", "no-std", "device", "slave"]
+keywords = ["iolink", "embedded", "no-std", "device"]
 categories = ["embedded", "no-std"]
 
 [dependencies]
