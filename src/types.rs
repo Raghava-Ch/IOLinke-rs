@@ -196,6 +196,9 @@ pub enum IoLinkError {
     CycleError,
     /// Invalid Event Error, This is a custom error type
     InvalidEvent,
+    /// Nothing to do, 
+    /// This is a custom error type for dummy trait functions
+    NoActionNeeded,
 }
 
 /// Result type for IO-Link operations
