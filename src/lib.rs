@@ -19,24 +19,18 @@
 //! - System: Application Layer, Event State Machine, System Management
 //! - Storage: Parameter Manager, Data Storage
 //!
-//! ## Usage
+//! ## Macros
 //!
-//! ```rust,no_run
-//! use iolink_device_stack::{ApplicationLayer, PhysicalLayer, DeviceStack};
-//!
-//! // Initialize the device stack with HAL implementations
-//! let mut device = DeviceStack::new(hal_implementation);
-//! 
-//! // Main application loop
-//! loop {
-//!     device.poll()?;
-//! }
-//! ```
+//! This crate integrates with `iolinke-macros` to provide convenient procedural
+//! macros for common IO-Link patterns.
+
+// Re-export macros for convenience
+pub use iolinke_macros::*;
 
 pub mod application;
 pub mod command;
 pub mod dl_mode;
-pub mod event;
+pub mod event_handler;
 pub mod event_sm;
 #[cfg(feature = "std")]
 pub mod ffi;

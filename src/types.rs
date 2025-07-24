@@ -29,6 +29,58 @@ pub enum IoLinkMode {
     Com3 = 3,
 }
 
+/// See Table 94 – SM_DeviceMode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum DeviceMode {
+    /// (Device changed to waiting for configuration)
+    Idle,
+    /// (Device changed to the mode defined in service "SM_SetDeviceCom")
+    Sio,
+    /// (Device changed to the SM mode "SM_ComEstablish")
+    Estabcom,
+    /// (Device changed to the COM1 mode)
+    Com1,
+    /// (Device changed to the COM2 mode)
+    Com2,
+    /// (Device changed to the COM3 mode)
+    Com3,
+    /// (Device changed to the STARTUP mode)
+    Startup,
+    /// (Device changed to the SM mode "SM_IdentStartup")
+    Identstartup,
+    /// (Device changed to the SM mode "SM_IdentCheck")
+    Identchange,
+    /// (Device changed to the PREOPERATE mode)
+    Preoperate,
+    /// (Device changed to the OPERATE mode)
+    Operate,
+}
+
+/// See 7.2.1.14 DL_Mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum DlMode {
+    /// (Handler changed to the INACTIVE state)
+    Inactive,
+    /// (COM1 mode established)
+    Com1,
+    /// (COM2 mode established)
+    Com2,
+    /// (COM3 mode established)
+    Com3,
+    /// (Lost communication)
+    Comlost,
+    /// (Handler changed to the EstablishCom state)
+    Estabcom,
+    /// (Handler changed to the STARTUP state)
+    Startup,
+    /// (Handler changed to the PREOPERATE state)
+    Preoperate,
+    /// (Handler changed to the OPERATE state)
+    Operate,
+}
+
 /// All the timers used in IO-Link
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Timer {
