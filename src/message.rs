@@ -3,7 +3,7 @@
 //! This module implements the Message Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 6.3
 
-use crate::{dl_mode, types::{IoLinkError, IoLinkResult, MessageType}, MHConf, MHInfo, Timer};
+use crate::{dl_mode, types::{IoLinkError, IoLinkResult, MessageType}, MhConf, MHInfo, Timer};
 use heapless::Vec;
 use nom::{
     bytes::complete::take,
@@ -83,7 +83,7 @@ enum Transition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageHandlerEvent {
     /// Table 47 – T1 T11
-    MsgHandlerConf(MHConf),
+    MsgHandlerConf(MhConf),
     /// See 5.2.2.3 PL_Transfer
     /// Table 47 – T2, T3
     PlTransfer,
@@ -113,7 +113,7 @@ pub trait MsgHandlerInfo {
 trait MsgHandlerConf {
     /// This call causes the message handler to send a message with the
     /// requested transmission rate of COMx and with M-sequence TYPE_0 (see Table 46).
-    fn mh_conf_update(&mut self, mh_conf: MHConf);
+    fn mh_conf_update(&mut self, mh_conf: MhConf);
 }
 
 /// Message Handler implementation
@@ -146,7 +146,7 @@ impl MessageHandler {
 
         let new_state = match (self.state, event) {
             (State::Inactive, Event::MsgHandlerConf(conf)) => {
-                if conf == MHConf::Active {
+                if conf == MhConf::Active {
                     self.exec_transition = Transition::T1;
                     State::Idle
                 } else {
@@ -384,7 +384,7 @@ impl MessageHandler {
 
     /// This call causes the message handler to send a message with the
     /// requested transmission rate of COMx and with M-sequence TYPE_0 (see Table 46).
-    pub fn mh_conf_update(&mut self, mh_conf: MHConf) {
+    pub fn mh_conf_update(&mut self, mh_conf: MhConf) {
         let _ = self.process_event(MessageHandlerEvent::MsgHandlerConf(mh_conf));
     }
 
@@ -454,7 +454,7 @@ impl MessageHandler {
 impl MsgHandlerConf for MessageHandler {
     /// This call causes the message handler to send a message with the
     /// requested transmission rate of COMx and with M-sequence TYPE_0 (see Table 46).
-    fn mh_conf_update(&mut self, mh_conf: MHConf) {
+    fn mh_conf_update(&mut self, mh_conf: MhConf) {
         let _ = self.process_event(MessageHandlerEvent::MsgHandlerConf(mh_conf));
     }
     

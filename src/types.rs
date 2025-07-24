@@ -122,11 +122,17 @@ pub enum MHInfo {
 
 /// All the message handler confirmation type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MHConf {
+pub enum MhConf {
     Com(IoLinkMode),
     Active,
     Inactive,
+}
 
+/// All the event handler confirmation type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EhConf {
+    Active,
+    Inactive,
 }
 
 /// Physical layer status
