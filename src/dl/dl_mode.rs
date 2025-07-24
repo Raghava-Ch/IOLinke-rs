@@ -3,8 +3,8 @@
 //! This module implements the DL-Mode Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 6.2
 
-use crate::message::MsgHandlerInfo;
-use crate::pl::PhysicalLayer;
+use crate::dl::message::MsgHandlerInfo;
+use crate::pl::physical_layer::PhysicalLayer;
 use crate::types::{IoLinkError, IoLinkMode, IoLinkResult};
 use crate::{DlMode, MHInfo, MasterCommand, Timer};
 

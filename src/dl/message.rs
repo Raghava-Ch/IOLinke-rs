@@ -3,7 +3,7 @@
 //! This module implements the Message Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 6.3
 
-use crate::{dl_mode, types::{IoLinkError, IoLinkResult, MessageType}, MhConf, MHInfo, Timer};
+use crate::{dl::dl_mode, types::{IoLinkError, IoLinkResult, MessageType}, MhConf, MHInfo, Timer};
 use heapless::Vec;
 use nom::{
     bytes::complete::take,

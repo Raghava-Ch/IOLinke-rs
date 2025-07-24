@@ -27,24 +27,12 @@
 // Re-export macros for convenience
 pub use iolinke_macros::*;
 
-pub mod application;
-pub mod command;
-pub mod dl_mode;
-pub mod event_handler;
-pub mod event_sm;
+mod al;
+mod dl;
+mod pl;
 #[cfg(feature = "std")]
 pub mod ffi;
-pub mod hal;
-pub mod isdu;
-pub mod message;
-pub mod on_request;
-pub mod parameter;
-pub mod process_data;
-pub mod sm;
-pub mod storage;
-pub mod types;
-
-mod pl;
+mod types;
 
 #[cfg(test)]
 pub mod test_utils;
@@ -52,45 +40,38 @@ pub mod test_utils;
 pub use test_utils::MockHal;
 
 // Re-export main traits and types
-pub use application::{ApplicationLayer, ApplicationLayerImpl};
-pub use hal::{IoLinkHal};
-pub use dl_mode::{DlModeHandler, DlModeState};
-pub use message::MessageHandler;
+pub use al::{ApplicationLayer,};
 pub use types::*;
 
 /// Simple IO-Link device implementation
 pub struct IoLinkDevice {
-    dl_mode: DlModeHandler,
-    message_handler: MessageHandler,
-    application: ApplicationLayerImpl,
+    dl: dl::DataLinkLayer,
+    application: al::ApplicationLayer,
 }
 
 impl IoLinkDevice {
     /// Create a new simple IO-Link device
     pub fn new() -> Self {
         Self {
-            dl_mode: DlModeHandler::new(),
-            message_handler: MessageHandler::new(),
-            application: ApplicationLayerImpl::new(),
+            dl: dl::DataLinkLayer::default(),
+            application: al::ApplicationLayer::default(),
         }
     }
 
     /// Step 1: Set device identification
     pub fn set_device_id(&mut self, vendor_id: u16, device_id: u32, function_id: u16) {
-        let device_identification = DeviceIdentification {
+        let _device_identification = DeviceIdentification {
             vendor_id,
             device_id,
             function_id,
             reserved: 0,
         };
-        self.application.set_device_id(device_identification);
     }
 
     /// Step 3: Basic polling function
     pub fn poll(&mut self) -> IoLinkResult<()> {
         // Poll all state machines
-        self.dl_mode.poll()?;
-        self.message_handler.poll(&mut self.dl_mode)?;
+        self.dl.poll()?;
         self.application.poll()?;
         Ok(())
     }
