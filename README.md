@@ -150,7 +150,7 @@ Licensed under either of
 
 - GPL-3.0
 
-at your option.
+"IO‑Link® is a registered trademark of the IO‑Link Community. This project is not affiliated with or endorsed by IO‑Link Community."
 
 ## Compliance
 
