@@ -1,30 +1,34 @@
 [package]
-name = "iolink_device_stack"
+name = "iolinke-device"
 version = "0.1.0"
-edition = "2024"
-authors = ["Your Name <your.email@example.com>"]
+edition = "2021"
+authors = ["IO-Link Device Stack Contributors"]
 description = "IO-Link Device stack implementation compliant with IO-Link Specification v1.1.4"
 license = "GPL-3"
-repository = "https://github.com/your-org/iolink_device_stack"
+repository = "https://github.com/Raghava-Ch/IOLinke-Device"
 readme = "README.md"
 keywords = ["iolink", "embedded", "no-std", "device"]
 categories = ["embedded", "no-std"]
 
 [dependencies]
+# Workspace dependencies
+heapless = { workspace = true }
+embedded-hal = { workspace = true }
+nom = { workspace = true }
+nb = { workspace = true }
+
+# Project-specific dependencies
+iolinke-macros = { path = "../IOLinke-macros" }
 smlang = "0.8"
-heapless = "0.8"
-embedded-hal = "1.0"
 cstr_core = "0.2"
 log = "0.4"
-nom = { version = "7.1", default-features = false }
-nb = "1.1"
 
 [dependencies.cortex-m]
-version = "0.7"
+workspace = true
 optional = true
 
 [dependencies.panic-halt]
-version = "0.2"
+workspace = true
 optional = true
 
 [features]

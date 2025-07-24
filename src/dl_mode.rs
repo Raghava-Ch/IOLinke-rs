@@ -6,8 +6,20 @@
 use crate::message::MsgHandlerInfo;
 use crate::pl::PhysicalLayer;
 use crate::types::{IoLinkError, IoLinkMode, IoLinkResult};
-use crate::{MHInfo, MasterCommand, Timer};
+use crate::{DlMode, MHInfo, MasterCommand, Timer};
 
+/// DL indications to other modules
+pub trait DlInd {
+    /// See 7.2.1.14 DL_Mode
+    /// The DL uses the DL_Mode service to report to System Management that a certain operating
+    /// status has been reached. The parameters of the service primitives are listed in Table 29.
+    fn dl_mode_ind(&mut self, mode: DlMode) -> IoLinkResult<()>;
+    /// See 7.2.1.5 DL_Write
+    /// The DL_Write service is used by System Management to write a Device parameter value to
+    /// the Device via the page communication channel. The parameters of the service primitives are
+    /// listed in Table 20.
+    fn dl_write_ind(&mut self, address: u8, value: u8) -> IoLinkResult<()>;
+}
 /// DL-Mode Handler states
 /// See IO-Link v1.1.4 Section 7.3.2.5
 /// See Table 45 – State transition tables of the Device DL-mode handler

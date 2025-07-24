@@ -24,17 +24,6 @@ impl EventHandler {
         // Process pending events
         Ok(())
     }
-
-    /// Add an event to the queue
-    pub fn add_event(&mut self, event: Event) -> IoLinkResult<()> {
-        self.event_queue.push_back(event)
-            .map_err(|_| IoLinkError::BufferOverflow)
-    }
-
-    /// Get the next event
-    pub fn get_event(&mut self) -> Option<Event> {
-        self.event_queue.pop_front()
-    }
 }
 
 impl Default for EventHandler {
