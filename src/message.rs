@@ -3,7 +3,7 @@
 //! This module implements the Message Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 6.3
 
-use crate::types::{IoLinkError, IoLinkResult, MessageType};
+use crate::{types::{IoLinkError, IoLinkResult, MessageType}, MHConf, Timer};
 use heapless::Vec;
 use nom::{
     bytes::complete::take,
@@ -31,42 +31,80 @@ pub struct IoLinkMessage {
 /// Message Handler states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageHandlerState {
-    /// Idle state
+    /// Waiting for activation by the Device DL-mode handler through MH_Conf_ACTIVE 
+    /// (see Table 45, Transition T1).
+    Inactive,
+    /// Waiting on first UART frame of the Master message through PL_Transfer service
+    /// indication. Check whether time "MaxCycleTime" elapsed.
     Idle,
-    /// Receiving message
-    Receiving,
-    /// Processing message
-    Processing,
-    /// Sending response
-    Sending,
-    /// Error state
-    Error,
+    /// Receive a Master message UART frame. Check number of received UART frames
+    /// (Device detects M-sequence type by means of the first two received octets depending
+    /// on the current communication state and thus knows the number of the UART frames).
+    /// Check whether the time "MaxUARTframeTime" elapsed.
+    GetMessage,
+    /// Check M-sequence type and checksum of received message.
+    CheckMessage,
+    /// Compile message from OD.rsp, PD.rsp, EventFlag, and PDStatus services.
+    CreateMessage,
+}
+
+/// See Table 47 – State transition tables of the Device message handler
+#[derive(Debug, PartialEq, Eq)]
+enum Transitions {
+    /// Nothing to transit.
+    Tn,
+    /// 0 1 –
+    T1,
+    /// 1 2 Start "MaxUARTframeTime" and "MaxCycleTime" when in OPERATE.
+    T2,
+    /// 2 2 Restart timer "MaxUARTframeTime".
+    T3,
+    /// 2 3 Reset timer "MaxUARTframeTime".
+    T4,
+    /// 3 4 Invoke OD.ind and PD.ind service indications
+    T5,
+    /// 4 1 Compile and invoke PL_Transfer.rsp service response 
+    /// (Device sends response message)
+    T6,
+    /// 3 1 –
+    T7,
+    /// 3 1 Indicate error to DL-mode handler via MHInfo (ILLEGAL_MESSAGETYPE)
+    T8,
+    /// 2 1 Reset both timers "MaxUARTframeTime" and "MaxCycleTime".
+    T9,
+    /// 1 1 Indicate error to actuator technology that shall observe 
+    /// this information and take corresponding actions (see 10.2 and 10.8.3).
+    T10,
+    /// 1 0 Device message handler changes state to Inactive_0.
+    T11,
 }
 
 /// Message Handler events
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageHandlerEvent {
-    /// Start receiving
-    StartReceive,
-    /// Message received
-    MessageReceived,
-    /// Start processing
-    StartProcessing,
-    /// Processing complete
-    ProcessingComplete,
-    /// Start sending
-    StartSending,
-    /// Sending complete
-    SendingComplete,
-    /// Error occurred
-    Error,
-    /// Reset
-    Reset,
+    /// Table 47 – T1 T11
+    MsgHandlerConf(MHConf),
+    /// See 5.2.2.3 PL_Transfer
+    /// Table 47 – T2, T3
+    PlTransfer,
+    /// Table 47 – T4
+    Completed,
+    /// Table 47 – T5
+    NoError,
+    /// Table 47 – T6
+    Ready,
+    /// Table 47 – T7
+    ChecksumError,
+    /// Table 47 – T8
+    TypeError,
+    /// Table 47 – T9, T10
+    TimerElapsed(Timer),
 }
 
 /// Message Handler implementation
 pub struct MessageHandler {
     state: MessageHandlerState,
+    exec_transition: Transitions,
     rx_buffer: Vec<u8, MAX_MESSAGE_SIZE>,
     tx_buffer: Vec<u8, MAX_MESSAGE_SIZE>,
     current_message: Option<IoLinkMessage>,
@@ -78,6 +116,7 @@ impl MessageHandler {
     pub fn new() -> Self {
         Self {
             state: MessageHandlerState::Idle,
+            exec_transition: Transitions::Tn,
             rx_buffer: Vec::new(),
             tx_buffer: Vec::new(),
             current_message: None,
@@ -91,14 +130,58 @@ impl MessageHandler {
         use MessageHandlerState as State;
 
         let new_state = match (self.state, event) {
-            (State::Idle, Event::StartReceive) => State::Receiving,
-            (State::Receiving, Event::MessageReceived) => State::Processing,
-            (State::Receiving, Event::Error) => State::Error,
-            (State::Processing, Event::ProcessingComplete) => State::Sending,
-            (State::Processing, Event::Error) => State::Error,
-            (State::Sending, Event::SendingComplete) => State::Idle,
-            (State::Sending, Event::Error) => State::Error,
-            (State::Error, Event::Reset) => State::Idle,
+            (State::Inactive, Event::MsgHandlerConf(conf)) => {
+                if conf == MHConf::Active {
+                    self.exec_transition = Transitions::T1;
+                    State::Idle
+                } else {
+                    State::Inactive
+                }
+            },
+            (State::Idle, Event::PlTransfer) => {
+                self.exec_transition = Transitions::T2;
+                State::GetMessage
+            },
+            (State::Idle, Event::TimerElapsed(timer)) => {
+                if timer == Timer::MaxCycleTime {
+                    self.exec_transition = Transitions::T10;
+                    State::Idle
+                } else {
+                    return Err(IoLinkError::InvalidParameter);
+                }
+            },
+            (State::GetMessage, Event::PlTransfer) => {
+                self.exec_transition = Transitions::T3;
+                State::GetMessage
+            },
+            (State::GetMessage, Event::Completed) => {
+                self.exec_transition = Transitions::T4;
+                State::CheckMessage
+            },
+            (State::GetMessage, Event::TimerElapsed(timer)) => {
+                if timer == Timer::MaxUARTFrameTime {
+                    self.exec_transition = Transitions::T9;
+                    State::Idle
+                } else {
+                    return Err(IoLinkError::InvalidParameter);
+                }
+            },
+            (State::CheckMessage, Event::NoError) => {
+                self.exec_transition = Transitions::T5;
+                State::CreateMessage
+            },
+            (State::CheckMessage, Event::ChecksumError) => {
+                self.exec_transition = Transitions::T7;
+                State::Idle
+            },
+            (State::CheckMessage, Event::TypeError) => {
+                self.exec_transition = Transitions::T8;
+                State::Idle
+            },
+            (State::CreateMessage, Event::Ready) => {
+                self.exec_transition = Transitions::T6;
+                State::Idle
+            },
             _ => return Err(IoLinkError::InvalidParameter),
         };
 
@@ -109,60 +192,91 @@ impl MessageHandler {
     /// Poll the message handler
     /// See IO-Link v1.1.4 Section 6.3
     pub fn poll(&mut self) -> IoLinkResult<()> {
-        match self.state {
-            MessageHandlerState::Idle => {
-                // Ready to receive new messages
-                if !self.rx_buffer.is_empty() {
-                    self.process_event(MessageHandlerEvent::StartReceive)?;
-                }
-            }
-            MessageHandlerState::Receiving => {
-                // Try to parse received data
-                if let Ok(message) = self.parse_message() {
-                    self.current_message = Some(message);
-                    self.process_event(MessageHandlerEvent::MessageReceived)?;
-                } else if self.rx_buffer.len() >= MAX_MESSAGE_SIZE {
-                    // Buffer full but no valid message
-                    self.process_event(MessageHandlerEvent::Error)?;
-                }
-            }
-            MessageHandlerState::Processing => {
-                // Process the current message
-                if let Some(message) = self.current_message.take() {
-                    self.process_message(&message)?;
-                    self.process_event(MessageHandlerEvent::ProcessingComplete)?;
-                }
-            }
-            MessageHandlerState::Sending => {
-                // Send response (would integrate with physical layer)
-                self.process_event(MessageHandlerEvent::SendingComplete)?;
-            }
-            MessageHandlerState::Error => {
-                // Handle error condition
-                self.error_count += 1;
-                self.rx_buffer.clear();
-                self.tx_buffer.clear();
-                self.current_message = None;
-                self.process_event(MessageHandlerEvent::Reset)?;
-            }
+        match self.exec_transition {
+        Transitions::Tn => {
+            // No transition, remain in current state
+        }
+        Transitions::T1 => {
+            // Inactive -> Idle (activation by DL-mode handler)
+            self.state = MessageHandlerState::Idle;
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T2 => {
+            // Idle -> GetMessage (start timers)
+            self.state = MessageHandlerState::GetMessage;
+            // Start MaxUARTframeTime and MaxCycleTime timers (handled externally)
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T3 => {
+            // GetMessage -> GetMessage (restart MaxUARTframeTime)
+            // Timer restart handled externally
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T4 => {
+            // GetMessage -> CheckMessage (reset MaxUARTframeTime)
+            self.state = MessageHandlerState::CheckMessage;
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T5 => {
+            // CheckMessage -> CreateMessage (invoke OD.ind, PD.ind)
+            self.state = MessageHandlerState::CreateMessage;
+            // OD.ind and PD.ind service indications handled externally
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T6 => {
+            // CreateMessage -> Idle (send response)
+            self.state = MessageHandlerState::Idle;
+            // Compile and send response via PL_Transfer.rsp (handled externally)
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T7 => {
+            // CheckMessage -> Idle (no message, e.g. timeout)
+            self.state = MessageHandlerState::Idle;
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T8 => {
+            // CheckMessage -> Idle (illegal message type)
+            self.state = MessageHandlerState::Idle;
+            self.error_count += 1;
+            // Indicate error to DL-mode handler via MHInfo (ILLEGAL_MESSAGETYPE)
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T9 => {
+            // GetMessage -> Idle (timeout, reset timers)
+            self.state = MessageHandlerState::Idle;
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T10 => {
+            // Idle -> Idle (error indication to actuator tech)
+            // Indicate error to actuator technology (see 10.2, 10.8.3)
+            self.exec_transition = Transitions::Tn;
+        }
+        Transitions::T11 => {
+            // Idle -> Inactive (deactivation)
+            self.state = MessageHandlerState::Inactive;
+            self.exec_transition = Transitions::Tn;
+        }
         }
         Ok(())
     }
 
-    /// Add received data to buffer
-    pub fn add_rx_data(&mut self, data: &[u8]) -> IoLinkResult<()> {
-        for &byte in data {
-            self.rx_buffer.push(byte)
-                .map_err(|_| IoLinkError::BufferOverflow)?;
-        }
-        Ok(())
+    /// 5.2.2.3 PL_Transfer
+    /// The PL-Transfer service is used to exchange the SDCI data between Data Link Layer and
+    /// Physical Layer. The parameters of the service primitives are listed in Table 4.
+    pub fn pl_transfer(&mut self) {
+        let _ = self.process_event(MessageHandlerEvent::PlTransfer);
     }
 
-    /// Get transmit data
-    pub fn get_tx_data(&mut self) -> Vec<u8, MAX_MESSAGE_SIZE> {
-        let data = self.tx_buffer.clone();
-        self.tx_buffer.clear();
-        data
+    /// Any MasterCommand received by the Device command handler
+    /// (see Table 44 and Figure 54, state "CommandHandler_2")
+    pub fn timer_update(&mut self, timer: Timer) {
+        let _ = self.process_event(MessageHandlerEvent::TimerElapsed(timer));
+    }
+
+    /// This call causes the message handler to send a message with the
+    /// requested transmission rate of COMx and with M-sequence TYPE_0 (see Table 46).
+    pub fn mh_conf_update(&mut self, mh_conf: MHConf) {
+        let _ = self.process_event(MessageHandlerEvent::MsgHandlerConf(mh_conf));
     }
 
     /// Parse IO-Link message from buffer
@@ -311,19 +425,6 @@ mod tests {
         assert_eq!(message.data.len(), 2);
         assert_eq!(message.data[0], 0xAA);
         assert_eq!(message.data[1], 0xBB);
-    }
-
-    #[test]
-    fn test_message_handler_state_machine() {
-        let mut handler = MessageHandler::new();
-        assert_eq!(handler.state(), MessageHandlerState::Idle);
-
-        // Add some test data
-        handler.add_rx_data(&[0x00, 0x01, 0x02, 0xAA, 0xBB, 0xA8]).unwrap();
-        
-        // Poll should trigger state transitions
-        handler.poll().unwrap();
-        // Should be in Receiving state after poll
     }
 
     #[test]

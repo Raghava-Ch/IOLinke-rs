@@ -33,7 +33,11 @@ pub enum IoLinkMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Timer {
     /// See Table 42 – Wake-up procedure and retry characteristics
-    Tdsio
+    Tdsio,
+    /// See A.3.7 Cycle time
+    MaxCycleTime,
+    /// See Table 47 Internal items
+    MaxUARTFrameTime,
 }
 
 /// All the master commands used in IO-Link
@@ -56,12 +60,21 @@ pub enum MasterCommand {
 /// See 7.2.2.6
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MHInfo {
-    /// lost communication)
+    /// lost communication
     COMlost,
     /// unexpected M-sequence type detected
     IllegalMessagetype,
     /// Checksum error detected
     ChecksumMismatch,
+}
+
+/// All the message handler confirmation type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MHConf {
+    Com(IoLinkMode),
+    Active,
+    Inactive,
+
 }
 
 /// Physical layer status
