@@ -50,6 +50,8 @@ pub mod sm;
 pub mod storage;
 pub mod types;
 
+mod pl;
+
 #[cfg(test)]
 pub mod test_utils;
 #[cfg(test)]
@@ -57,7 +59,45 @@ pub use test_utils::MockHal;
 
 // Re-export main traits and types
 pub use application::{ApplicationLayer, ApplicationLayerImpl};
-pub use hal::{PhysicalLayer};
+pub use hal::{IoLinkHal};
 pub use dl_mode::{DlModeHandler, DlModeState};
 pub use message::MessageHandler;
 pub use types::*;
+
+/// Simple IO-Link device implementation
+pub struct IoLinkDevice {
+    dl_mode: DlModeHandler,
+    message_handler: MessageHandler,
+    application: ApplicationLayerImpl,
+}
+
+impl IoLinkDevice {
+    /// Create a new simple IO-Link device
+    pub fn new() -> Self {
+        Self {
+            dl_mode: DlModeHandler::new(),
+            message_handler: MessageHandler::new(),
+            application: ApplicationLayerImpl::new(),
+        }
+    }
+
+    /// Step 1: Set device identification
+    pub fn set_device_id(&mut self, vendor_id: u16, device_id: u32, function_id: u16) {
+        let device_identification = DeviceIdentification {
+            vendor_id,
+            device_id,
+            function_id,
+            reserved: 0,
+        };
+        self.application.set_device_id(device_identification);
+    }
+
+    /// Step 3: Basic polling function
+    pub fn poll(&mut self) -> IoLinkResult<()> {
+        // Poll all state machines
+        self.dl_mode.poll()?;
+        self.message_handler.poll(&mut self.dl_mode)?;
+        self.application.poll()?;
+        Ok(())
+    }
+}
