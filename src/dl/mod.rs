@@ -1,3 +1,5 @@
+use crate::IoLinkResult;
+
 mod command;
 mod dl_mode;
 mod event_handler;
