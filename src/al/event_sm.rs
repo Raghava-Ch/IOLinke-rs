@@ -38,6 +38,7 @@ enum Transition {
     T4,
 }
 
+/// See 8.3.3.2 Event state machine of the Device AL
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventStateMachineEvent {
     /// {Activate} See 8.3.3.2 , Triggers T1
