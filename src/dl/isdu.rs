@@ -6,22 +6,105 @@
 use crate::types::{IoLinkError, IoLinkResult, Isdu};
 use heapless::Vec;
 
-/// ISDU Handler states
+/// See 7.3.6.4 State machine of the Device ISDU handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IsduState {
-    /// Idle state
+pub enum IsduHandlerState {
+    /// {Inactive_0}
+    Inactive,
+    /// {Idle_1}
     Idle,
-    /// Processing request
-    Processing,
-    /// Sending response
-    Responding,
-    /// Error state
-    Error,
+    /// {ISDURequest_2}
+    ISDURequest,
+    /// {ISDUResponse_4}
+    ISDUResponse,
+    /// {ISDUWait_3}
+    ISDUWait,
+}
+
+/// See Table 54 – State transition tables of the Device ISDU handler
+#[derive(Debug, PartialEq, Eq)]
+enum Transition {
+    /// Tn: No transition
+    Tn,
+    /// T1: State: Inactive (0) -> Idle (1)
+    /// Action: -
+    T1,
+    /// T2: State: Idle (1) -> ISDURequest (2)
+    /// Action: Start receiving of ISDU request data
+    T2,
+    /// T3: State: ISDURequest (2) -> ISDURequest (2)
+    /// Action: Receive ISDU request data
+    T3,
+    /// T4: State: ISDURequest (2) -> ISDUWait (3)
+    /// Action: Invoke DL_ISDUTransport.ind to AL (see 7.2.1.6)
+    T4,
+    /// T5: State: ISDUWait (3) -> ISDUWait (3)
+    /// Action: Invoke OD.rsp with "busy" indication (see Table A.14)
+    T5,
+    /// T6: State: ISDUWait (3) -> ISDUResponse (4)
+    /// Action: -
+    T6,
+    /// T7: State: ISDUResponse (4) -> ISDUResponse (4)
+    /// Action: Invoke OD.rsp with ISDU response data
+    T7,
+    /// T8: State: ISDUResponse (4) -> Idle (1)
+    /// Action: -
+    T8,
+    /// T9: State: ISDURequest (2) -> Idle (1)
+    /// Action: -
+    T9,
+    /// T10: State: ISDUWait (3) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    T10,
+    /// T11: State: ISDUResponse (4) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    T11,
+    /// T12: State: Idle (1) -> Inactive (0)
+    /// Action: -
+    T12,
+    /// T13: State: ISDURequest (2) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    T13,
+    /// T14: State: Idle (1) -> Idle (1)
+    /// Action: Invoke OD.rsp with "no service" indication (see Table A.12 and Table A.14)
+    T14,
+    /// T15: State: ISDUWait (3) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    T15,
+    /// T16: State: ISDUResponse (4) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    T16,
+}
+
+/// See Figure 52 – State machine of the Device ISDU handler
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IsduHandlerEvent {
+    /// {ISDURead}
+    IsduRead,
+    /// {IH_Conf_ACTIVE}
+    IhConfActive,
+    /// {ISDUWrite}
+    IsduWrite,
+    /// {ISDUStart}
+    IsduStart,
+    /// {[ISDUError]}
+    IsduError,
+    /// {IH_Conf_INACTIVE}
+    IhConfInactive,
+    /// {[ISDUSendComplete]}
+    IsduSendComplete,
+    /// {ISDUAbort}
+    IsduAbort,
+    /// {[ISDURecComplete]}
+    IsduRecComplete,
+    /// {ISDURespStart}
+    IsduRespStart,
 }
 
 /// ISDU Handler implementation
 pub struct IsduHandler {
-    state: IsduState,
+    state: IsduHandlerState,
+    exec_transition: Transition,
     current_request: Option<Isdu>,
     response_data: Vec<u8, 32>,
 }
@@ -30,35 +113,145 @@ impl IsduHandler {
     /// Create a new ISDU Handler
     pub fn new() -> Self {
         Self {
-            state: IsduState::Idle,
+            state: IsduHandlerState::Idle,
+            exec_transition: Transition::Tn,
             current_request: None,
             response_data: Vec::new(),
         }
     }
 
+    /// Process an event
+    pub fn process_event(&mut self, event: IsduHandlerEvent) -> IoLinkResult<()> {
+        use IsduHandlerEvent as Event;
+        use IsduHandlerState as State;
+
+        let (new_transition, new_state) = match (self.state, event) {
+            (State::Inactive, Event::IhConfActive) => {
+                (Transition::T1, State::Idle)
+            }
+            (State::Idle, Event::IsduStart) => {
+                (Transition::T2, State::ISDURequest)
+            }
+            (State::Idle, Event::IhConfInactive) => {
+                (Transition::T12, State::Inactive)
+            }
+            (State::Idle, Event::IsduRead) => {
+                (Transition::T14, State::Idle)
+            }
+            (State::ISDURequest, Event::IsduWrite) => {
+                (Transition::T3, State::ISDURequest)
+            }
+            (State::ISDURequest, Event::IsduRecComplete) => {
+                (Transition::T4, State::ISDUWait)
+            }
+            (State::ISDURequest, Event::IsduError) => {
+                (Transition::T13, State::Idle)
+            }
+            (State::ISDURequest, Event::IsduAbort) => {
+                (Transition::T9, State::Idle)
+            }
+            (State::ISDUWait, Event::IsduRead) => {
+                (Transition::T5, State::ISDUWait)
+            }
+            (State::ISDUWait, Event::IsduRespStart) => {
+                (Transition::T6, State::ISDUResponse)
+            }
+            (State::ISDUWait, Event::IsduAbort) => {
+                (Transition::T10, State::Idle)
+            }
+            (State::ISDUWait, Event::IsduError) => {
+                (Transition::T15, State::Idle)
+            }
+            (State::ISDUResponse, Event::IsduRead) => {
+                (Transition::T7, State::ISDUResponse)
+            }
+            (State::ISDUResponse, Event::IsduSendComplete) => {
+                (Transition::T8, State::Idle)
+            }
+            (State::ISDUResponse, Event::IsduAbort) => {
+                (Transition::T11, State::Idle)
+            }
+            (State::ISDUResponse, Event::IsduError) => {
+                (Transition::T16, State::Idle)
+            }
+            _ => return Err(IoLinkError::InvalidEvent),
+        };
+        self.exec_transition = new_transition;
+        self.state = new_state;
+
+        Ok(())
+
+    }
     /// Poll the ISDU handler
     /// See IO-Link v1.1.4 Section 8.4.3
     pub fn poll(&mut self) -> IoLinkResult<()> {
-        match self.state {
-            IsduState::Idle => {
-                // Wait for ISDU requests
+        match self.exec_transition {
+            Transition::Tn => {
+                // No transition to execute
             }
-            IsduState::Processing => {
-                // Process current request
-                if let Some(request) = self.current_request.take() {
-                    self.process_request(&request)?;
-                    self.state = IsduState::Responding;
-                }
+            Transition::T1 => {
+                // State: Inactive (0) -> Idle (1)
+                self.state = IsduHandlerState::Idle;
             }
-            IsduState::Responding => {
-                // Send response
-                self.state = IsduState::Idle;
+            Transition::T2 => {
+                // State: Idle (1) -> ISDURequest (2)
+                self.state = IsduHandlerState::ISDURequest;
             }
-            IsduState::Error => {
-                // Handle error recovery
-                self.current_request = None;
-                self.response_data.clear();
-                self.state = IsduState::Idle;
+            Transition::T3 => {
+                // State: ISDURequest (2) -> ISDURequest (2)
+                // Continue receiving ISDU request data
+            }
+            Transition::T4 => {
+                // State: ISDURequest (2) -> ISDUWait (3)
+                self.state = IsduHandlerState::ISDUWait;
+            }
+            Transition::T5 => {
+                // State: ISDUWait (3) -> ISDUWait (3)
+                // Invoke OD.rsp with "busy" indication
+            }
+            Transition::T6 => {
+                // State: ISDUWait (3) -> ISDUResponse (4)
+                self.state = IsduHandlerState::ISDUResponse;
+            }
+            Transition::T7 => {
+                // State: ISDUResponse (4) -> ISDUResponse (4)
+                // Invoke OD.rsp with ISDU response data
+            }
+            Transition::T8 => {
+                // State: ISDUResponse (4) -> Idle (1)
+                self.state = IsduHandlerState::Idle;
+            }
+            Transition::T9 => {
+                // State: ISDURequest (2) -> Idle (1)
+                self.state = IsduHandlerState::Idle;
+            }
+            Transition::T10 => {
+                // State: ISDUWait (3) -> Idle (1)
+                self.state = IsduHandlerState::Idle;
+            }
+            Transition::T11 => {
+                // State: ISDUResponse (4) -> Idle (1)
+                self.state = IsduHandlerState::Idle;
+            }
+            Transition::T12 => {
+                // State: Idle (1) -> Inactive (0)
+                self.state = IsduHandlerState::Inactive;
+            }
+            Transition::T13 => {        
+                // State: ISDURequest (2) -> Idle (1)
+                self.state = IsduHandlerState::Idle;
+            }
+            Transition::T14 => {
+                // State: Idle (1) -> Idle (1)
+                // Invoke OD.rsp with "no service" indication
+            }
+            Transition::T15 => {
+                // State: ISDUWait (3) -> Idle (1)
+                self.state = IsduHandlerState::Idle;
+            }
+            Transition::T16 => {
+                // State: ISDUResponse (4) -> Idle (1)
+                self.state = IsduHandlerState::Idle;
             }
         }
         Ok(())
@@ -99,34 +292,6 @@ impl IsduHandler {
             }
         }
         Ok(())
-    }
-
-    /// Handle ISDU write request
-    fn handle_write(&mut self, _request: &Isdu) -> IoLinkResult<()> {
-        // Implementation would write to parameter storage
-        Ok(())
-    }
-
-    /// Add ISDU request
-    pub fn add_request(&mut self, request: Isdu) -> IoLinkResult<()> {
-        if self.state != IsduState::Idle {
-            return Err(IoLinkError::DeviceNotReady);
-        }
-        self.current_request = Some(request);
-        self.state = IsduState::Processing;
-        Ok(())
-    }
-
-    /// Get response data
-    pub fn get_response(&mut self) -> Vec<u8, 32> {
-        let data = self.response_data.clone();
-        self.response_data.clear();
-        data
-    }
-
-    /// Get current state
-    pub fn state(&self) -> IsduState {
-        self.state
     }
 }
 
