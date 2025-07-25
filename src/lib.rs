@@ -30,6 +30,10 @@ pub use iolinke_macros::*;
 mod al;
 mod dl;
 mod pl;
+mod parameter;
+mod sm;
+mod storage;
+
 #[cfg(feature = "std")]
 pub mod ffi;
 mod types;
