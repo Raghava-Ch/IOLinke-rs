@@ -96,8 +96,8 @@ impl OnRequestHandler {
         }
     }
 
-    /// Poll the handler
-    pub fn poll(&mut self, event: OnRequestHandlerEvent) -> IoLinkResult<()> {
+    /// Process an event
+    pub fn process_event(&mut self, event: OnRequestHandlerEvent) -> IoLinkResult<()> {
         use OnRequestHandlerState as State;
         use OnRequestHandlerEvent as Event;
 
@@ -118,6 +118,51 @@ impl OnRequestHandler {
         };
         self.exec_transition = new_transition;
         self.state = new_state;
+
+        Ok(())
+    }
+
+    /// Poll the state machine
+    pub fn poll(&mut self) -> IoLinkResult<()> {
+        // Process pending transitions
+        match self.exec_transition {
+            Transition::Tn => {
+                // No transition, do nothing
+            }
+            Transition::T1 => {
+                // Invoke AL_Write
+            }
+            Transition::T2 => {
+                // Invoke DL_WriteParam (16 to 31)
+            }
+            Transition::T3 => {
+                // Invoke AL_Read
+            }
+            Transition::T4 => {
+                // Invoke DL_ReadParam (0 to 31)
+            }
+            Transition::T5 => {
+                // Invoke AL_Read
+            }
+            Transition::T6 => {
+                // Invoke AL_Write
+            }
+            Transition::T7 => {
+                // Invoke DL_ISDUTransport (read)
+            }
+            Transition::T8 => {
+                // Invoke DL_ISDUTransport (write)
+            }
+            Transition::T9 => {
+                // Handle abort scenarios
+            }
+            Transition::T10 => {
+                // Handle abort scenarios
+            }
+            Transition::T11 => {
+                // Handle abort scenarios
+            }
+        }
 
         Ok(())
     }
