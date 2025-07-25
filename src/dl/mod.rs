@@ -6,6 +6,7 @@ mod event_handler;
 mod isdu;
 mod message;
 mod process_data;
+mod on_request;
 
 pub struct DataLinkLayer {
     command: command::CommandHandler,
