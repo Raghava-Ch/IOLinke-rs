@@ -1,48 +1,21 @@
 
-use crate::types::{IoLinkError, IoLinkMode, IoLinkResult, PhysicalLayerStatus};
+use crate::{dl, types::{IoLinkError, IoLinkMode, IoLinkResult, PhysicalLayerStatus}};
 use embedded_hal::digital::{InputPin, OutputPin};
 /// Physical Layer trait for low-level UART/PHY access
 /// See IO-Link v1.1.4 Section 5.2 and Figure 13
-pub trait PhysicalLayer {
-    /// Set the communication mode
-    /// See IO-Link v1.1.4 Section 5.2.2.1
-    fn pl_set_mode(&mut self, mode: IoLinkMode) -> IoLinkResult<()> {
-        let _ = mode; // Placeholder for actual implementation
-        Err(IoLinkError::NoActionNeeded)
-    }
-
+pub trait PhysicalLayerInd {
     /// Transfer data over the physical layer
     /// See IO-Link v1.1.4 Section 5.2.2.2
-    fn pl_transfer(&mut self, tx_data: &[u8], rx_buffer: &mut [u8]) -> IoLinkResult<usize> {
-        let _ = tx_data; // Placeholder for actual implementation
+    fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<()> {
         let _ = rx_buffer; // Placeholder for actual implementation
-        Err(IoLinkError::NoActionNeeded)
+        Err(IoLinkError::NoImplFound)
     }
 
     /// Wake up the physical layer
     /// See IO-Link v1.1.4 Section 5.2.2.3
-    fn pl_wake_up(&mut self) -> IoLinkResult<()> {
+    fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
         // Placeholder for actual implementation
-        Err(IoLinkError::NoActionNeeded)
-    }
-
-    /// Get physical layer status
-    /// See IO-Link v1.1.4 Section 5.2.3
-    fn pl_status(&self) -> PhysicalLayerStatus {
-        // Placeholder for actual implementation
-        PhysicalLayerStatus::NoCommunication
-    }
-
-    /// Check if data is available for reading
-    fn data_available(&self) -> bool {
-        // Placeholder for actual implementation
-        false
-    }
-
-    /// Get the current baud rate
-    fn get_baud_rate(&self) -> u32 {
-        // Placeholder for actual implementation
-        0
+        Err(IoLinkError::NoImplFound)
     }
 }
 
@@ -109,4 +82,42 @@ pub trait IoLinkUart {
 
     /// Enable/disable UART
     fn set_enabled(&mut self, enabled: bool) -> IoLinkResult<()>;
+}
+
+pub struct PhysicalLayer {
+
+}
+
+impl PhysicalLayer {
+    pub fn new() -> Self {
+        PhysicalLayer {}
+    }
+
+    /// Set the communication mode
+    /// See IO-Link v1.1.4 Section 5.2.2.1
+    pub fn pl_set_mode(&mut self, mode: IoLinkMode) -> IoLinkResult<()> {
+        let _ = mode; // Placeholder for actual implementation
+        Err(IoLinkError::NoImplFound)
+    }
+
+    /// Wake up the physical layer
+    /// See IO-Link v1.1.4 Section 5.2.2.3
+    pub fn pl_wake_up(&mut self, dl_mode: &mut dl::DataLinkLayer) -> IoLinkResult<()> {
+        dl_mode.pl_wake_up_ind();
+        Ok(())
+    }
+
+    /// Transfer data over the physical layer
+    /// See IO-Link v1.1.4 Section 5.2.2.2
+    pub fn pl_transfer_req(&mut self, tx_data: &[u8]) -> IoLinkResult<usize> {
+        let _ = tx_data; // Placeholder for actual implementation
+        Err(IoLinkError::NoImplFound)
+    }
+
+    /// Transfer data over the physical layer
+    /// See IO-Link v1.1.4 Section 5.2.2.2
+    pub fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<usize> {
+
+        Err(IoLinkError::NoImplFound)
+    }
 }

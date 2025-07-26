@@ -3,9 +3,9 @@
 //! This module implements the System Management state machine as defined in
 //! IO-Link Specification v1.1.4
 
-use iolinke_macros::master_command;
+use iolinke_macros::{direct_parameter, master_command};
 
-use crate::{dl_mode::DlInd, types::{IoLinkError, IoLinkResult}, DeviceMode, DlMode};
+use crate::{dl::DlInd, pl, types::{IoLinkError, IoLinkResult}, DeviceMode, DlMode, IoLinkMode};
 
 /// Table 95 – State transition tables of the Device System Management
 #[derive(Debug, PartialEq, Eq)]
@@ -248,7 +248,10 @@ impl SystemManagement {
     }
 
     /// Poll the system management
-    pub fn poll(&mut self) -> IoLinkResult<()> {
+    pub fn poll(
+        &mut self,
+        physical_layer: &mut pl::physical_layer::PhysicalLayer,
+    ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
                 // No transition to execute
@@ -314,10 +317,124 @@ impl SystemManagement {
         Ok(())
     }
 
+
+    /// Execute T1 transition: Switch to SIO mode
+    fn execute_t1(&mut self, physical_layer: &mut pl::physical_layer::PhysicalLayer) -> IoLinkResult<()> {
+        // TODO: Implement proper SIO mode configuration based on device application settings
+        // Invoke PL_SetMode(DI|DO|INACTIVE)
+        physical_layer.pl_set_mode(IoLinkMode::Inactive)?;
+        // Invoke SM_DeviceMode(SIO)
+        Ok(())
+    }
+
+    /// Execute T2 transition: Switch to communication mode
+    fn execute_t2(&mut self, physical_layer: &mut pl::physical_layer::PhysicalLayer) -> IoLinkResult<()> {
+        // TODO: Determine actual COM mode (COM1, COM2, or COM3) based on established communication
+        // Invoke PL_SetMode(COMx)
+        // TODO: Change the COM1 to actual communication mode from the application
+        physical_layer.pl_set_mode(IoLinkMode::Com1)?; 
+        // Invoke SM_DeviceMode(ESTABCOM)
+        Ok(())
+    }
+
+    /// Execute T3 transition: Switch to SM_Idle mode
+    fn execute_t3(
+        &mut self,
+        physical_layer: &mut pl::physical_layer::PhysicalLayer,
+    ) -> IoLinkResult<()> {
+        // TODO: Cleanup any active communication sessions and reset state
+        // Invoke PL_SetMode(INACTIVE)
+        physical_layer.pl_set_mode(IoLinkMode::Inactive)?;
+        // Invoke SM_DeviceMode(IDLE)
+        Ok(())
+    }
+
+    /// Execute T4 transition: Indicate baudrate establishment
+    fn execute_t4(&mut self) -> IoLinkResult<()> {
+        // Invoke SM_DeviceMode(COMx)
+        // TODO: Invoke SM_DeviceMode(COMx)
+        Ok(())
+    }
+
+    /// Execute T5 transition: Enter device identification phase
+    fn execute_t5(&mut self) -> IoLinkResult<()> {
+        // TODO: Prepare device identification data for master verification
+        // Invoke SM_DeviceMode(IDENTSTARTUP)
+        Ok(())
+    }
+
+    /// Execute T6 transition: Enter device identity check phase
+    fn execute_t6(&mut self) -> IoLinkResult<()> {
+        // TODO: Handle master-provided RID and DID parameters for compatibility check
+        // Invoke SM_DeviceMode(IDENTCHANGE)
+        Ok(())
+    }
+
+    /// Execute T7 transition: Enter device compatibility startup phase
+    fn execute_t7(&mut self) -> IoLinkResult<()> {
+        // TODO: Implement compatibility verification logic with master
+        // Device compatibility startup phase is entered
+        // No specific device mode change mentioned in spec
+        Ok(())
+    }
+
+    /// Execute T8 transition: Enter device preoperate phase
+    fn execute_t8(&mut self) -> IoLinkResult<()> {
+        // TODO: Prepare device for parameterization and data storage operations
+        // Invoke SM_DeviceMode(PREOPERATE)
+        Ok(())
+    }
+
+    /// Execute T9 transition: Enter device operate phase
+    fn execute_t9(&mut self) -> IoLinkResult<()> {
+        // TODO: Initialize cyclic process data exchange and acyclic data transfer
+        // Invoke SM_DeviceMode(OPERATE)
+        Ok(())
+    }
+
+    /// Execute T10 transition: Enter device preoperate phase from IdentStartup
+    fn execute_t10(&mut self) -> IoLinkResult<()> {
+        // TODO: Handle direct transition from identification to preoperate
+        // Invoke SM_DeviceMode(PREOPERATE)
+        Ok(())
+    }
+
+    /// Execute T11 transition: Enter device operate phase from ComStartup
+    fn execute_t11(&mut self) -> IoLinkResult<()> {
+        // TODO: Handle legacy master behavior (direct transition to operate)
+        // Invoke SM_DeviceMode(OPERATE)
+        Ok(())
+    }
+
+    /// Execute T12 transition: Enter communication startup phase from Preoperate
+    fn execute_t12(&mut self) -> IoLinkResult<()> {
+        // TODO: Reset communication parameters and restart identification process
+        // Invoke SM_DeviceMode(STARTUP)
+        Ok(())
+    }
+
+    /// Execute T13 transition: Enter communication startup phase from Operate
+    fn execute_t13(&mut self) -> IoLinkResult<()> {
+        // TODO: Handle communication restart from operate mode
+        // Invoke SM_DeviceMode(STARTUP)
+        Ok(())
+    }
+
+    /// Execute T14 transition: Change transmission rate and establish communication
+    fn execute_t14(&mut self, physical_layer: &mut pl::physical_layer::PhysicalLayer) -> IoLinkResult<()> {
+        // TODO: Implement transmission rate change logic based on device identification requirements
+        // Invoke PL_SetMode(COMx)
+        // TODO: Change the COM1 to actual communication mode from the application
+        physical_layer.pl_set_mode(IoLinkMode::Com1)?;
+        // Invoke SM_DeviceMode(ESTABCOM)
+        Ok(())
+    }
     /// See 9.3.2.7 SM_DeviceMode
     /// The SM_DeviceMode service is used to indicate changes of communication states to the
     /// Device application. The parameters of the service primitives are listed in Table 94.
-    pub fn device_mode_ind(&mut self, mode: DeviceMode) -> IoLinkResult<()> {
+    pub fn set_device_mode_req(&mut self, mode: DeviceMode) -> IoLinkResult<()> {
+        // TODO: Implement proper device mode indication handling for all modes
+        // TODO: Add device application notification mechanism
         if mode == DeviceMode::Sio {
             self.process_event(SystemManagementEvent::SmDeviceModeSio)?;
         }
@@ -357,5 +474,12 @@ impl DlInd for SystemManagement {
         else {
             return Err(IoLinkError::InvalidEvent);
         }
+    }
+
+    fn dl_read_ind(&mut self, address: u8) -> IoLinkResult<()> {
+        if address == direct_parameter!(MinCycleTime) { // MinCycleTime address
+            return self.process_event(SystemManagementEvent::DlReadMincycletime);
+        }
+        Err(IoLinkError::InvalidEvent)
     }
 }

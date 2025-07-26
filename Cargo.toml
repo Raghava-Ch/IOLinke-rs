@@ -34,6 +34,8 @@ optional = true
 [features]
 default = []
 std = []
+clang = []
+rustlang = []
 cortex-m = ["dep:cortex-m"]
 panic-halt = ["dep:panic-halt"]
 
