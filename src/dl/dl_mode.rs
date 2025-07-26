@@ -29,7 +29,7 @@ pub trait DlInd {
 /// See IO-Link v1.1.4 Section 7.3.2.5
 /// See Table 45 – State transition tables of the Device DL-mode handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DlModeState {
+pub enum DlModeState {
     /// Inactive state
     Idle,
     /// Establish Communication

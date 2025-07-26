@@ -3,10 +3,22 @@
 //! This module implements the Message Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 6.3
 
+use crate::types;
 use crate::types::{IoLinkError, IoLinkResult, MessageType};
 use crate::{dl, pl, MHInfo, MhConfState, Timer};
 use heapless::Vec;
 use nom::{bytes::complete::take, number::complete::u8, IResult};
+
+pub trait OdInd {
+    /// Invoke OD.ind service with the provided data
+    fn od_ind(
+        &mut self,
+        rw_direction: types::RwDirection,
+        address_ctrl: u8,
+        length: u8,
+        data: &[u8],
+    ) -> IoLinkResult<()>;
+}
 
 /// Maximum message buffer size
 const MAX_MESSAGE_SIZE: usize = 32;
@@ -372,6 +384,17 @@ impl MessageHandler {
                 self.handle_parameter_command(message)?;
             }
         }
+        Ok(())
+    }
+
+    /// 7.2.2.5 PDInStatus
+    /// The service PDInStatus sets and signals the validity qualifier
+    /// of the input Process Data.
+    pub fn pd_in_status_req(&mut self, valid: types::PdInStatus) -> IoLinkResult<()> {
+        match valid {
+            types::PdInStatus::VALID => self.process_event(MessageHandlerEvent::NoError),
+            types::PdInStatus::INVALID => self.process_event(MessageHandlerEvent::ChecksumError),
+        };
         Ok(())
     }
 

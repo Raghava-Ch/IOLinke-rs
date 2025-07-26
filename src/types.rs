@@ -35,6 +35,28 @@ pub enum IoLinkMode {
     Inactive = 0xFF
 }
 
+/// See 7.2.2.2 OD Arguments
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RwDirection {
+    /// Read operation
+    Read,
+    /// Write operation
+    Write,
+}
+
+/// See A.1.2 M-sequence control (MC)
+/// Also see Table A.1 – Values of communication channel
+pub enum ComChannel {
+    /// {Process} = 0
+    Process = 0,
+    /// {Page} = 1
+    Page = 1,
+    /// {Diagnosis} = 2
+    Diagnosis = 2,
+    /// {ISDU} = 3
+    Isdu = 3,
+}
+
 /// See Table 94 – SM_DeviceMode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -161,19 +183,28 @@ pub enum Timer {
 }
 
 /// All the master commands used in IO-Link
-/// See Table B.2 – Types of MasterCommands
+/// See Table B.1.2 – Types of MasterCommands
+/// Also see Table 55 – Control codes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MasterCommand {
-    ///MasterCommand = 0x5A
+    /// MasterCommand {Fallback} = 0x5Au8
     INACTIVE,
-    ///MasterCommand = 0x97
-    STARTUP,
-    ///MasterCommand = 0x9A
-    PREOPERATE,
-    ///MasterCommand = 0x99
-    OPERATE,
-    ///MasterCommand = 0x5A
+    /// MasterCommand {Fallback} = 0x5Au8
     FALLBACK,
+    /// MasterCommand {DeviceStartup} = 0x97u8
+    STARTUP,
+    /// MasterCommand {DevicePreoperate} = 0x9Au8
+    PREOPERATE,
+    /// MasterCommand {DeviceOperate} = 0x99u8
+    /// This command is also known as PDOUTINVALID
+    OPERATE,
+    /// MasterCommand {MasterIdent} = 0x95u8
+    MASTERIDENT,
+    /// MasterCommand {DeviceIdent} = 0x96u8
+    DEVICEIDENT,
+    /// MasterCommand {ProcessDataOutputOperate} = 0x98u8
+    /// This command aka PDOUTVALID
+    PDOUT,
 }
 
 /// All the message handler information type
@@ -199,6 +230,28 @@ pub enum PhysicalLayerStatus {
     Communication = 1,
     /// Error state
     Error = 2,
+}
+
+/// See 7.2.1.18 DL_Control
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DlControlCodes {
+    /// (Input Process Data valid; see 7.2.2.5, 8.2.2.12)
+    VALID,
+    /// (Input Process Data invalid)
+    INVALID,
+    /// (Output Process Data valid; see 7.3.7.1)
+    PDOUTVALID,
+    /// (Output Process Data invalid or missing)
+    PDOUTINVALID,
+}
+
+/// See 7.2.2.5 PDInStatus
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PdInStatus {
+    /// (Input Process Data valid based on PD status flag (see A.1.5); see 7.2.1.18)
+    VALID,
+    /// (Input Process Data invalid)
+    INVALID,
 }
 
 /// Message types for IO-Link communication
