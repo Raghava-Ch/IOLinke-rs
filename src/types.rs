@@ -91,6 +91,64 @@ pub enum DlMode {
     Operate,
 }
 
+/// All the message handler confirmation type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MhConfState {
+    Com(IoLinkMode),
+    Active,
+    Inactive,
+}
+
+/// All the Command handler configuration states used
+/// See Figure 54 – State machine of the Device command handler
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChConfState {
+    /// (Handler changed to the ACTIVE state)
+    Active,
+    /// (Handler changed to the INACTIVE state)
+    Inactive,
+}
+
+/// All the On-request data configuration states used
+/// See Figure 49 – State machine of the Device On-request Data handler
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OhConfState {
+    /// (Handler changed to the ACTIVE state)
+    Active,
+    /// (Handler changed to the INACTIVE state)
+    Inactive,
+}
+
+/// All the ISDU Hanler configuration states used
+/// See Figure 52 – State machine of the Device ISDU handler
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IhConfState {
+    /// (Handler changed to the ACTIVE state)
+    Active,
+    /// (Handler changed to the INACTIVE state)
+    Inactive,
+}
+
+/// All the Event Handler configuration states used
+/// See Figure 56 – State machine of the Device Event handler
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EhConfState {
+    /// (Handler changed to the ACTIVE state)
+    Active,
+    /// (Handler changed to the INACTIVE state)
+    Inactive,
+}
+
+/// All the Process Data Handler configuration states used
+/// See Figure 47 – State machine of the Device Process Data handler
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PdConfState {
+    /// (Handler changed to the ACTIVE state)
+    Active,
+    /// (Handler changed to the INACTIVE state)
+    Inactive,
+}
+
 /// All the timers used in IO-Link
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Timer {
@@ -128,21 +186,6 @@ pub enum MHInfo {
     IllegalMessagetype,
     /// Checksum error detected
     ChecksumMismatch,
-}
-
-/// All the message handler confirmation type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MhConf {
-    Com(IoLinkMode),
-    Active,
-    Inactive,
-}
-
-/// All the event handler confirmation type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EhConf {
-    Active,
-    Inactive,
 }
 
 /// Physical layer status

@@ -3,12 +3,12 @@
 //! This module implements the Event Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 8.4.4
 
-use crate::{types::{Event, EventType, IoLinkError, IoLinkResult}, EhConf};
+use crate::types::{self, Event, EventType, IoLinkError, IoLinkResult};
 use heapless::Deque;
 
 /// See Table 60 – State transition tables of the Device Event handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventHandlerState {
+enum EventHandlerState {
     /// - Inactive_0: Waiting on activation
     Inactive,
     /// - Idle_1: Waiting on DL-Event service from 
@@ -53,7 +53,7 @@ enum Transition {
 
 /// Figure 56 – State machine of the Device Event handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventHandlerEvent {
+enum EventHandlerEvent {
     /// {EH_Conf_ACTIVE} See Table 60, Tiggers T1
     EhConfActive,
     /// {DL_Event} See Table 60, Tiggers T2
@@ -165,14 +165,14 @@ impl EventHandler {
     }
 
     /// Event handler conf for updating Active or Inactive
-    pub fn eh_conf(&mut self, mode: EhConf) -> IoLinkResult<()> {
+    /// See 7.3.8.4 State machine of the Device Event handler
+    pub fn eh_conf(&mut self, state: types::EhConfState) -> IoLinkResult<()> {
         // Update the event handler configuration
-        if mode == EhConf::Active {
-            self.process_event(EventHandlerEvent::EhConfActive)?;
-        } else {
-            self.process_event(EventHandlerEvent::EhConfInactive)?;
-        }
-        
+        match state {
+            types::EhConfState::Active => self.process_event(EventHandlerEvent::EhConfActive),
+            types::EhConfState::Inactive => self.process_event(EventHandlerEvent::EhConfInactive),
+        }?;
+
         Ok(())
     }
 
