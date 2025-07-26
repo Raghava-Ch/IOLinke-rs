@@ -27,12 +27,22 @@ pub enum IoLinkMode {
     Com2 = 2,
     /// COM3 mode (230.4 kbaud)
     Com3 = 3,
+    /// DI mode
+    Di = 4,
+    /// DO mode
+    Do = 5,
+    /// INACTIVE mode
+    Inactive = 0xFF
 }
 
 /// See Table 94 – SM_DeviceMode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DeviceMode {
+    /// (Device changed to the SM mode "SM_IdentStartup")
+    IdentStartup,
+    /// (Device changed to the SM mode "SM_IdentChange")
+    IdentChange,
     /// (Device changed to waiting for configuration)
     Idle,
     /// (Device changed to the mode defined in service "SM_SetDeviceCom")
@@ -256,7 +266,7 @@ pub enum IoLinkError {
     InvalidEvent,
     /// Nothing to do, 
     /// This is a custom error type for dummy trait functions
-    NoActionNeeded,
+    NoImplFound,
 }
 
 /// Result type for IO-Link operations

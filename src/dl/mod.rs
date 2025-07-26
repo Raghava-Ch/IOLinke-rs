@@ -1,4 +1,4 @@
-use crate::IoLinkResult;
+use crate::{pl::physical_layer::{PhysicalLayer, PhysicalLayerInd}, sm, IoLinkResult};
 
 mod command;
 mod dl_mode;
@@ -7,6 +7,8 @@ mod isdu;
 mod message;
 mod process_data;
 mod on_request;
+
+pub use dl_mode::DlInd;
 
 pub struct DataLinkLayer {
     command: command::CommandHandler,
@@ -17,9 +19,11 @@ pub struct DataLinkLayer {
 }
 
 impl DataLinkLayer {
-    pub fn poll(&mut self) -> IoLinkResult<()> {
+    pub fn poll(&mut self, system_management: &mut sm::SystemManagement) -> IoLinkResult<()> {
         self.command.poll();
-        self.dl_mode.poll();
+        self.dl_mode.poll(
+            &mut self.message,
+            system_management);
         self.event_handler.poll();
         self.event_handler.poll();
         self.message.poll(&mut self.dl_mode);
@@ -38,5 +42,15 @@ impl Default for DataLinkLayer {
             message: message::MessageHandler::new(),
             process_data: process_data::ProcessDataHandler::new(),
         }
+    }
+}
+
+impl PhysicalLayerInd for DataLinkLayer {
+    fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
+        self.dl_mode.pl_wake_up_ind()
+    }
+
+    fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<()> {
+        self.message.pl_transfer_ind(rx_buffer)
     }
 }
