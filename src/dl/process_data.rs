@@ -3,11 +3,11 @@
 //! This module implements the Process Data Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 7.2
 
-use crate::types::{IoLinkError, IoLinkResult, ProcessData};
+use crate::types::{self, IoLinkError, IoLinkResult, ProcessData};
 
 /// Process Data Handler states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProcessDataHandlerState {
+enum ProcessDataHandlerState {
     /// {Inactive_0}
     Inactive,
     /// {PDActive_1}
@@ -47,7 +47,7 @@ enum Transition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProcessDataHandlerEvent {
+enum ProcessDataHandlerEvent {
     /// {PD_ind}
     PDInd,
     /// {PD_Conf_ACTIVE}
@@ -165,6 +165,17 @@ impl ProcessDataHandler {
             }
             
         }
+        Ok(())
+    }
+
+    /// Handle Process Data configuration changes
+    /// See 7.3.4.4 State machine of the Device Process Data handler
+    pub fn pd_conf(&mut self, state: types::PdConfState) -> IoLinkResult<()> {
+        match state {
+            types::PdConfState::Active => self.process_event(ProcessDataHandlerEvent::PDConfActive),
+            types::PdConfState::Inactive => self.process_event(ProcessDataHandlerEvent::PDConfInactive),
+        }?;
+
         Ok(())
     }
 

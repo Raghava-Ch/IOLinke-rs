@@ -3,11 +3,11 @@
 //! This module implements the On request Data Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 7.3.5.3
 
-use crate::types::{IoLinkError, IoLinkResult};
+use crate::types::{self, IoLinkError, IoLinkResult};
 
 /// On request Data Handler states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OnRequestHandlerState {
+enum OnRequestHandlerState {
     /// {Inactive_0}
     Inactive,
     /// {Idle_1}
@@ -39,7 +39,7 @@ enum Transition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OnRequestHandlerEvent {
+enum OnRequestHandlerEvent {
     /// {OD_ind_Command}
     OdIndCommand,
     /// {OD_ind_Param}
@@ -122,6 +122,15 @@ impl OnRequestHandler {
             }
         }
         Ok(())
+    }
+
+    /// Handle On request configuration changes
+    /// See 7.3.5.3 State machine of the Device On-request Data handler
+    pub fn oh_conf(&mut self, state: types::ChConfState) -> IoLinkResult<()> {
+        match state {
+            types::ChConfState::Active => self.process_event(OnRequestHandlerEvent::OhConfActive),
+            types::ChConfState::Inactive => self.process_event(OnRequestHandlerEvent::OhConfInactive),
+        }
     }
 
 }

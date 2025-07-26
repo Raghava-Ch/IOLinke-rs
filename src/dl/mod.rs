@@ -1,12 +1,15 @@
-use crate::{pl::physical_layer::{PhysicalLayer, PhysicalLayerInd}, sm, IoLinkResult};
+use crate::{
+    pl::physical_layer::{PhysicalLayer, PhysicalLayerInd},
+    sm, IoLinkResult,
+};
 
 mod command;
 mod dl_mode;
 mod event_handler;
 mod isdu;
 mod message;
-mod process_data;
 mod on_request;
+mod process_data;
 
 pub use dl_mode::DlInd;
 
@@ -16,17 +19,29 @@ pub struct DataLinkLayer {
     event_handler: event_handler::EventHandler,
     message: message::MessageHandler,
     process_data: process_data::ProcessDataHandler,
+    isdu: isdu::IsduHandler,
+    on_request: on_request::OnRequestHandler,
 }
 
 impl DataLinkLayer {
-    pub fn poll(&mut self, system_management: &mut sm::SystemManagement) -> IoLinkResult<()> {
+    pub fn poll(
+        &mut self,
+        system_management: &mut sm::SystemManagement,
+        physical_layer: &mut PhysicalLayer,
+    ) -> IoLinkResult<()> {
         self.command.poll();
         self.dl_mode.poll(
+            &mut self.isdu,
+            &mut self.event_handler,
+            &mut self.command,
+            &mut self.on_request,
+            &mut self.process_data,
             &mut self.message,
-            system_management);
+            system_management,
+        );
         self.event_handler.poll();
         self.event_handler.poll();
-        self.message.poll(&mut self.dl_mode);
+        self.message.poll(&mut self.dl_mode, physical_layer);
         self.process_data.poll();
 
         Ok(())
@@ -41,6 +56,8 @@ impl Default for DataLinkLayer {
             event_handler: event_handler::EventHandler::new(),
             message: message::MessageHandler::new(),
             process_data: process_data::ProcessDataHandler::new(),
+            isdu: isdu::IsduHandler::new(),
+            on_request: on_request::OnRequestHandler::new(),
         }
     }
 }

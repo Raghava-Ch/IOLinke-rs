@@ -3,11 +3,17 @@
 //! This module implements the Command Handler state machine as defined in
 //! IO-Link Specification v1.1.4
 
-use crate::types::{IoLinkError, IoLinkResult};
+use crate::{types::{IoLinkError, IoLinkResult}, ChConfState, MasterCommand};
+
+pub trait MasterCommandInd {
+    /// Any MasterCommand received by the Device command handler
+    /// (see Table 44 and Figure 54, state "CommandHandler_2")
+    fn master_command_ind(&mut self, master_command: MasterCommand) -> IoLinkResult<()>;
+}
 
 /// See 7.3.7.3 State machine of the Device command handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CommandHandlerState {
+enum CommandHandlerState {
     ///{Inactive_0} Waiting on activation
     Inactive,
     ///{Idle_1} Waiting on next MasterCommand
@@ -53,7 +59,7 @@ enum Transition {
 
 /// See Table 57 – State transition tables of the Device command handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventHandlerEvent {
+enum EventHandlerEvent {
     /// {CH_Conf_ACTIVE} See Table 57, Triggers T1
     ChConfActive,
     /// {[Received MasterCmd PDOUT]} See Table 57, Triggers T2
@@ -132,6 +138,16 @@ impl CommandHandler {
 
             }
         }
+        Ok(())
+    }
+
+    /// See 7.3.7.3 State machine of the Device command handler
+    pub fn ch_conf(&mut self, state: ChConfState) -> IoLinkResult<()> {
+        match state {
+            ChConfState::Active => self.process_event(EventHandlerEvent::ChConfActive),
+            ChConfState::Inactive => self.process_event(EventHandlerEvent::ChConfInactive),
+        }?;
+
         Ok(())
     }
 }

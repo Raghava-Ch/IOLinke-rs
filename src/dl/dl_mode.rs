@@ -3,8 +3,8 @@
 //! This module implements the DL-Mode Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 6.2
 
-use crate::{dl, pl, sm};
 use crate::types::{IoLinkError, IoLinkMode, IoLinkResult};
+use crate::{dl, pl, sm, types};
 use crate::{DlMode, MHInfo, MasterCommand, Timer};
 
 /// DL indications to other modules
@@ -13,13 +13,13 @@ pub trait DlInd {
     /// The DL uses the DL_Mode service to report to System Management that a certain operating
     /// status has been reached. The parameters of the service primitives are listed in Table 29.
     fn dl_mode_ind(&mut self, mode: DlMode) -> IoLinkResult<()>;
-    
+
     /// See 7.2.1.5 DL_Write
     /// The DL_Write service is used by System Management to write a Device parameter value to
     /// the Device via the page communication channel. The parameters of the service primitives are
     /// listed in Table 20.
     fn dl_write_ind(&mut self, address: u8, value: u8) -> IoLinkResult<()>;
-   
+
     /// 7.2.1.4 DL_Read
     /// The DL_Read service is used by System Management to read a Device parameter value via
     /// the page communication channel. The parameters of the service primitives are listed in Table 19.
@@ -29,7 +29,7 @@ pub trait DlInd {
 /// See IO-Link v1.1.4 Section 7.3.2.5
 /// See Table 45 – State transition tables of the Device DL-mode handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DlModeState {
+enum DlModeState {
     /// Inactive state
     Idle,
     /// Establish Communication
@@ -111,18 +111,24 @@ enum Transition {
 }
 /// DL-Mode Handler events
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DlModeEvent {
+enum DlModeEvent {
     /// Table 45 – T1
     PlWakeUp,
     /// Mode change request
     /// Table 45 – T2
     ComChange(IoLinkMode),
-    /// Table 45 – T3, T4, T5, T6, T7, T8, T9,
-    MasterCmd(MasterCommand), // TODO: Check the T5 what is V1.0-supp
+    /// Table 45 – T3
+    MasterCommandPreoperate,
+    /// Table 45 – T4, T5
+    MasterCommandOperate, // TODO: Check the T5 what is V1.0-supp
+    /// Table 45 – T6, T7
+    MasterCommandStartup,
+    /// Table 45 – T8, T9
+    MasterCommandFallback,
     /// Table 45 – T10
-    TimerElapsed(Timer),
-    /// Table 45 – T11
-    MsgHandlerError(MHInfo),
+    TimerElapsedTdsio,
+    /// Table 45 – T11, T12
+    MHInfoIllegalMessagetype,
 }
 
 /// DL-Mode Handler state machine
@@ -151,79 +157,26 @@ impl DlModeHandler {
         use DlModeEvent::*;
         use DlModeState::*;
 
-        let new_state = match (self.state, event) {
-            (Idle, PlWakeUp) => {
-                self.exec_transition = Transition::T1;
-                EstablishCom
-            }
+        let (new_transition, new_state) = match (self.state, event) {
+            (Idle, PlWakeUp) => (Transition::T1, EstablishCom),
             (EstablishCom, ComChange(mode)) => {
-                self.exec_transition = Transition::T2;
                 self.target_mode = mode;
-                Startup
+                (Transition::T2, Startup)
             }
-            (EstablishCom, TimerElapsed(timer)) => {
-                if timer == Timer::Tdsio {
-                    self.exec_transition = Transition::T10;
-                    Idle
-                } else {
-                    return Err(IoLinkError::InvalidEvent);
-                }
-            }
-            (Startup, MasterCmd(cmd)) => {
-                if cmd == MasterCommand::PREOPERATE {
-                    self.exec_transition = Transition::T3;
-                    Preoperate
-                } else if cmd == MasterCommand::OPERATE {
-                    self.exec_transition = Transition::T5;
-                    Operate
-                } else {
-                    return Err(IoLinkError::InvalidEvent);
-                }
-            }
-            (Preoperate, MasterCmd(cmd)) => {
-                if cmd == MasterCommand::OPERATE {
-                    self.exec_transition = Transition::T4;
-                    Operate
-                } else if cmd == MasterCommand::STARTUP {
-                    self.exec_transition = Transition::T6;
-                    Startup
-                } else if cmd == MasterCommand::FALLBACK {
-                    self.exec_transition = Transition::T8;
-                    Idle
-                } else {
-                    return Err(IoLinkError::InvalidEvent);
-                }
-            }
-            (Preoperate, MsgHandlerError(error)) => {
-                if error == MHInfo::IllegalMessagetype {
-                    self.exec_transition = Transition::T12;
-                    Startup
-                } else {
-                    return Err(IoLinkError::InvalidEvent);
-                }
-            }
-            (Operate, MasterCmd(cmd)) => {
-                if cmd == MasterCommand::STARTUP {
-                    self.exec_transition = Transition::T7;
-                    Startup
-                } else if cmd == MasterCommand::FALLBACK {
-                    self.exec_transition = Transition::T9;
-                    Idle
-                } else {
-                    return Err(IoLinkError::InvalidEvent);
-                }
-            }
-            (Operate, MsgHandlerError(error)) => {
-                if error == MHInfo::IllegalMessagetype {
-                    self.exec_transition = Transition::T11;
-                    Startup
-                } else {
-                    return Err(IoLinkError::InvalidEvent);
-                }
-            }
+            (EstablishCom, TimerElapsedTdsio) => (Transition::T10, Idle),
+            (Startup, MasterCommandPreoperate) => (Transition::T3, Preoperate),
+            (Startup, MasterCommandOperate) => (Transition::T5, Operate),
+            (Preoperate, MasterCommandOperate) => (Transition::T4, Operate),
+            (Preoperate, MasterCommandStartup) => (Transition::T6, Startup),
+            (Preoperate, MasterCommandFallback) => (Transition::T8, Idle),
+            (Preoperate, MHInfoIllegalMessagetype) => (Transition::T12, Startup),
+            (Operate, MasterCommandStartup) => (Transition::T7, Startup),
+            (Operate, MasterCommandFallback) => (Transition::T9, Idle),
+            (Operate, MHInfoIllegalMessagetype) => (Transition::T11, Startup),
             _ => return Err(IoLinkError::InvalidEvent),
         };
 
+        self.exec_transition = new_transition;
         self.state = new_state;
         Ok(())
     }
@@ -232,6 +185,11 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Section 7.3.2.5
     pub fn poll(
         &mut self,
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+        command_handler: &mut dl::command::CommandHandler,
+        on_request_handler: &mut dl::on_request::OnRequestHandler,
+        process_data_handler: &mut dl::process_data::ProcessDataHandler,
         message_handler: &mut dl::message::MessageHandler,
         system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
@@ -245,47 +203,86 @@ impl DlModeHandler {
             }
             Transition::T2 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t2(system_management);
+                self.execute_t2(on_request_handler, command_handler, system_management);
             }
             Transition::T3 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t3(system_management);
+                self.execute_t3(isdu_handler, event_handler, system_management);
             }
             Transition::T4 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t4(system_management);
+                self.execute_t4(process_data_handler, system_management);
             }
             Transition::T5 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t5(system_management);
+                self.execute_t5(
+                    isdu_handler,
+                    event_handler,
+                    process_data_handler,
+                    system_management,
+                );
             }
             Transition::T6 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t6(system_management);
+                self.execute_t6(isdu_handler, event_handler, system_management);
             }
             Transition::T7 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t7(system_management);
+                self.execute_t7(
+                    isdu_handler,
+                    event_handler,
+                    process_data_handler,
+                    system_management,
+                );
             }
             Transition::T8 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t8(message_handler, system_management);
+                self.execute_t8(
+                    isdu_handler,
+                    event_handler,
+                    command_handler,
+                    on_request_handler,
+                    process_data_handler,
+                    message_handler,
+                    system_management,
+                );
             }
             Transition::T9 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t9(message_handler, system_management);
+                self.execute_t9(
+                    isdu_handler,
+                    event_handler,
+                    command_handler,
+                    on_request_handler,
+                    process_data_handler,
+                    message_handler,
+                    system_management,
+                );
             }
             Transition::T10 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t10(message_handler, system_management);
+                self.execute_t10(
+                    isdu_handler,
+                    event_handler,
+                    command_handler,
+                    on_request_handler,
+                    process_data_handler,
+                    message_handler,
+                    system_management,
+                );
             }
             Transition::T11 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t11(message_handler, system_management);
+                self.execute_t11(
+                    isdu_handler,
+                    event_handler,
+                    process_data_handler,
+                    system_management,
+                );
             }
             Transition::T12 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t12(system_management);
+                self.execute_t12(isdu_handler, event_handler, system_management);
             }
         }
         Ok(())
@@ -296,10 +293,10 @@ impl DlModeHandler {
     fn execute_t1(
         &mut self,
         message_handler: &mut dl::message::MessageHandler,
-        system_management: &mut sm::SystemManagement
+        system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
         // Activate message handler (call MH_Conf_ACTIVE in Figure 44)
-        message_handler.mh_conf_update(crate::MhConf::Active);
+        message_handler.mh_conf_update(crate::MhConfState::Active);
         // Indicate state via service DL_Mode.ind(ESTABCOM) to SM
         system_management.dl_mode_ind(DlMode::Estabcom);
         log::debug!("DL-Mode: T1 - Wakeup detected, activating message handler");
@@ -311,15 +308,21 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T2
     fn execute_t2(
         &mut self,
-        system_management: &mut sm::SystemManagement
+        on_request_handler: &mut dl::on_request::OnRequestHandler,
+        command_handler: &mut dl::command::CommandHandler,
+        system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Activate On-request Data (call OH_Conf_ACTIVE in Figure 49)
-        // Activate command handler (call CH_Conf_ACTIVE in Figure 54)
-        // Indicate state via service DL_Mode.ind (COM1, COM2, or COM3) to SM
-        log::debug!("DL-Mode: T2 - Communication mode {:?} established", self.target_mode);
+        log::debug!(
+            "DL-Mode: T2 - Communication mode {:?} established",
+            self.target_mode
+        );
         self.current_mode = self.target_mode;
-        // TODO: Implement OH_Conf_ACTIVE call
-        // TODO: Implement CH_Conf_ACTIVE call
+        // Activate On-request Data (call OH_Conf_ACTIVE in Figure 49)
+        on_request_handler.oh_conf(crate::ChConfState::Active);
+        // Activate command handler (call CH_Conf_ACTIVE in Figure 54)
+        command_handler.ch_conf(crate::ChConfState::Active);
+        // Indicate state via service DL_Mode.ind (COM1, COM2, or COM3) to SM
+        // TODO: Implement the actual COMx mode handling
         let dl_mode = match self.current_mode {
             IoLinkMode::Com1 => DlMode::Com1,
             IoLinkMode::Com2 => DlMode::Com2,
@@ -327,7 +330,7 @@ impl DlModeHandler {
             _ => return Err(IoLinkError::InvalidEvent),
         };
         system_management.dl_mode_ind(dl_mode);
-        
+
         Ok(())
     }
 
@@ -335,14 +338,16 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T3
     fn execute_t3(
         &mut self,
-        system_management: &mut sm::SystemManagement
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+        system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Activate ISDU (call IH_Conf_ACTIVE in Figure 52)
-        // Activate Event handler (call EH_Conf_ACTIVE in Figure 56)
-        // Indicate state via service DL_Mode.ind (PREOPERATE) to SM
         log::debug!("DL-Mode: T3 - PREOPERATE command received");
-        // TODO: Implement IH_Conf_ACTIVE call
-        // TODO: Implement EH_Conf_ACTIVE call
+        // Activate ISDU (call IH_Conf_ACTIVE in Figure 52)
+        isdu_handler.ih_conf(types::IhConfState::Active);
+        // Activate Event handler (call EH_Conf_ACTIVE in Figure 56)
+        event_handler.eh_conf(types::EhConfState::Active);
+        // Indicate state via service DL_Mode.ind (PREOPERATE) to SM
         system_management.dl_mode_ind(DlMode::Preoperate);
 
         Ok(())
@@ -352,14 +357,15 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T4
     fn execute_t4(
         &mut self,
-        system_management: &mut sm::SystemManagement
+        process_data_handler: &mut dl::process_data::ProcessDataHandler,
+        system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Activate Process Data handler (call PD_Conf_ACTIVE in Figure 47)
-        // Indicate state via service DL_Mode.ind (OPERATE) to SM
         log::debug!("DL-Mode: T4 - OPERATE command received from PREOPERATE");
-        // TODO: Implement PD_Conf_ACTIVE call
+        // Activate Process Data handler (call PD_Conf_ACTIVE in Figure 47)
+        process_data_handler.pd_conf(types::PdConfState::Active);
+        // Indicate state via service DL_Mode.ind (OPERATE) to SM
         system_management.dl_mode_ind(DlMode::Operate);
-        
+
         Ok(())
     }
 
@@ -367,16 +373,19 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T5
     fn execute_t5(
         &mut self,
-        system_management: &mut sm::SystemManagement
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+        process_data_handler: &mut dl::process_data::ProcessDataHandler,
+        system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Activate Process Data handler (call PD_Conf_ACTIVE in Figure 47)
-        // Activate ISDU (call IH_Conf_ACTIVE in Figure 52)
-        // Activate Event handler (call EH_Conf_ACTIVE in Figure 56)
-        // Indicate state via service DL_Mode.ind (OPERATE) to SM
         log::debug!("DL-Mode: T5 - OPERATE command received from STARTUP");
-        // TODO: Implement PD_Conf_ACTIVE call
-        // TODO: Implement IH_Conf_ACTIVE call
-        // TODO: Implement EH_Conf_ACTIVE call
+        // Activate Process Data handler (call PD_Conf_ACTIVE in Figure 47)
+        process_data_handler.pd_conf(types::PdConfState::Active);
+        // Activate ISDU (call IH_Conf_ACTIVE in Figure 52)
+        isdu_handler.ih_conf(types::IhConfState::Active);
+        // Activate Event handler (call EH_Conf_ACTIVE in Figure 56)
+        event_handler.eh_conf(types::EhConfState::Active);
+        // Indicate state via service DL_Mode.ind (OPERATE) to SM
         system_management.dl_mode_ind(DlMode::Operate);
 
         Ok(())
@@ -386,14 +395,16 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T6
     fn execute_t6(
         &mut self,
-        system_management: &mut sm::SystemManagement
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+        system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
-        // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
-        // Indicate state via service DL_Mode.ind (STARTUP) to SM
         log::debug!("DL-Mode: T6 - STARTUP command received from PREOPERATE");
-        // TODO: Implement IH_Conf_INACTIVE call
-        // TODO: Implement EH_Conf_INACTIVE call
+        // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
+        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
+        event_handler.eh_conf(types::EhConfState::Inactive);
+        // Indicate state via service DL_Mode.ind (STARTUP) to SM
         system_management.dl_mode_ind(DlMode::Startup);
 
         Ok(())
@@ -403,16 +414,19 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T7
     fn execute_t7(
         &mut self,
-        system_management: &mut sm::SystemManagement
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+        process_data_handler: &mut dl::process_data::ProcessDataHandler,
+        system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Deactivate Process Data handler (call PD_Conf_INACTIVE in Figure 47)
-        // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
-        // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
-        // Indicate state via service DL_Mode.ind (STARTUP) to SM
         log::debug!("DL-Mode: T7 - STARTUP command received from OPERATE");
-        // TODO: Implement PD_Conf_INACTIVE call
-        // TODO: Implement IH_Conf_INACTIVE call
-        // TODO: Implement EH_Conf_INACTIVE call
+        // Deactivate Process Data handler (call PD_Conf_INACTIVE in Figure 47)
+        process_data_handler.pd_conf(types::PdConfState::Inactive);
+        // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
+        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
+        event_handler.eh_conf(types::EhConfState::Inactive);
+        // Indicate state via service DL_Mode.ind (STARTUP) to SM
         system_management.dl_mode_ind(DlMode::Startup);
 
         Ok(())
@@ -422,15 +436,25 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T8
     fn execute_t8(
         &mut self,
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+        command_handler: &mut dl::command::CommandHandler,
+        on_request_handler: &mut dl::on_request::OnRequestHandler,
+        process_data_handler: &mut dl::process_data::ProcessDataHandler,
         message_handler: &mut dl::message::MessageHandler,
         system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Wait until TFBD elapsed, then deactivate all handlers (call xx_Conf_INACTIVE)
-        // Indicate state via service DL_Mode.ind (INACTIVE) to SM
         log::debug!("DL-Mode: T8 - FALLBACK command received from PREOPERATE");
+        // Wait until TFBD elapsed,
         // TODO: Implement TFBD timer wait
-        // TODO: Implement all xx_Conf_INACTIVE calls
-        message_handler.mh_conf_update(crate::MhConf::Inactive);
+        //Then deactivate all handlers (call xx_Conf_INACTIVE)
+        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        event_handler.eh_conf(types::EhConfState::Inactive);
+        command_handler.ch_conf(crate::ChConfState::Inactive);
+        on_request_handler.oh_conf(crate::ChConfState::Inactive);
+        process_data_handler.pd_conf(types::PdConfState::Inactive);
+        message_handler.mh_conf_update(crate::MhConfState::Inactive);
+        // Indicate state via service DL_Mode.ind (INACTIVE) to SM
         system_management.dl_mode_ind(DlMode::Inactive);
 
         Ok(())
@@ -440,15 +464,25 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T9
     fn execute_t9(
         &mut self,
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+        command_handler: &mut dl::command::CommandHandler,
+        on_request_handler: &mut dl::on_request::OnRequestHandler,
+        process_data_handler: &mut dl::process_data::ProcessDataHandler,
         message_handler: &mut dl::message::MessageHandler,
         system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Wait until TFBD elapsed, then deactivate all handlers (call xx_Conf_INACTIVE)
-        // Indicate state via service DL_Mode.ind (INACTIVE) to SM
         log::debug!("DL-Mode: T9 - FALLBACK command received from OPERATE");
+        // Wait until TFBD elapsed, 
         // TODO: Implement TFBD timer wait
-        // TODO: Implement all xx_Conf_INACTIVE calls
-        message_handler.mh_conf_update(crate::MhConf::Inactive);
+        // Then deactivate all handlers (call xx_Conf_INACTIVE)
+        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        event_handler.eh_conf(types::EhConfState::Inactive);
+        command_handler.ch_conf(crate::ChConfState::Inactive);
+        on_request_handler.oh_conf(crate::ChConfState::Inactive);
+        process_data_handler.pd_conf(types::PdConfState::Inactive);
+        message_handler.mh_conf_update(crate::MhConfState::Inactive);
+        // Indicate state via service DL_Mode.ind (INACTIVE) to SM
         system_management.dl_mode_ind(DlMode::Inactive);
 
         Ok(())
@@ -458,16 +492,25 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T10
     fn execute_t10(
         &mut self,
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+        command_handler: &mut dl::command::CommandHandler,
+        on_request_handler: &mut dl::on_request::OnRequestHandler,
+        process_data_handler: &mut dl::process_data::ProcessDataHandler,
         message_handler: &mut dl::message::MessageHandler,
         system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // After unsuccessful wakeup procedures, establish configured SIO mode
-        // Deactivate all handlers (call xx_Conf_INACTIVE)
-        // Indicate state via service DL_Mode.ind (INACTIVE) to SM
         log::debug!("DL-Mode: T10 - Unsuccessful wakeup, establishing SIO mode");
         self.current_mode = IoLinkMode::Sio;
-        // TODO: Implement all xx_Conf_INACTIVE calls
-        message_handler.mh_conf_update(crate::MhConf::Inactive);
+        // After unsuccessful wakeup procedures, establish configured SIO mode
+        // Deactivate all handlers (call xx_Conf_INACTIVE)
+        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        event_handler.eh_conf(types::EhConfState::Inactive);
+        command_handler.ch_conf(crate::ChConfState::Inactive);
+        on_request_handler.oh_conf(crate::ChConfState::Inactive);
+        process_data_handler.pd_conf(types::PdConfState::Inactive);
+        message_handler.mh_conf_update(crate::MhConfState::Inactive);
+        // Indicate state via service DL_Mode.ind (INACTIVE) to SM
         system_management.dl_mode_ind(DlMode::Inactive);
 
         Ok(())
@@ -477,17 +520,19 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T11
     fn execute_t11(
         &mut self,
-        message_handler: &mut dl::message::MessageHandler,
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+        process_data_handler: &mut dl::process_data::ProcessDataHandler,
         system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Deactivate Process Data (call PD_Conf_INACTIVE in Figure 47)
-        // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
-        // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
-        // Indicate state via service DL_Mode.ind (STARTUP) to SM
         log::debug!("DL-Mode: T11 - Illegal M-sequence type from OPERATE");
-        // TODO: Implement PD_Conf_INACTIVE call
-        // TODO: Implement IH_Conf_INACTIVE call
-        // TODO: Implement EH_Conf_INACTIVE call
+        // Deactivate Process Data (call PD_Conf_INACTIVE in Figure 47)
+        process_data_handler.pd_conf(types::PdConfState::Inactive);
+        // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
+        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
+        event_handler.eh_conf(types::EhConfState::Inactive);
+        // Indicate state via service DL_Mode.ind (STARTUP) to SM
         system_management.dl_mode_ind(DlMode::Startup);
 
         Ok(())
@@ -497,32 +542,33 @@ impl DlModeHandler {
     /// See IO-Link v1.1.4 Table 45, T12
     fn execute_t12(
         &mut self,
+        isdu_handler: &mut dl::isdu::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
         system_management: &mut sm::SystemManagement,
     ) -> IoLinkResult<()> {
-        // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
-        // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
-        // Indicate state via service DL_Mode.ind (STARTUP) to SM
         log::debug!("DL-Mode: T12 - Illegal M-sequence type from PREOPERATE");
-        // TODO: Implement IH_Conf_INACTIVE call
-        // TODO: Implement EH_Conf_INACTIVE call
+        // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
+        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
+        event_handler.eh_conf(types::EhConfState::Inactive);
+        // Indicate state via service DL_Mode.ind (STARTUP) to SM
         system_management.dl_mode_ind(DlMode::Startup);
         Ok(())
     }
+
     /// One out of three possible SDCI communication modes COM1, COM2, or COM3
+    /// See Figure 37 – State machine of the Device DL-mode handler
+    /// This function is called to indicate communication is successful.
     pub fn com_mode_update(&mut self, com_mode: IoLinkMode) {
         let _ = self.process_event(DlModeEvent::ComChange(com_mode));
     }
 
-    /// Any MasterCommand received by the Device command handler
-    /// (see Table 44 and Figure 54, state "CommandHandler_2")
-    pub fn master_command_update(&mut self, master_command: MasterCommand) {
-        let _ = self.process_event(DlModeEvent::MasterCmd(master_command));
-    }
-
-    /// Any MasterCommand received by the Device command handler
-    /// (see Table 44 and Figure 54, state "CommandHandler_2")
-    pub fn timer_update(&mut self, timer: Timer) {
-        let _ = self.process_event(DlModeEvent::TimerElapsed(timer));
+    /// Timer elapsed event
+    /// This function is called to indicate a Tdsio timer has elapsed.
+    pub fn timer_elapsed(&mut self, timer: Timer) {
+        if timer == Timer::Tdsio {
+            let _ = self.process_event(DlModeEvent::TimerElapsedTdsio);
+        }
     }
 }
 
@@ -547,7 +593,32 @@ impl dl::message::MsgHandlerInfo for DlModeHandler {
     /// See 7.2.2.6 MHInfo
     /// The service MHInfo signals an exceptional operation within the message handler. The
     /// parameters of the service are listed in Table 39.
-    fn mh_info_update(&mut self, mh_info: MHInfo) {
-        let _ = self.process_event(DlModeEvent::MsgHandlerError(mh_info));
+    fn mh_info(&mut self, mh_info: MHInfo) {
+        if mh_info == types::MHInfo::IllegalMessagetype {
+            let _ = self.process_event(DlModeEvent::MHInfoIllegalMessagetype);
+        }
+    }
+}
+
+impl dl::command::MasterCommandInd for DlModeHandler {
+    /// Any MasterCommand received by the Device command handler
+    /// (see Table 44 and Figure 54, state "CommandHandler_2")
+    fn master_command_ind(&mut self, master_command: MasterCommand) -> IoLinkResult<()> {
+        match master_command {
+            MasterCommand::PREOPERATE => {
+                let _ = self.process_event(DlModeEvent::MasterCommandPreoperate);
+            }
+            MasterCommand::OPERATE => {
+                let _ = self.process_event(DlModeEvent::MasterCommandOperate);
+            }
+            MasterCommand::STARTUP => {
+                let _ = self.process_event(DlModeEvent::MasterCommandStartup);
+            }
+            MasterCommand::FALLBACK => {
+                let _ = self.process_event(DlModeEvent::MasterCommandFallback);
+            }
+            _ => return Err(IoLinkError::InvalidEvent),
+        }
+        Ok(())
     }
 }

@@ -4,7 +4,7 @@
 //! IO-Link Specification v1.1.4 Section 6.3
 
 use crate::types::{IoLinkError, IoLinkResult, MessageType};
-use crate::{dl, pl, MHInfo, MhConf, Timer};
+use crate::{dl, pl, MHInfo, MhConfState, Timer};
 use heapless::Vec;
 use nom::{bytes::complete::take, number::complete::u8, IResult};
 
@@ -27,7 +27,7 @@ pub struct IoLinkMessage {
 
 /// Message Handler states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MessageHandlerState {
+enum MessageHandlerState {
     /// Waiting for activation by the Device DL-mode handler through MH_Conf_ACTIVE
     /// (see Table 45, Transition T1).
     Inactive,
@@ -78,9 +78,9 @@ enum Transition {
 
 /// Message Handler events
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MessageHandlerEvent {
+enum MessageHandlerEvent {
     /// Table 47 – T1 T11
-    MsgHandlerConf(MhConf),
+    MsgHandlerConf(MhConfState),
     /// See 5.2.2.3 PL_Transfer
     /// Table 47 – T2, T3
     PlTransfer,
@@ -103,14 +103,7 @@ pub trait MsgHandlerInfo {
     /// See 7.2.2.6 MHInfo
     /// The service MHInfo signals an exceptional operation within the message handler. The
     /// parameters of the service are listed in Table 39.
-    fn mh_info_update(&mut self, mh_info: MHInfo);
-}
-
-/// Trait for message handler operations in bw modules
-trait MsgHandlerConf {
-    /// This call causes the message handler to send a message with the
-    /// requested transmission rate of COMx and with M-sequence TYPE_0 (see Table 46).
-    fn mh_conf_update(&mut self, mh_conf: MhConf);
+    fn mh_info(&mut self, mh_info: MHInfo);
 }
 
 /// Message Handler implementation
@@ -143,7 +136,7 @@ impl MessageHandler {
 
         let (new_transition, new_state) = match (self.state, event) {
             (State::Inactive, Event::MsgHandlerConf(conf)) => {
-                if conf == MhConf::Active {
+                if conf == MhConfState::Active {
                     (Transition::T1, State::Idle)
                 } else {
                     (Transition::Tn, State::Inactive)
@@ -311,7 +304,7 @@ impl MessageHandler {
     /// Transition T8: CheckMessage -> Idle
     /// Indicate error to DL-mode handler via MHInfo (ILLEGAL_MESSAGETYPE)
     fn execute_t8(&mut self, dl_mode: &mut dl::dl_mode::DlModeHandler) -> IoLinkResult<()> {
-        dl_mode.mh_info_update(MHInfo::IllegalMessagetype);
+        dl_mode.mh_info(MHInfo::IllegalMessagetype);
         Ok(())
     }
 
@@ -346,7 +339,7 @@ impl MessageHandler {
 
     /// This call causes the message handler to send a message with the
     /// requested transmission rate of COMx and with M-sequence TYPE_0 (see Table 46).
-    pub fn mh_conf_update(&mut self, mh_conf: MhConf) {
+    pub fn mh_conf_update(&mut self, mh_conf: MhConfState) {
         let _ = self.process_event(MessageHandlerEvent::MsgHandlerConf(mh_conf));
     }
 
@@ -410,14 +403,6 @@ impl MessageHandler {
         self.rx_buffer.clear();
         self.tx_buffer.clear();
         self.current_message = None;
-    }
-}
-
-impl MsgHandlerConf for MessageHandler {
-    /// This call causes the message handler to send a message with the
-    /// requested transmission rate of COMx and with M-sequence TYPE_0 (see Table 46).
-    fn mh_conf_update(&mut self, mh_conf: MhConf) {
-        let _ = self.process_event(MessageHandlerEvent::MsgHandlerConf(mh_conf));
     }
 }
 

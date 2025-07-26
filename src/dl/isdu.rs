@@ -3,12 +3,12 @@
 //! This module implements the ISDU Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 8.4.3
 
-use crate::types::{IoLinkError, IoLinkResult, Isdu};
+use crate::types::{self, IoLinkError, IoLinkResult, Isdu};
 use heapless::Vec;
 
 /// See 7.3.6.4 State machine of the Device ISDU handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IsduHandlerState {
+enum IsduHandlerState {
     /// {Inactive_0}
     Inactive,
     /// {Idle_1}
@@ -78,7 +78,7 @@ enum Transition {
 
 /// See Figure 52 – State machine of the Device ISDU handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IsduHandlerEvent {
+enum IsduHandlerEvent {
     /// {ISDURead}
     IsduRead,
     /// {IH_Conf_ACTIVE}
@@ -257,14 +257,24 @@ impl IsduHandler {
         Ok(())
     }
 
+    /// Handle ISDU configuration changes
+    /// See 7.3.6.4 State machine of the Device ISDU handler
+    pub fn ih_conf(&mut self, state: types::IhConfState) -> IoLinkResult<()> {
+        match state {
+            types::IhConfState::Active => self.process_event(IsduHandlerEvent::IhConfActive),
+            types::IhConfState::Inactive => self.process_event(IsduHandlerEvent::IhConfInactive),
+        };
+        Ok(())
+    }
+
     /// Process an ISDU request
     fn process_request(&mut self, request: &Isdu) -> IoLinkResult<()> {
         if request.is_write {
             // Handle write request
-            self.handle_write(request)?;
+            // self.handle_write(request)?;
         } else {
             // Handle read request
-            self.handle_read(request)?;
+            // self.handle_read(request)?;
         }
         Ok(())
     }
