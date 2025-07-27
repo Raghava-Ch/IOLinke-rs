@@ -46,6 +46,7 @@ pub enum RwDirection {
 
 /// See A.1.2 M-sequence control (MC)
 /// Also see Table A.1 – Values of communication channel
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComChannel {
     /// {Process} = 0
     Process = 0,
@@ -358,8 +359,10 @@ pub enum IoLinkError {
     
     /// Cycle Error, This is a custom error type
     CycleError,
-    /// Invalid Event Error, This is a custom error type
+    /// Invalid Event Data, This is a custom error type
     InvalidEvent,
+    /// Invalid Event Ddata, This is a custom error type
+    InvalidData,
     /// Nothing to do, 
     /// This is a custom error type for dummy trait functions
     NoImplFound,

@@ -3,15 +3,25 @@
 //! This module implements the Event Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 8.4.4
 
-use crate::types::{self, Event, EventType, IoLinkError, IoLinkResult};
-use heapless::Deque;
+use crate::{
+    dl::message::OdInd,
+    types::{self, Event, EventType, IoLinkError, IoLinkResult},
+};
 
+/// {EventRead} See Table 60, Tiggers T4, T6
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OdIndData {
+    rw_direction: types::RwDirection,
+    com_channel: types::ComChannel,
+    address_ctrl: u8,
+    length: u8,
+}
 /// See Table 60 – State transition tables of the Device Event handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EventHandlerState {
     /// - Inactive_0: Waiting on activation
     Inactive,
-    /// - Idle_1: Waiting on DL-Event service from 
+    /// - Idle_1: Waiting on DL-Event service from
     /// AL providing Event data and the DL_EventTrigger
     /// service to fire the "Event flag" bit (see A.1.5)
     Idle,
@@ -36,13 +46,13 @@ enum Transition {
     T3,
     /// T4: State: FreezeEventMemory (2) -> FreezeEventMemory (2)
     /// Action: Master requests Event memory data via EventRead (= OD.ind). Send Event data by invoking OD.rsp with Event data of the requested Event memory address.
-    T4,
+    T4(OdIndData),
     /// T5: State: FreezeEventMemory (2) -> Idle (1)
     /// Action: Invoke service EventFlag.req (Flag = FALSE) to indicate Event deactivation to the Master via the "Event flag" bit. Mark all Event slots in memory as invalid according to A.6.3.
-    T5,
+    T5(OdIndData),
     /// T6: State: Idle (1) -> Idle (1)
     /// Action: Send contents of Event memory by invoking OD.rsp with Event data
-    T6,
+    T6(OdIndData),
     /// T7: State: Idle (1) -> Inactive (0)
     /// Action: -
     T7,
@@ -61,9 +71,9 @@ enum EventHandlerEvent {
     /// {DL_EventTrigger} See Table 60, Tiggers T3
     DLEventTrigger,
     /// {EventRead} See Table 60, Tiggers T4, T6
-    EventRead,
+    EventRead(OdIndData),
     /// {EventConf} See Table 60, Tiggers T5
-    EventConf,
+    EventConf(OdIndData),
     /// {EH_Config_INACTIVE} See Table 60, Tiggers T7, T8
     EhConfInactive,
 }
@@ -89,30 +99,20 @@ impl EventHandler {
         use EventHandlerState as State;
 
         let (new_transition, new_state) = match (self.state, event) {
-            (State::Inactive, Event::EhConfActive) => {
-                (Transition::T1, State::Idle)
+            (State::Inactive, Event::EhConfActive) => (Transition::T1, State::Idle),
+            (State::Idle, Event::DlEvent) => (Transition::T2, State::Idle),
+            (State::Idle, Event::DLEventTrigger) => (Transition::T3, State::FreezeEventMemory),
+            (State::FreezeEventMemory, Event::EventRead(event_rw_data)) => {
+                (Transition::T4(event_rw_data), State::FreezeEventMemory)
             }
-            (State::Idle, Event::DlEvent) => {
-                (Transition::T2, State::Idle)
+            (State::FreezeEventMemory, Event::EventConf(event_rw_data)) => {
+                (Transition::T5(event_rw_data), State::Idle)
             }
-            (State::Idle, Event::DLEventTrigger) => {
-                (Transition::T3, State::FreezeEventMemory)
+            (State::Idle, Event::EventRead(event_rw_data)) => {
+                (Transition::T6(event_rw_data), State::Idle)
             }
-            (State::FreezeEventMemory, Event::EventRead) => {
-                (Transition::T4, State::FreezeEventMemory)
-            }
-            (State::FreezeEventMemory, Event::EventConf) => {
-                (Transition::T5, State::Idle)
-            }
-            (State::Idle, Event::EventRead) => {
-                (Transition::T6, State::Idle)
-            }
-            (State::Idle, Event::EhConfInactive) => {
-                (Transition::T7, State::Inactive)
-            }
-            (State::FreezeEventMemory, Event::EhConfInactive) => {
-                (Transition::T8, State::Inactive)
-            }
+            (State::Idle, Event::EhConfInactive) => (Transition::T7, State::Inactive),
+            (State::FreezeEventMemory, Event::EhConfInactive) => (Transition::T8, State::Inactive),
             _ => return Err(IoLinkError::InvalidEvent),
         };
         // Update the state and transition
@@ -140,15 +140,15 @@ impl EventHandler {
                 // State: Idle (1) -> FreezeEventMemory (2)
                 // Action: Invoke service EventFlag.req (Flag = TRUE) to indicate Event activation to the Master via the "Event flag" bit. Mark all Event slots in memory as not changeable.
             }
-            Transition::T4 => {
+            Transition::T4(event_rw_data) => {
                 // State: FreezeEventMemory (2) -> FreezeEventMemory (2)
                 // Action: Master requests Event memory data via EventRead (= OD.ind). Send Event data by invoking OD.rsp with Event data of the requested Event memory address.
             }
-            Transition::T5 => {
+            Transition::T5(event_rw_data) => {
                 // State: FreezeEventMemory (2) -> Idle (1)
                 // Action: Invoke service EventFlag.req (Flag = FALSE) to indicate Event deactivation to the Master via the "Event flag" bit. Mark all Event slots in memory as invalid according to A.6.3.
             }
-            Transition::T6 => {
+            Transition::T6(event_rw_data) => {
                 // State: Idle (1) -> Idle (1)
                 // Action: Send contents of Event memory by invoking OD.rsp with Event data
             }
@@ -175,7 +175,39 @@ impl EventHandler {
 
         Ok(())
     }
+}
 
+impl OdInd for EventHandler {
+    /// Handle the OD.ind event
+    fn od_ind(
+        &mut self,
+        rw_direction: types::RwDirection,
+        com_channel: types::ComChannel,
+        address_ctrl: u8,
+        length: u8,
+        _data: &[u8],
+    ) -> IoLinkResult<()> {
+        // Process the incoming data
+        let od_ind_data = OdIndData {
+            rw_direction,
+            com_channel,
+            address_ctrl,
+            length,
+        };
+        let event = if rw_direction == types::RwDirection::Read && com_channel == types::ComChannel::Diagnosis {
+            EventHandlerEvent::EventRead(od_ind_data)
+        } else if rw_direction == types::RwDirection::Write
+            && com_channel == types::ComChannel::Diagnosis
+        {
+            EventHandlerEvent::EventConf(od_ind_data)
+        }
+        else {
+            return Err(IoLinkError::InvalidEvent);
+        };
+
+        self.process_event(event)?;
+        Ok(())
+    }
 }
 
 impl Default for EventHandler {
