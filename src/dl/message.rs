@@ -14,6 +14,7 @@ pub trait OdInd {
     fn od_ind(
         &mut self,
         rw_direction: types::RwDirection,
+        com_channel: types::ComChannel,
         address_ctrl: u8,
         length: u8,
         data: &[u8],

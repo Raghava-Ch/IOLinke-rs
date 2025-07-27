@@ -29,7 +29,7 @@ impl DataLinkLayer {
         system_management: &mut sm::SystemManagement,
         physical_layer: &mut PhysicalLayer,
     ) -> IoLinkResult<()> {
-        self.command.poll();
+        self.command.poll(&mut self.message);
         self.dl_mode.poll(
             &mut self.isdu,
             &mut self.event_handler,
