@@ -356,6 +356,14 @@ impl MessageHandler {
         let _ = self.process_event(MessageHandlerEvent::MsgHandlerConf(mh_conf));
     }
 
+    /// See 7.2.2.4 EventFlag
+    /// The EventFlag service sets or signals the status of 
+    /// the "Event flag" (see A.1.5) during cyclic
+    /// communication. The parameters of the service primitives are listed in Table 37.
+    pub fn event_flag(flag: bool) {
+        // Update the checksum / status (CKS) bit 7 wrt to the flag argument
+    }
+
     /// Parse IO-Link message from buffer
     /// See IO-Link v1.1.4 Section 6.1
     fn parse_message(&self) -> Result<IoLinkMessage, IoLinkError> {

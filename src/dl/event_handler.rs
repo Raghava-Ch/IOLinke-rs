@@ -82,6 +82,8 @@ pub struct EventHandler {
     /// Current state of the Event Handler
     state: EventHandlerState,
     exec_transition: Transition,
+    /// See 7.3.8.1 Events and Table 58 – Event memory
+    event_memory: [u8; 18],
 }
 
 impl EventHandler {
@@ -90,6 +92,7 @@ impl EventHandler {
         Self {
             state: EventHandlerState::Inactive,
             exec_transition: Transition::Tn,
+            event_memory: [0u8; 18],
         }
     }
 
@@ -102,14 +105,14 @@ impl EventHandler {
             (State::Inactive, Event::EhConfActive) => (Transition::T1, State::Idle),
             (State::Idle, Event::DlEvent) => (Transition::T2, State::Idle),
             (State::Idle, Event::DLEventTrigger) => (Transition::T3, State::FreezeEventMemory),
-            (State::FreezeEventMemory, Event::EventRead(event_rw_data)) => {
-                (Transition::T4(event_rw_data), State::FreezeEventMemory)
+            (State::FreezeEventMemory, Event::EventRead(od_ind_data)) => {
+                (Transition::T4(od_ind_data), State::FreezeEventMemory)
             }
-            (State::FreezeEventMemory, Event::EventConf(event_rw_data)) => {
-                (Transition::T5(event_rw_data), State::Idle)
+            (State::FreezeEventMemory, Event::EventConf(od_ind_data)) => {
+                (Transition::T5(od_ind_data), State::Idle)
             }
-            (State::Idle, Event::EventRead(event_rw_data)) => {
-                (Transition::T6(event_rw_data), State::Idle)
+            (State::Idle, Event::EventRead(od_ind_data)) => {
+                (Transition::T6(od_ind_data), State::Idle)
             }
             (State::Idle, Event::EhConfInactive) => (Transition::T7, State::Inactive),
             (State::FreezeEventMemory, Event::EhConfInactive) => (Transition::T8, State::Inactive),
@@ -129,38 +132,100 @@ impl EventHandler {
                 // No transition to execute
             }
             Transition::T1 => {
-                // State: Inactive (0) -> Idle (1)
-                // Action: -
+                self.exec_transition = Transition::Tn;
+                self.execute_t1();
             }
             Transition::T2 => {
-                // State: Idle (1) -> Idle (1)
-                // Action: Change Event memory entries with new Event data (see Table 58)
+                self.exec_transition = Transition::Tn;
+                self.execute_t2();
             }
             Transition::T3 => {
-                // State: Idle (1) -> FreezeEventMemory (2)
-                // Action: Invoke service EventFlag.req (Flag = TRUE) to indicate Event activation to the Master via the "Event flag" bit. Mark all Event slots in memory as not changeable.
+                self.exec_transition = Transition::Tn;
+                self.execute_t3();
             }
-            Transition::T4(event_rw_data) => {
-                // State: FreezeEventMemory (2) -> FreezeEventMemory (2)
-                // Action: Master requests Event memory data via EventRead (= OD.ind). Send Event data by invoking OD.rsp with Event data of the requested Event memory address.
+            Transition::T4(od_ind_data) => {
+                self.exec_transition = Transition::Tn;
+                self.execute_t4(od_ind_data);
             }
-            Transition::T5(event_rw_data) => {
-                // State: FreezeEventMemory (2) -> Idle (1)
-                // Action: Invoke service EventFlag.req (Flag = FALSE) to indicate Event deactivation to the Master via the "Event flag" bit. Mark all Event slots in memory as invalid according to A.6.3.
+            Transition::T5(od_ind_data) => {
+                self.exec_transition = Transition::Tn;
+                self.execute_t5(od_ind_data);
             }
-            Transition::T6(event_rw_data) => {
-                // State: Idle (1) -> Idle (1)
-                // Action: Send contents of Event memory by invoking OD.rsp with Event data
+            Transition::T6(od_ind_data) => {
+                self.exec_transition = Transition::Tn;
+                self.execute_t6(od_ind_data);
             }
             Transition::T7 => {
-                // State: Idle (1) -> Inactive (0)
-                // Action: -
+                self.exec_transition = Transition::Tn;
+                self.execute_t7();
             }
             Transition::T8 => {
-                // State: FreezeEventMemory (2) -> Inactive (0)
-                // Action: Discard Event memory data
+                self.exec_transition = Transition::Tn;
+                self.execute_t8();
             }
         }
+        Ok(())
+    }
+
+    /// Execute T1 transition: Inactive (0) -> Idle (1)
+    /// Action: -
+    fn execute_t1(&mut self) -> IoLinkResult<()> {
+        // No specific action required for this transition
+        Ok(())
+    }
+
+    /// Execute T2 transition: Idle (1) -> Idle (1)
+    /// Action: Change Event memory entries with new Event data (see Table 58)
+    fn execute_t2(&mut self) -> IoLinkResult<()> {
+        // TODO: Implement Event memory update with new Event data
+        // TODO: Compose event memory entry for the given data and update it to the event memory in fifo manner
+        // This should update the Event memory entries according to Table 58
+        Ok(())
+    }
+
+    /// Execute T3 transition: Idle (1) -> FreezeEventMemory (2)
+    /// Action: Invoke service EventFlag.req (Flag = TRUE) to indicate Event activation to the Master via the "Event flag" bit. Mark all Event slots in memory as not changeable.
+    fn execute_t3(&mut self) -> IoLinkResult<()> {
+        // TODO: Implement EventFlag.req service call with Flag = TRUE
+        // TODO: Mark all Event slots in memory as not changeable
+        Ok(())
+    }
+
+    /// Execute T4 transition: FreezeEventMemory (2) -> FreezeEventMemory (2)
+    /// Action: Master requests Event memory data via EventRead (= OD.ind). Send Event data by invoking OD.rsp with Event data of the requested Event memory address.
+    fn execute_t4(&mut self, od_ind_data: OdIndData) -> IoLinkResult<()> {
+        // TODO: Implement OD.rsp service call with Event data from requested memory address
+        // Use od_ind_data.address_ctrl to determine which Event memory address to read
+        Ok(())
+    }
+
+    /// Execute T5 transition: FreezeEventMemory (2) -> Idle (1)
+    /// Action: Invoke service EventFlag.req (Flag = FALSE) to indicate Event deactivation to the Master via the "Event flag" bit. Mark all Event slots in memory as invalid according to A.6.3.
+    fn execute_t5(&mut self, od_ind_data: OdIndData) -> IoLinkResult<()> {
+        // TODO: Implement EventFlag.req service call with Flag = FALSE
+        // TODO: Mark all Event slots in memory as invalid according to A.6.3
+        Ok(())
+    }
+
+    /// Execute T6 transition: Idle (1) -> Idle (1)
+    /// Action: Send contents of Event memory by invoking OD.rsp with Event data
+    fn execute_t6(&mut self, od_ind_data: OdIndData) -> IoLinkResult<()> {
+        // TODO: Implement OD.rsp service call with Event memory contents
+        // Use od_ind_data.address_ctrl to determine which Event memory data to send
+        Ok(())
+    }
+
+    /// Execute T7 transition: Idle (1) -> Inactive (0)
+    /// Action: -
+    fn execute_t7(&mut self) -> IoLinkResult<()> {
+        // No specific action required for this transition
+        Ok(())
+    }
+
+    /// Execute T8 transition: FreezeEventMemory (2) -> Inactive (0)
+    /// Action: Discard Event memory data
+    fn execute_t8(&mut self) -> IoLinkResult<()> {
+        // TODO: Implement Event memory data discard logic
         Ok(())
     }
 
@@ -173,6 +238,38 @@ impl EventHandler {
             types::EhConfState::Inactive => self.process_event(EventHandlerEvent::EhConfInactive),
         }?;
 
+        Ok(())
+    }
+
+    /// See 7.2.1.15 DL_Event
+    /// The service DL_Event indicates a pending status or error information. The cause for an Event
+    /// is located in a Device and the Device application triggers the Event transfer. The parameters
+    /// of the service primitives are listed in Table 30.
+    pub fn dl_event_req(
+        event_instance: types::EventInstance,
+        event_type: EventType,
+        event_mode: types::EventMode,
+        event_code: u16, // device_event_code macro to be used
+        events_left: u8,
+    ) -> IoLinkResult<()> {
+        // Process the DL_Event request
+        let event = EventHandlerEvent::DlEvent;
+        // Here we would typically handle the event based on event_instance and event_type
+        // For now, we just return Ok as a placeholder
+        Ok(())
+    }
+
+    /// See 7.2.1.17 DL_EventTrigger
+    /// The DL_EventTrigger request starts the Event signaling (see Event flag in Figure A.3) and
+    /// freezes the Event memory within the DL. The confirmation is returned after the activated
+    /// Events have been processed. Additional DL_EventTrigger requests are ignored until the
+    /// previous one has been confirmed (see 7.3.8, 8.3.3 and Figure 66). This service has no
+    /// parameters. The service primitives are listed in Table 32.
+    pub fn dl_event_trigger_req() -> IoLinkResult<()> {
+        // Process the DL_EventTrigger request
+        let event = EventHandlerEvent::DLEventTrigger;
+        // Here we would typically handle the event triggering logic
+        // For now, we just return Ok as a placeholder
         Ok(())
     }
 }
@@ -194,14 +291,15 @@ impl OdInd for EventHandler {
             address_ctrl,
             length,
         };
-        let event = if rw_direction == types::RwDirection::Read && com_channel == types::ComChannel::Diagnosis {
+        let event = if rw_direction == types::RwDirection::Read
+            && com_channel == types::ComChannel::Diagnosis
+        {
             EventHandlerEvent::EventRead(od_ind_data)
         } else if rw_direction == types::RwDirection::Write
             && com_channel == types::ComChannel::Diagnosis
         {
             EventHandlerEvent::EventConf(od_ind_data)
-        }
-        else {
+        } else {
             return Err(IoLinkError::InvalidEvent);
         };
 
