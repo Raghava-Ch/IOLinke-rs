@@ -58,6 +58,50 @@ pub enum ComChannel {
     Isdu = 3,
 }
 
+/// See A.6.4 EventQualifier
+/// Bits 0 to 2: INSTANCE
+/// These bits indicate the particular source (instance) of an Event thus refining its evaluation on
+/// the receiver side. Permissible values for INSTANCE are listed in Table A.17.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventInstance {
+    /// {Unknown} = 0
+    Unknown = 0,
+    // 1 to 3 Reserved
+    /// {Application} = 4
+    Application = 4,
+    /// {System} = 5
+    System = 5,
+    // 6 to 7 Reserved
+}
+
+/// See A.6.4 EventQualifier
+/// Bits 4 to 5: TYPE
+/// These bits indicate the Event mode. Permissible values for MODE are listed in Table A.20.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventType {
+    /// 0 is Reserved
+    /// {Notification} = 1
+    Notification = 1,
+    /// {Warning} = 2
+    Warning = 2,
+    /// {Error} = 3
+    Error = 3,
+}
+
+/// See A.6.4 EventQualifier
+/// Bits 6 to 7: MODE
+/// These bits indicate the Event mode. Permissible values for MODE are listed in Table A.20.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventMode {
+    /// 0 is Reserved
+    /// {Event single shot} = 1
+    SingleShot = 1,
+    /// {Event disappears} = 2
+    Disappears = 2,
+    /// {Event appears} = 3
+    Appears = 3,
+}
+
 /// See Table 94 – SM_DeviceMode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
