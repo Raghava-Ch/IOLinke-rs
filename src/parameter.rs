@@ -152,7 +152,7 @@ impl ParameterManager {
     /// Create a new Process Data Handler
     pub fn new() -> Self {
         Self {
-            state: ParameterManagerState::Inactive,
+            state: ParameterManagerState::Idle,
             exec_transition: Transition::Tn,
         }
     }
@@ -340,7 +340,7 @@ impl ParameterManager {
                 // T20: Idle -> Idle on [UploadEnd or ParamBreak or DownloadEnd]
                 // Action: Return ErrorType 0x8036 – Function temporarily unavailable if Block Parameterization supported or ErrorType 0x8035 – Function not available if Block Parameterization is not supported
                 // TODO: Implement error response based on Block Parameterization support
-                return Err(IoLinkError::FunctionNotAvailable);
+                // return Err(IoLinkError::FunctionNotAvailable);
             }
             Transition::T21 => {
                 // T21: Download -> Idle on [SysCmdReset]

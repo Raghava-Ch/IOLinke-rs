@@ -121,3 +121,9 @@ impl PhysicalLayer {
         Err(IoLinkError::NoImplFound)
     }
 }
+
+impl Default for PhysicalLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}

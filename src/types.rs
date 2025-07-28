@@ -350,22 +350,22 @@ pub struct Isdu {
 
 /// Event types for IO-Link devices
 /// See IO-Link v1.1.4 Section 8.4.4
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u16)]
-pub enum EventType {
-    /// No event
-    None = 0x0000,
-    /// Device appears
-    DeviceAppears = 0x1000,
-    /// Device disappears
-    DeviceDisappears = 0x1001,
-    /// Communication lost
-    CommunicationLost = 0x1002,
-    /// Device fault
-    DeviceFault = 0x2000,
-    /// Parameter change
-    ParameterChange = 0x3000,
-}
+// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// #[repr(u16)]
+// pub enum EventType {
+//     /// No event
+//     None = 0x0000,
+//     /// Device appears
+//     DeviceAppears = 0x1000,
+//     /// Device disappears
+//     DeviceDisappears = 0x1001,
+//     /// Communication lost
+//     CommunicationLost = 0x1002,
+//     /// Device fault
+//     DeviceFault = 0x2000,
+//     /// Parameter change
+//     ParameterChange = 0x3000,
+// }
 
 /// Event structure
 /// See IO-Link v1.1.4 Section 8.4.4
