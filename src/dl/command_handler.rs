@@ -4,7 +4,7 @@
 //! IO-Link Specification v1.1.4
 
 use crate::{
-    dl::{self, dl_mode::DlModeHandler},
+    dl,
     types::{self, IoLinkError, IoLinkResult},
     ChConfState, MasterCommand,
 };
@@ -119,7 +119,7 @@ impl CommandHandler {
     }
 
     /// Poll the handler
-    pub fn poll(&mut self, message_handler: &mut dl::message::MessageHandler) -> IoLinkResult<()> {
+    pub fn poll(&mut self, message_handler: &mut dl::message_handler::MessageHandler) -> IoLinkResult<()> {
         // Process pending events
         match self.exec_transition {
             Transition::Tn => {}
@@ -173,7 +173,7 @@ impl CommandHandler {
     fn execute_t3(
         &mut self,
         code: types::DlControlCodes,
-        message_handler: &mut dl::message::MessageHandler,
+        message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         // T3: State: Idle (1) -> Idle (1)
         // Action: If service DL_Control.req (VALID) then invoke PDInStatus.req (VALID).
@@ -234,7 +234,7 @@ impl CommandHandler {
     }
 }
 
-impl dl::command::MasterCommandInd for CommandHandler {
+impl dl::command_handler::MasterCommandInd for CommandHandler {
     /// Any MasterCommand received by the Device command handler
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
     fn master_command_ind(&mut self, master_command: MasterCommand) -> IoLinkResult<()> {

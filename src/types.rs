@@ -216,17 +216,6 @@ pub enum PdConfState {
     Inactive,
 }
 
-/// All the timers used in IO-Link
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Timer {
-    /// See Table 42 – Wake-up procedure and retry characteristics
-    Tdsio,
-    /// See A.3.7 Cycle time
-    MaxCycleTime,
-    /// See Table 47 Internal items
-    MaxUARTFrameTime,
-}
-
 /// All the master commands used in IO-Link
 /// See Table B.1.2 – Types of MasterCommands
 /// Also see Table 55 – Control codes
@@ -310,6 +299,8 @@ pub enum MessageType {
     DeviceCommand = 1,
     /// Type 2: Parameter command
     ParameterCommand = 2,
+    /// Used for uninitialized state
+    UnInitialized = 0xFF,
 }
 
 /// Process data input/output structure

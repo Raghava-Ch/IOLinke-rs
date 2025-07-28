@@ -304,7 +304,7 @@ impl IsduHandler {
     }
 }
 
-impl dl::message::OdInd for IsduHandler {
+impl dl::message_handler::OdInd for IsduHandler {
     fn od_ind(
         &mut self,
         rw_direction: types::RwDirection,

@@ -67,12 +67,12 @@ enum OnRequestHandlerEvent {
 }
 
 /// Process Data Handler implementation
-pub struct OnRequestHandler {
+pub struct OnRequestDataHandler {
     state: OnRequestHandlerState,
     exec_transition: Transition,
 }
 
-impl OnRequestHandler {
+impl OnRequestDataHandler {
     /// Create a new Process Data Handler
     pub fn new() -> Self {
         Self {
@@ -156,7 +156,7 @@ impl OnRequestHandler {
     }
 }
 
-impl dl::message::OdInd for OnRequestHandler {
+impl dl::message_handler::OdInd for OnRequestDataHandler {
     fn od_ind(
         &mut self,
         rw_direction: types::RwDirection,
@@ -192,7 +192,7 @@ impl dl::message::OdInd for OnRequestHandler {
     }
 }
 
-impl Default for OnRequestHandler {
+impl Default for OnRequestDataHandler {
     fn default() -> Self {
         Self::new()
     }
