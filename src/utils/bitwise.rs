@@ -59,7 +59,7 @@ macro_rules! construct_u8 {
 
 /// Extract bit 0 from byte
 #[macro_export]
-macro_rules! bit_0 {
+macro_rules! get_bit_0 {
     ($byte:expr) => {
         ($byte) & 0x01
     };
@@ -67,7 +67,7 @@ macro_rules! bit_0 {
 
 /// Extract bit 1 from byte
 #[macro_export]
-macro_rules! bit_1 {
+macro_rules! get_bit_1 {
     ($byte:expr) => {
         (($byte) >> 1) & 0x01
     };
@@ -75,7 +75,7 @@ macro_rules! bit_1 {
 
 /// Extract bit 2 from byte
 #[macro_export]
-macro_rules! bit_2 {
+macro_rules! get_bit_2 {
     ($byte:expr) => {
         (($byte) >> 2) & 0x01
     };
@@ -83,7 +83,7 @@ macro_rules! bit_2 {
 
 /// Extract bit 3 from byte
 #[macro_export]
-macro_rules! bit_3 {
+macro_rules! get_bit_3 {
     ($byte:expr) => {
         (($byte) >> 3) & 0x01
     };
@@ -91,7 +91,7 @@ macro_rules! bit_3 {
 
 /// Extract bit 4 from byte
 #[macro_export]
-macro_rules! bit_4 {
+macro_rules! get_bit_4 {
     ($byte:expr) => {
         (($byte) >> 4) & 0x01
     };
@@ -99,7 +99,7 @@ macro_rules! bit_4 {
 
 /// Extract bit 5 from byte
 #[macro_export]
-macro_rules! bit_5 {
+macro_rules! get_bit_5 {
     ($byte:expr) => {
         (($byte) >> 5) & 0x01
     };
@@ -107,7 +107,7 @@ macro_rules! bit_5 {
 
 /// Extract bit 6 from byte
 #[macro_export]
-macro_rules! bit_6 {
+macro_rules! get_bit_6 {
     ($byte:expr) => {
         (($byte) >> 6) & 0x01
     };
@@ -115,7 +115,7 @@ macro_rules! bit_6 {
 
 /// Extract bit 7 from byte
 #[macro_export]
-macro_rules! bit_7 {
+macro_rules! get_bit_7 {
     ($byte:expr) => {
         (($byte) >> 7) & 0x01
     };
@@ -123,7 +123,7 @@ macro_rules! bit_7 {
 
 /// Extract bits 5 and 6 from byte
 #[macro_export]
-macro_rules! bits_5_6 {
+macro_rules! get_bits_5_6 {
     ($byte:expr) => {
         (($byte) >> 5) & 0x03
     };
@@ -131,7 +131,7 @@ macro_rules! bits_5_6 {
 
 /// Extract bits 0-4 from byte
 #[macro_export]
-macro_rules! bits_0_4 {
+macro_rules! get_bits_0_4 {
     ($byte:expr) => {
         ($byte) & 0x1F
     };
@@ -139,8 +139,129 @@ macro_rules! bits_0_4 {
 
 /// Extract bits 6 and 7 from byte
 #[macro_export]
-macro_rules! bits_6_7 {
+macro_rules! get_bits_6_7 {
     ($byte:expr) => {
         (($byte) >> 6) & 0x03
+    };
+}
+
+/// Set bit 0 in byte
+#[macro_export]
+macro_rules! set_bit_0 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0xFE) | (($value & 0x01))
+    };
+}
+
+/// Set bit 1 in byte
+#[macro_export]
+macro_rules! set_bit_1 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0xFD) | (($value & 0x01) << 1)
+    };
+}
+
+/// Set bit 2 in byte
+#[macro_export]
+macro_rules! set_bit_2 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0xFB) | (($value & 0x01) << 2)
+    };
+}
+
+/// Set bit 3 in byte
+#[macro_export]
+macro_rules! set_bit_3 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0xF7) | (($value & 0x01) << 3)
+    };
+}
+
+/// Set bit 4 in byte
+#[macro_export]
+macro_rules! set_bit_4 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0xEF) | (($value & 0x01) << 4)
+    };
+}
+
+/// Set bit 5 in byte
+#[macro_export]
+macro_rules! set_bit_5 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0xDF) | (($value & 0x01) << 5)
+    };
+}
+
+/// Set bit 6 in byte
+#[macro_export]
+macro_rules! set_bit_6 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0xBF) | (($value & 0x01) << 6)
+    };
+}
+
+/// Set bit 7 in byte
+#[macro_export]
+macro_rules! set_bit_7 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0x7F) | (($value & 0x01) << 7)
+    };
+}
+
+/// Set bits 5 and 6 in byte
+#[macro_export]
+macro_rules! set_bits_5_6 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0x9F) | (($value & 0x03) << 5)
+    };
+}
+
+/// Set bits 0-4 in byte
+#[macro_export]
+macro_rules! set_bits_0_4 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0xE0) | ($value & 0x1F)
+    };
+}
+
+/// Set bits 0-5 in byte
+#[macro_export]
+macro_rules! set_bits_0_5 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0xE0) | ($value & 0x3F)
+    };
+}
+
+
+
+/// Sets bits 6 and 7 of a byte to the specified 2-bit value.
+///
+/// This macro preserves the lower 6 bits (bits 0-5) of the input byte
+/// and replaces bits 6 and 7 with the provided value.
+///
+/// # Parameters
+/// * `$byte` - The byte to modify
+/// * `$value` - A 2-bit value (0-3) to set in bits 6 and 7
+///
+/// # Returns
+/// A byte with bits 6-7 set to the specified value and bits 0-5 unchanged
+///
+/// # Examples
+/// ```rust
+/// // Set bits 6-7 to binary 10 (decimal 2)
+/// let original = 0b00111111; // All lower 6 bits set
+/// let result = set_bits_6_7!(original, 2);
+/// assert_eq!(result, 0b10111111); // Bits 6-7 now set to 10
+///
+/// // Set bits 6-7 to binary 01 (decimal 1)
+/// let original = 0b11000000; // Bits 6-7 originally set
+/// let result = set_bits_6_7!(original, 1);
+/// assert_eq!(result, 0b01000000); // Lower bits cleared, 6-7 set to 01
+/// ```
+#[macro_export]
+macro_rules! set_bits_6_7 {
+    ($byte:expr, $value:expr) => {
+        ($byte & 0x3F) | (($value & 0x03) << 6)
     };
 }

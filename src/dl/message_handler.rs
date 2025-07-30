@@ -8,8 +8,10 @@ use crate::dl;
 use crate::pl;
 use crate::types::{self, IoLinkError, IoLinkResult};
 use crate::{
-    bit_0, bit_1, bit_2, bit_3, bit_4, bit_5, bit_6, bit_7, bits_0_4, bits_5_6, bits_6_7,
-    construct_u8,
+    construct_u8, get_bit_0, get_bit_1, get_bit_2, get_bit_3, get_bit_4, get_bit_5, get_bit_6,
+    get_bit_7, get_bits_0_4, get_bits_5_6, get_bits_6_7, set_bit_0, set_bit_1, set_bit_2,
+    set_bit_3, set_bit_4, set_bit_5, set_bit_6, set_bit_7, set_bits_0_4, set_bits_0_5,
+    set_bits_5_6, set_bits_6_7,
 };
 
 use heapless::Vec;
@@ -32,19 +34,19 @@ macro_rules! extract_checksum_bits {
     };
 }
 
-/// Extract message type from first byte (bits 0-1)
-/// TYPE_0 = 0b00, TYPE_1 = 0b01, TYPE_2 = 0b10
-macro_rules! extract_message_type {
+/// Extract RW direction from first byte (bit 2)
+/// 0 = Read, 1 = Write
+macro_rules! extract_rw_direction {
     ($byte:expr) => {
-        ($byte) & 0x03
+        get_bit_7!($byte)
     };
 }
 
 /// Extract RW direction from first byte (bit 2)
 /// 0 = Read, 1 = Write
-macro_rules! extract_rw_direction {
-    ($byte:expr) => {
-        bit_7!($byte)
+macro_rules! compile_rw_direction {
+    ($byte:expr, $rw: expr) => {
+        set_bit_7!($byte, $rw)
     };
 }
 
@@ -52,7 +54,15 @@ macro_rules! extract_rw_direction {
 /// 00 = Process, 01 = Page, 10 = Diagnosis, 11 = ISDU
 macro_rules! extract_com_channel {
     ($byte:expr) => {
-        bits_5_6!($byte)
+        get_bits_5_6!($byte)
+    };
+}
+
+/// Compile communication channel from first byte (bits 5-6)
+/// 00 = Process, 01 = Page, 10 = Diagnosis, 11 = ISDU
+macro_rules! compile_com_channel {
+    ($byte:expr, $channel: expr) => {
+        set_bits_5_6!($byte, $channel)
     };
 }
 
@@ -72,7 +82,14 @@ macro_rules! extract_address {
 /// Extract address from first byte for M-sequence byte (bits 0-4)
 macro_rules! extract_address_fctrl {
     ($byte:expr) => {
-        bits_0_4!($byte)
+        get_bits_0_4!($byte)
+    };
+}
+
+/// Compile address from first byte for M-sequence byte (bits 0-4)
+macro_rules! compile_address_fctrl {
+    ($byte:expr, $address: expr) => {
+        set_bits_0_4!($byte, $address)
     };
 }
 
@@ -86,7 +103,14 @@ macro_rules! extract_data_length {
 /// Extract the message type (TYPE_0, TYPE_1, or TYPE_2)
 macro_rules! extract_message_type {
     ($msg_type:expr) => {
-        bits_6_7!($msg_type)
+        get_bits_6_7!($msg_type)
+    };
+}
+
+/// compile the message type (TYPE_0, TYPE_1, or TYPE_2)
+macro_rules! compile_message_type {
+    ($byte:expr, $msg_type:expr) => {
+        set_bits_6_7!($byte, $msg_type)
     };
 }
 
@@ -104,22 +128,36 @@ macro_rules! extract_checksum {
     };
 }
 
-/// Calculate XOR checksum for message validation
-macro_rules! calculate_xor_checksum {
-    ($data:expr) => {{
-        let mut checksum = 0u8;
-        for i in 0..($data.len() - 1) {
-            checksum ^= $data[i];
-        }
-        checksum
-    }};
+/// Compile `Event flag` for CKS byte
+macro_rules! compile_event_flag {
+    ($data:expr, $event_flag:expr) => {
+        set_bit_7!($data, $event_flag)
+    };
 }
 
-/// Validate message checksum
-macro_rules! validate_checksum {
-    ($data:expr) => {
-        calculate_xor_checksum!($data) == extract_checksum!($data)
+/// Compile `PD status` for CKS byte
+macro_rules! compile_pd_status {
+    ($data:expr, $pd_status:expr) => {
+        set_bit_6!($data, $pd_status)
     };
+}
+
+/// Compile Checksum byte Bit: 0 to Bit: 5
+macro_rules! compile_checksum {
+    ($data:expr, $checksum:expr) => {
+        set_bits_0_5!($data, $checksum)
+    };
+}
+
+/// See A.1.5 Checksum / status (CKS)
+/// Compile Checksum / Status (CKS) byte
+macro_rules! compile_checksum_status {
+    ($data:expr, $event_flag:expr, $pd_status:expr, $checksum:expr) => {{
+        compile_event_flag!($data, $event_flag);
+        compile_pd_status!($data, $pd_status);
+        compile_checksum!($data, $checksum);
+        $data
+    }};
 }
 
 // /// Extract payload data (excluding header and checksum)
@@ -273,15 +311,22 @@ pub trait MsgHandlerInfo {
     fn mh_info(&mut self, mh_info: types::MHInfo);
 }
 
+struct Buffers {
+    rx_buffer: [u8; MAX_FRAME_SIZE],
+    rx_buffer_len: u8,
+    tx_buffer: [u8; MAX_FRAME_SIZE],
+    tx_buffer_len: u8,
+}
+
 /// Message Handler implementation
 pub struct MessageHandler {
     state: MessageHandlerState,
     exec_transition: Transition,
-    rx_buffer: Vec<u8, MAX_FRAME_SIZE>,
-    tx_buffer: Vec<u8, MAX_FRAME_SIZE>,
+    buffers: Buffers,
     tx_message: IoLinkMessage,
     rx_message: IoLinkMessage,
     device_operate_state: types::MasterCommand,
+    od_transfer_pending: bool,
 }
 
 impl MessageHandler {
@@ -290,11 +335,16 @@ impl MessageHandler {
         Self {
             state: MessageHandlerState::Idle,
             exec_transition: Transition::Tn,
-            rx_buffer: Vec::new(),
-            tx_buffer: Vec::new(),
+            buffers: Buffers {
+                rx_buffer: [0; MAX_FRAME_SIZE],
+                rx_buffer_len: 0,
+                tx_buffer: [0; MAX_FRAME_SIZE],
+                tx_buffer_len: 0,
+            },
             tx_message: IoLinkMessage::default(),
             rx_message: IoLinkMessage::default(),
             device_operate_state: types::MasterCommand::INACTIVE,
+            od_transfer_pending: false,
         }
     }
 
@@ -408,17 +458,18 @@ impl MessageHandler {
             }
             MessageHandlerState::CreateMessage => {
                 // Check the response is ready to be sent
-                if self.tx_message.od.is_none() &&
-                self.tx_message.pd.is_none() &&
-                self.tx_message.address_fctrl.is_none() &&
-                self.tx_message.com_channel.is_none() &&
-                self.tx_message.read_write.is_none() &&
-                self.tx_message.message_type.is_none() &&
-                self.tx_message.pd_in_status.is_none()
+                if self.tx_message.od.is_none()
+                    && self.tx_message.pd.is_none()
+                    && self.tx_message.address_fctrl.is_none()
+                    && self.tx_message.com_channel.is_none()
+                    && self.tx_message.read_write.is_none()
+                    && self.tx_message.message_type.is_none()
+                    && self.tx_message.pd_in_status.is_none()
                 {
                     // No data to send, transition to Idle
                 } else {
                     // Data is ready, proceed to send
+                    self.compile_message()?;
                     self.process_event(MessageHandlerEvent::Ready)?;
                 }
             }
@@ -496,8 +547,8 @@ impl MessageHandler {
         &mut self,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
-        // Compile and send response via PL_Transfer.rsp (handled externally)
-        physical_layer.pl_transfer_req(&self.tx_buffer)?;
+        // Compiled and send response via PL_Transfer.rsp (handled externally)
+        physical_layer.pl_transfer_req(&self.buffers.tx_buffer)?;
 
         Ok(())
     }
@@ -614,37 +665,66 @@ impl MessageHandler {
         Ok(())
     }
 
+    /// Compile IO-Link message from buffer
+    /// See IO-Link v1.1.4 `Annex A` (normative)
+    /// Codings, timing constraints, and errors
+    /// A.1 General structure and encoding of M-sequences
+    fn compile_message(&mut self) -> IoLinkResult<()> {
+        let io_link_message = &self.tx_message;
+        let tx_buffer = &mut self.buffers.tx_buffer;
+        *tx_buffer = [0; MAX_FRAME_SIZE];
+        let length = match self.device_operate_state {
+            types::MasterCommand::STARTUP => {
+                compile_iolink_startup_frame(tx_buffer, io_link_message)?
+            }
+            types::MasterCommand::PREOPERATE => {
+                compile_iolink_preoperate_frame(tx_buffer, io_link_message)?
+            }
+            types::MasterCommand::OPERATE => {
+                compile_iolink_operate_frame(tx_buffer, io_link_message, self.od_transfer_pending)?
+            }
+            _ => return Err(IoLinkError::InvalidMseqType),
+        };
+        self.buffers.tx_buffer_len = length as u8;
+        todo!("Implement IO-Link message compilation logic");
+    }
+
     /// Parse IO-Link message from buffer
     /// See IO-Link v1.1.4 Section 6.1
     fn parse_message(&mut self) -> IoLinkResult<IoLinkMessage> {
-        if validate_checksum(self.rx_buffer.len() as u8, &mut self.rx_buffer) == false {
+        let rx_buffer: &mut [u8; 66] = &mut self.buffers.rx_buffer;
+        if validate_checksum(rx_buffer.len() as u8, rx_buffer) == false {
             // If checksum is invalid, indicate error
             return Err(IoLinkError::ChecksumError);
         }
         let io_link_message = match self.device_operate_state {
             types::MasterCommand::STARTUP => {
                 let m_seq_type: u8 = types::MsequenceType::Type0.into();
-                let rxed_m_seq_base_type: u8 = extract_message_type!(self.rx_buffer[1]);
+                let rxed_m_seq_base_type: u8 = extract_message_type!(rx_buffer[1]);
                 if m_seq_type != rxed_m_seq_base_type {
                     return Err(IoLinkError::InvalidMseqType);
                 }
-                parse_iolink_startup_frame(&self.rx_buffer)
+                parse_iolink_startup_frame(rx_buffer)
             }
             types::MasterCommand::PREOPERATE => {
                 const M_SEQ_TYPE: u8 = config::m_seq_capability::preoperate_m_sequence();
-                let rxed_m_seq_base_type: u8 = extract_message_type!(self.rx_buffer[1]);
+                let rxed_m_seq_base_type: u8 = extract_message_type!(rx_buffer[1]);
                 if rxed_m_seq_base_type != M_SEQ_TYPE {
                     return Err(IoLinkError::InvalidMseqType);
                 }
-                parse_iolink_pre_operate_frame(&self.rx_buffer)
+                parse_iolink_pre_operate_frame(rx_buffer)
             }
             types::MasterCommand::OPERATE => {
                 const M_SEQ_TYPE: u8 = config::m_seq_capability::operate_m_sequence_base_type();
-                let rxed_m_seq_base_type: u8 = extract_message_type!(self.rx_buffer[1]);
+                let com_channel = types::ComChannel::try_from(extract_com_channel!(rx_buffer[0]))?;
+                if com_channel != types::ComChannel::Process {
+                    self.od_transfer_pending = true;
+                }
+                let rxed_m_seq_base_type: u8 = extract_message_type!(rx_buffer[1]);
                 if rxed_m_seq_base_type != M_SEQ_TYPE {
                     return Err(IoLinkError::InvalidMseqType);
                 }
-                parse_iolink_operate_frame(&self.rx_buffer)
+                parse_iolink_operate_frame(rx_buffer)
             }
             _ => return Err(IoLinkError::InvalidMseqType),
         };
@@ -692,15 +772,12 @@ impl MessageHandler {
         Ok(())
     }
 
-    /// Get current state
-    pub fn state(&self) -> MessageHandlerState {
-        self.state
-    }
-
     /// Clear buffers
-    pub fn clear_buffers(&mut self) {
-        self.rx_buffer.clear();
-        self.tx_buffer.clear();
+    fn clear_buffers(&mut self) {
+        self.buffers.rx_buffer = [0; MAX_FRAME_SIZE];
+        self.buffers.rx_buffer_len = 0;
+        self.buffers.tx_buffer = [0; MAX_FRAME_SIZE];
+        self.buffers.tx_buffer_len = 0;
         self.tx_message = IoLinkMessage::default();
     }
 }
@@ -726,6 +803,174 @@ impl pl::physical_layer::IoLinkTimer for MessageHandler {
         let _ = self.process_event(event);
         true
     }
+}
+
+fn compile_iolink_startup_frame(
+    tx_buffer: &mut [u8],
+    io_link_message: &IoLinkMessage,
+) -> Result<u8, IoLinkError> {
+    tx_buffer[0] = io_link_message
+        .od
+        .as_ref()
+        .ok_or(IoLinkError::InvalidData)?[0];
+    tx_buffer[1] = compile_checksum_status!(
+        tx_buffer[1],
+        io_link_message.event_flag,
+        io_link_message.pd_in_status,
+        0 // Checksum will be calculated later
+    );
+    let checksum = calculate_checksum(2, &tx_buffer);
+    tx_buffer[1] = compile_checksum!(tx_buffer[1], checksum);
+    Ok(2)
+}
+
+fn compile_iolink_preoperate_frame(
+    tx_buffer: &mut [u8],
+    io_link_message: &IoLinkMessage,
+) -> Result<u8, IoLinkError> {
+    const OD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_od_len();
+    if io_link_message.od.is_none() {
+        return Err(IoLinkError::InvalidData);
+    }
+    for (i, &byte) in io_link_message.od.as_ref().unwrap().iter().enumerate() {
+        if i < OD_LENGTH as usize {
+            tx_buffer[i] = byte;
+        } else {
+            break; // Avoid out of bounds access
+        }
+    }
+    tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
+        tx_buffer[OD_LENGTH as usize],
+        io_link_message.event_flag,
+        io_link_message.pd_in_status,
+        0 // Checksum will be calculated later
+    );
+    let checksum = calculate_checksum(OD_LENGTH + 1, &tx_buffer);
+    tx_buffer[OD_LENGTH as usize] = compile_checksum!(tx_buffer[OD_LENGTH as usize], checksum);
+    Ok(OD_LENGTH + 1)
+}
+
+fn compile_iolink_native_operate_frame(
+    tx_buffer: &mut [u8],
+    io_link_message: &IoLinkMessage,
+) -> Result<u8, IoLinkError> {
+    const OD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_od_len();
+    const PD_LENGTH_BITS: u8 = config::m_seq_capability::operate_m_sequence_legacy_pd_out_len();
+    const PD_LENGTH: u8 = if PD_LENGTH_BITS & 0x01 == 0 {
+        PD_LENGTH_BITS / 8
+    } else {
+        // The ceiling division technique:
+        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+        // Formula is ceil(a/b) = (a + b - 1) / b
+        (PD_LENGTH_BITS + 7) / 8 // Integer ceiling division
+    };
+    if io_link_message.od.is_none() {
+        return Err(IoLinkError::InvalidData);
+    }
+    for (i, &byte) in io_link_message.od.as_ref().unwrap().iter().enumerate() {
+        if i < OD_LENGTH as usize {
+            tx_buffer[i] = byte;
+        } else {
+            break; // Avoid out of bounds access
+        }
+    }
+    tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
+        tx_buffer[OD_LENGTH as usize],
+        io_link_message.event_flag,
+        io_link_message.pd_in_status,
+        0 // Checksum will be calculated later
+    );
+    tx_buffer[PD_LENGTH as usize] = compile_checksum_status!(
+        tx_buffer[PD_LENGTH as usize],
+        io_link_message.event_flag,
+        io_link_message.pd_in_status,
+        0 // Checksum will be calculated later
+    );
+    let checksum = calculate_checksum(OD_LENGTH + PD_LENGTH + 1, &tx_buffer);
+    tx_buffer[OD_LENGTH as usize] =
+        compile_checksum!(tx_buffer[(OD_LENGTH + PD_LENGTH) as usize], checksum);
+    Ok(OD_LENGTH + PD_LENGTH + 1)
+}
+
+fn compile_iolink_interleaved_operate_frame_od(
+    tx_buffer: &mut [u8],
+    io_link_message: &IoLinkMessage,
+) -> Result<u8, IoLinkError> {
+    const OD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_od_len();
+    if io_link_message.od.is_none() {
+        return Err(IoLinkError::InvalidData);
+    }
+    for (i, &byte) in io_link_message.od.as_ref().unwrap().iter().enumerate() {
+        if i < OD_LENGTH as usize {
+            tx_buffer[i] = byte;
+        } else {
+            break; // Avoid out of bounds access
+        }
+    }
+    tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
+        tx_buffer[OD_LENGTH as usize],
+        io_link_message.event_flag,
+        io_link_message.pd_in_status,
+        0 // Checksum will be calculated later
+    );
+    let checksum = calculate_checksum(OD_LENGTH + 1, &tx_buffer);
+    tx_buffer[OD_LENGTH as usize] = compile_checksum!(tx_buffer[OD_LENGTH as usize], checksum);
+    Ok(OD_LENGTH + 1)
+}
+
+fn compile_iolink_interleaved_operate_frame_pd(
+    tx_buffer: &mut [u8],
+    io_link_message: &IoLinkMessage,
+) -> Result<u8, IoLinkError> {
+    const PD_LENGTH_BITS: (u8, bool) = config::m_seq_capability::operate_m_sequence_pd_out_len();
+    const PD_LENGTH: u8 = if PD_LENGTH_BITS.1 {
+        PD_LENGTH_BITS.0
+    } else {
+        // The ceiling division technique:
+        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+        // Formula is ceil(a/b) = (a + b - 1) / b
+        (PD_LENGTH_BITS.0 + 7) / 8 as u8 // Integer ceiling division
+    };
+    if io_link_message.od.is_none() {
+        return Err(IoLinkError::InvalidData);
+    }
+    for (i, &byte) in io_link_message.od.as_ref().unwrap().iter().enumerate() {
+        if i < PD_LENGTH as usize {
+            tx_buffer[i] = byte;
+        } else {
+            break; // Avoid out of bounds access
+        }
+    }
+    tx_buffer[PD_LENGTH as usize] = compile_checksum_status!(
+        tx_buffer[PD_LENGTH as usize],
+        io_link_message.event_flag,
+        io_link_message.pd_in_status,
+        0 // Checksum will be calculated later
+    );
+    let checksum = calculate_checksum(PD_LENGTH + 1, &tx_buffer);
+    tx_buffer[PD_LENGTH as usize] = compile_checksum!(tx_buffer[PD_LENGTH as usize], checksum);
+    Ok(PD_LENGTH + 1)
+}
+
+fn compile_iolink_operate_frame(
+    tx_buffer: &mut [u8],
+    io_link_message: &IoLinkMessage,
+    od_transfer_pending: bool,
+) -> IoLinkResult<u8> {
+    const INTERLEAVED_MODE: bool = config::m_seq_capability::interleaved_mode();
+    let length = if INTERLEAVED_MODE {
+        // If interleaved mode is enabled, we need to handle both OD and PD frames
+        // Check if the message is an OD frame
+        if od_transfer_pending {
+            compile_iolink_interleaved_operate_frame_pd(tx_buffer, io_link_message)
+        } else {
+            compile_iolink_interleaved_operate_frame_od(tx_buffer, io_link_message)
+        }
+    } else {
+        compile_iolink_native_operate_frame(tx_buffer, io_link_message)
+    }?;
+
+    Ok(length)
 }
 
 /// Parse IO-Link frame using nom
@@ -839,15 +1084,23 @@ fn parse_iolink_operate_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
 fn parse_iolink_native_operate_frame(
     input: &[u8],
 ) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
-    const OD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_od_len();
-    const PD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_pd_out_len();
-    if input.len() != HEADER_SIZE + OD_LENGTH as usize + PD_LENGTH as usize {
+    const OD_LENGTH_OCTETS: u8 = config::m_seq_capability::operate_m_sequence_od_len();
+    const PD_LENGTH_BITS: (u8, bool) = config::m_seq_capability::operate_m_sequence_pd_out_len();
+    const PD_LENGTH: u8 = if PD_LENGTH_BITS.1 {
+        PD_LENGTH_BITS.0
+    } else {
+        // The ceiling division technique:
+        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+        // Formula is ceil(a/b) = (a + b - 1) / b
+        (PD_LENGTH_BITS.0 + 7) / 8 as u8 // Integer ceiling division
+    };
+    if input.len() != HEADER_SIZE + OD_LENGTH_OCTETS as usize + PD_LENGTH as usize {
         return Err(IoLinkError::InvalidData);
     }
     let mut od: Vec<u8, MAX_OD_SIZE> = Vec::new();
     let mut pd: Vec<u8, MAX_PD_SIZE> = Vec::new();
 
-    for i in 2..(2 + OD_LENGTH as usize) {
+    for i in 2..(2 + OD_LENGTH_OCTETS as usize) {
         if i < input.len() {
             if let Err(_) = od.push(input[i]) {
                 return Err(IoLinkError::InvalidData);
@@ -857,7 +1110,7 @@ fn parse_iolink_native_operate_frame(
         }
     }
 
-    for i in (2 + OD_LENGTH as usize)..(2 + OD_LENGTH as usize + PD_LENGTH as usize) {
+    for i in (2 + OD_LENGTH_OCTETS as usize)..(2 + OD_LENGTH_OCTETS as usize + PD_LENGTH as usize) {
         if i < input.len() {
             if let Err(_) = pd.push(input[i]) {
                 return Err(IoLinkError::InvalidData);
@@ -894,7 +1147,15 @@ fn parse_iolink_interleaved_operate_frame_od(
 fn parse_iolink_interleaved_operate_frame_pd(
     input: &[u8],
 ) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
-    const PD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_pd_out_len();
+    const PD_LENGTH_BITS: u8 = config::m_seq_capability::operate_m_sequence_legacy_pd_out_len();
+    const PD_LENGTH: u8 = if PD_LENGTH_BITS & 0x01 == 0 {
+        PD_LENGTH_BITS / 8
+    } else {
+        // The ceiling division technique:
+        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+        // Formula is ceil(a/b) = (a + b - 1) / b
+        (PD_LENGTH_BITS + 7) / 8 // Integer ceiling division
+    };
     if input.len() != HEADER_SIZE + PD_LENGTH as usize {
         return Err(IoLinkError::InvalidData);
     }
@@ -918,26 +1179,28 @@ fn validate_checksum(length: u8, data: &mut [u8]) -> bool {
     let received_checksum = extract_checksum_bits!(data[1]);
     // clear the received checksum bits (0-5), Before calculating the checksum
     data[1] = clear_checksum_bits_0_to_5!(data[1]);
-    let calculated_checksum = calculate_checksum(length, data);
+    let calculated_checksum = calculate_checksum(length, &data);
     calculated_checksum == received_checksum
 }
 
 /// See A.1.6 Calculation of the checksum
 /// Calculate message checksum
-fn calculate_checksum(_length: u8, data: &mut [u8]) -> u8 {
+fn calculate_checksum(length: u8, data: &[u8]) -> u8 {
     // Seed value as per IO-Link spec
     let mut checksum = 0x52u8;
-    for byte in data.iter() {
-        checksum ^= byte;
+    for i in 0..length as usize {
+        if i < data.len() {
+            checksum ^= data[i];
+        }
     }
-    let d_bit0 = bit_0!(checksum);
-    let d_bit1 = bit_1!(checksum);
-    let d_bit2 = bit_2!(checksum);
-    let d_bit3 = bit_3!(checksum);
-    let d_bit4 = bit_4!(checksum);
-    let d_bit5 = bit_5!(checksum);
-    let d_bit6 = bit_6!(checksum);
-    let d_bit7 = bit_7!(checksum);
+    let d_bit0 = get_bit_0!(checksum);
+    let d_bit1 = get_bit_1!(checksum);
+    let d_bit2 = get_bit_2!(checksum);
+    let d_bit3 = get_bit_3!(checksum);
+    let d_bit4 = get_bit_4!(checksum);
+    let d_bit5 = get_bit_5!(checksum);
+    let d_bit6 = get_bit_6!(checksum);
+    let d_bit7 = get_bit_7!(checksum);
 
     let checksum_bit0 = d_bit1 ^ d_bit0;
     let checksum_bit1 = d_bit3 ^ d_bit2;
