@@ -1,7 +1,7 @@
 [package]
 name = "iolinke-device"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["IO-Link Device Stack Contributors"]
 description = "IO-Link Device stack implementation compliant with IO-Link Specification v1.1.4"
 license = "GPL-3"
@@ -14,7 +14,6 @@ categories = ["embedded", "no-std"]
 # Workspace dependencies
 heapless = { workspace = true }
 embedded-hal = { workspace = true }
-nom = { workspace = true }
 nb = { workspace = true }
 
 # Project-specific dependencies
@@ -38,6 +37,7 @@ clang = []
 rustlang = []
 cortex-m = ["dep:cortex-m"]
 panic-halt = ["dep:panic-halt"]
+legacy_device = []
 
 [build-dependencies]
 # cbindgen = "0.27"

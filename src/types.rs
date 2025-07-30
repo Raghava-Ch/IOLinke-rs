@@ -37,11 +37,25 @@ pub enum IoLinkMode {
 
 /// See 7.2.2.2 OD Arguments
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum RwDirection {
     /// Read operation
     Read,
     /// Write operation
     Write,
+}
+
+
+impl TryFrom<u8> for RwDirection {
+    type Error = IoLinkError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(RwDirection::Read),
+            1 => Ok(RwDirection::Write),
+            _ => Err(IoLinkError::InvalidParameter),
+        }
+    }
 }
 
 /// See A.1.2 M-sequence control (MC)
@@ -56,6 +70,34 @@ pub enum ComChannel {
     Diagnosis = 2,
     /// {ISDU} = 3
     Isdu = 3,
+}
+
+impl TryFrom<u8> for ComChannel {
+    type Error = IoLinkError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(ComChannel::Process),
+            1 => Ok(ComChannel::Page),
+            2 => Ok(ComChannel::Diagnosis),
+            3 => Ok(ComChannel::Isdu),
+            _ => Err(IoLinkError::InvalidParameter),
+        }
+    }
+}
+
+/// See A.1.3 Checksum / M-sequence type (CKT)
+/// Also see Bit 6 to 7: M-sequence type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MsequenceBaseType {
+    /// {Type 0} = 0
+    Type0 = 0,
+    /// {Type 1} = 1
+    Type1 = 1,
+    /// {Type 2} = 2
+    Type2 = 2,
+    /// {reserved} = 3
+    Reserved = 3,
 }
 
 /// See A.6.4 EventQualifier
@@ -299,8 +341,29 @@ pub enum MessageType {
     DeviceCommand = 1,
     /// Type 2: Parameter command
     ParameterCommand = 2,
-    /// Used for uninitialized state
-    UnInitialized = 0xFF,
+}
+
+impl TryFrom<u8> for MessageType {
+    type Error = IoLinkError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(MessageType::ProcessData),
+            1 => Ok(MessageType::DeviceCommand),
+            2 => Ok(MessageType::ParameterCommand),
+            _ => Err(IoLinkError::InvalidParameter),
+        }
+    }
+}
+
+impl Into<u8> for MessageType {
+    fn into(self) -> u8 {
+        match self {
+            MessageType::ProcessData => 0,
+            MessageType::DeviceCommand => 1,
+            MessageType::ParameterCommand => 2,
+        }
+    }
 }
 
 /// Process data input/output structure
@@ -391,15 +454,17 @@ pub enum IoLinkError {
     HardwareError,
     /// Protocol error
     ProtocolError,
-    
     /// Cycle Error, This is a custom error type
     CycleError,
     /// Invalid Event Data, This is a custom error type
     InvalidEvent,
-    /// Invalid Event Ddata, This is a custom error type
+    /// Invalid Event Data, This is a custom error type
     InvalidData,
-    /// Nothing to do, 
-    /// This is a custom error type for dummy trait functions
+    /// Invalid M-sequence type, This is a custom error type
+    InvalidMseqType,
+    /// M-sequence checksum error, This is a custom error type
+    InvalidMseqChecksum,
+    /// Nothing to do, This is a custom error type for dummy trait functions
     NoImplFound,
 }
 
@@ -447,5 +512,91 @@ impl DeviceStatus {
     /// Get device operating mode
     pub fn operating_mode(&self) -> u8 {
         (self.raw >> 4) & 0x03
+    }
+}
+
+/// See 7.3.3.2 M-sequences
+/// Also see A.2.6 M-sequence type usage for STARTUP, PREOPERATE and OPERATE modes
+///     Table A.7 – M-sequence types for the STARTUP mode
+///     Table A.8 – M-sequence types for the PREOPERATE mode
+///     Table A.9 – M-sequence types for the OPERATE mode (legacy protocol)
+///     Table A.10 – M-sequence types for the OPERATE mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum MsequenceType {
+    /// TYPE_0:
+    /// ```
+    /// MC | CKT | --OD-- | CKS
+    ///          | RD WR  |    
+    /// ```
+    Type0 = 0,
+
+    /// TYPE_1_1:
+    /// ```
+    /// MC | CKT | --PD₀ PD₁-- | CKS
+    ///          |    RD WR    |    
+    /// ```
+    Type11,
+
+    /// TYPE_1_2:
+    /// ```
+    /// MC | CKT | --OD₀ OD₁-- | CKS
+    ///          |    RD WR    |    
+    /// ```
+    Type12,
+
+    /// TYPE_1_V:
+    /// ```
+    /// MC | CKT | --OD₀ ... ODₙ-- | CKS
+    ///          |      RD WR      |    
+    /// ```
+    Type1V,
+
+    /// TYPE_2_1:
+    /// ```
+    /// MC | CKT |  --OD-- | PD | CKS
+    ///          |  RD WR  |    
+    /// ```
+    Type21,
+
+    /// TYPE_2_2:
+    /// ```
+    /// MC | CKT |  --OD-- | PD₀ PD₁ | CKS
+    ///          |  RD WR  |    
+    /// ```
+    Type22,
+
+    /// TYPE_2_3:
+    /// ```
+    /// MC | CKT | PD |  --OD-- | CKS
+    ///               |  RD WR  |    
+    /// ```
+    Type23,
+
+    /// TYPE_2_4:
+    /// ```
+    /// MC | CKT | PD₀ PD₁ |  --OD-- | CKS
+    ///                    |  RD WR  |    
+    /// ```
+    Type24,
+
+    /// TYPE_2_5:
+    /// ```
+    /// MC | CKT | PD |  --OD-- | PD | CKS
+    ///               |  RD WR  |    
+    /// ```
+    Type25,
+
+    /// TYPE_2_V:
+    /// ```
+    /// MC | CKT | PD₀ ... PDₙ₋₁ | --OD₀ ... ODₘ₋₁-- | PD₀ ... PDₖ₋₁ | CKS
+    ///                          |       RD WR       |
+    /// ```
+    Type2V = 9,
+}
+
+impl Into<u8> for MsequenceType {
+    fn into(self) -> u8 {
+        self as u8
     }
 }

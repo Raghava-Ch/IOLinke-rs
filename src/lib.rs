@@ -33,6 +33,8 @@ mod pl;
 mod parameter;
 mod sm;
 mod storage;
+mod config;
+mod utils;
 
 #[cfg(feature = "std")]
 pub mod ffi;

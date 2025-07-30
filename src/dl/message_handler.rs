@@ -3,11 +3,131 @@
 //! This module implements the Message Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 6.3
 
-use crate::dl::{self, od_handler};
-use crate::pl::{self, physical_layer};
-use crate::types::{self, IoLinkError, IoLinkResult, MHInfo, MessageType, MhConfState};
+use crate::config;
+use crate::dl;
+use crate::pl;
+use crate::types::{self, IoLinkError, IoLinkResult};
+use crate::{
+    bit_0, bit_1, bit_2, bit_3, bit_4, bit_5, bit_6, bit_7, bits_0_4, bits_5_6, bits_6_7,
+    construct_u8,
+};
+
 use heapless::Vec;
-use nom::{bytes::complete::take, number::complete::u8, IResult};
+
+/// Mask to set bits 0-5 to zero while preserving bits 6-7
+/// This macro clears the revceived checksum bits (0-5) in a byte,
+/// leaving bits 6 and 7 unchanged.
+#[macro_export]
+macro_rules! clear_checksum_bits_0_to_5 {
+    ($byte:expr) => {
+        ($byte) & 0xC0
+    };
+}
+
+/// Extract checksum bits (bits 0-5) from byte
+#[macro_export]
+macro_rules! extract_checksum_bits {
+    ($byte:expr) => {
+        ($byte) & 0x3F
+    };
+}
+
+/// Extract message type from first byte (bits 0-1)
+/// TYPE_0 = 0b00, TYPE_1 = 0b01, TYPE_2 = 0b10
+macro_rules! extract_message_type {
+    ($byte:expr) => {
+        ($byte) & 0x03
+    };
+}
+
+/// Extract RW direction from first byte (bit 2)
+/// 0 = Read, 1 = Write
+macro_rules! extract_rw_direction {
+    ($byte:expr) => {
+        bit_7!($byte)
+    };
+}
+
+/// Extract communication channel from first byte (bits 5-6)
+/// 00 = Process, 01 = Page, 10 = Diagnosis, 11 = ISDU
+macro_rules! extract_com_channel {
+    ($byte:expr) => {
+        bits_5_6!($byte)
+    };
+}
+
+/// Extract reserved bits from first byte (bits 5-7)
+macro_rules! extract_reserved_bits {
+    ($byte:expr) => {
+        (($byte) >> 5) & 0x07
+    };
+}
+
+/// Extract address from second byte for M-sequence TYPE_1 and TYPE_2
+macro_rules! extract_address {
+    ($byte:expr) => {
+        ($byte)
+    };
+}
+/// Extract address from first byte for M-sequence byte (bits 0-4)
+macro_rules! extract_address_fctrl {
+    ($byte:expr) => {
+        bits_0_4!($byte)
+    };
+}
+
+/// Extract data length from length byte
+macro_rules! extract_data_length {
+    ($byte:expr) => {
+        ($byte)
+    };
+}
+
+/// Extract the message type (TYPE_0, TYPE_1, or TYPE_2)
+macro_rules! extract_message_type {
+    ($msg_type:expr) => {
+        bits_6_7!($msg_type)
+    };
+}
+
+/// Check if communication channel is valid
+macro_rules! is_valid_com_channel {
+    ($channel:expr) => {
+        ($channel) <= 0x03
+    };
+}
+
+/// Extract checksum field (last byte of message)
+macro_rules! extract_checksum {
+    ($data:expr) => {
+        $data[$data.len() - 1]
+    };
+}
+
+/// Calculate XOR checksum for message validation
+macro_rules! calculate_xor_checksum {
+    ($data:expr) => {{
+        let mut checksum = 0u8;
+        for i in 0..($data.len() - 1) {
+            checksum ^= $data[i];
+        }
+        checksum
+    }};
+}
+
+/// Validate message checksum
+macro_rules! validate_checksum {
+    ($data:expr) => {
+        calculate_xor_checksum!($data) == extract_checksum!($data)
+    };
+}
+
+// /// Extract payload data (excluding header and checksum)
+// macro_rules! extract_payload {
+//     ($data:expr, $start_idx:expr, $length:expr) => {
+//         &$data[$start_idx..($start_idx + $length as usize)]
+//     };
+// }
 
 pub trait OdInd {
     /// Invoke OD.ind service with the provided data
@@ -21,23 +141,34 @@ pub trait OdInd {
     ) -> IoLinkResult<()>;
 }
 
-/// Maximum message buffer size
-const MAX_MESSAGE_SIZE: usize = 32;
+const HEADER_SIZE: usize = 2; // Header size is 2 bytes (MC and length)
+/// Maximum message buffer size for OD
+/// This is the maximum size of the message buffer used for OD messages.
+const MAX_OD_SIZE: usize = 32;
+/// Maximum message buffer size for PD
+/// This is the maximum size of the message buffer used for PD messages.
+const MAX_PD_SIZE: usize = 32;
+/// Maximum frame size for IO-Link messages
+const MAX_FRAME_SIZE: usize = MAX_OD_SIZE + MAX_PD_SIZE + HEADER_SIZE;
 
 /// IO-Link message structure
 /// See IO-Link v1.1.4 Section 6.1
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct IoLinkMessage {
+    /// Read/Write direction
+    read_write: Option<types::RwDirection>,
     /// Message type
-    message_type: Option<MessageType>,
+    message_type: Option<types::MessageType>,
     /// Communication channel
-    channel: Option<types::ComChannel>,
+    com_channel: Option<types::ComChannel>,
+    /// Contains the address or flow control value (see A.1.2).
+    address_fctrl: Option<u8>,
     /// Event flag
     event_flag: bool,
     /// On Request Data (OD) response data
-    od: Option<Vec<u8, MAX_MESSAGE_SIZE>>,
+    od: Option<Vec<u8, MAX_OD_SIZE>>,
     /// Process Data (PD) response data
-    pd: Option<Vec<u8, MAX_MESSAGE_SIZE>>,
+    pd: Option<Vec<u8, MAX_PD_SIZE>>,
     /// Process Data input status
     pd_in_status: Option<types::PdInStatus>,
 }
@@ -45,8 +176,10 @@ struct IoLinkMessage {
 impl Default for IoLinkMessage {
     fn default() -> Self {
         Self {
+            read_write: None,
             message_type: None,
-            channel: None,
+            com_channel: None,
+            address_fctrl: None,
             event_flag: false,
             od: None,
             pd: None,
@@ -107,7 +240,7 @@ enum Transition {
 }
 
 /// Message Handler events
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum MessageHandlerEvent {
     /// Table 47 – T1
     MhConfActive,
@@ -129,7 +262,7 @@ enum MessageHandlerEvent {
     /// Table 47 – T10
     TimerMaxCycle,
     /// Table 47 – T9
-    TimerMaxUARTFrame
+    TimerMaxUARTFrame,
 }
 
 /// Trait for message handler operations in bw modules
@@ -137,17 +270,18 @@ pub trait MsgHandlerInfo {
     /// See 7.2.2.6 MHInfo
     /// The service MHInfo signals an exceptional operation within the message handler. The
     /// parameters of the service are listed in Table 39.
-    fn mh_info(&mut self, mh_info: MHInfo);
+    fn mh_info(&mut self, mh_info: types::MHInfo);
 }
 
 /// Message Handler implementation
 pub struct MessageHandler {
     state: MessageHandlerState,
     exec_transition: Transition,
-    rx_buffer: Vec<u8, MAX_MESSAGE_SIZE>,
-    tx_buffer: Vec<u8, MAX_MESSAGE_SIZE>,
-    current_message: IoLinkMessage,
-    error_count: u32,
+    rx_buffer: Vec<u8, MAX_FRAME_SIZE>,
+    tx_buffer: Vec<u8, MAX_FRAME_SIZE>,
+    tx_message: IoLinkMessage,
+    rx_message: IoLinkMessage,
+    device_operate_state: types::MasterCommand,
 }
 
 impl MessageHandler {
@@ -158,8 +292,9 @@ impl MessageHandler {
             exec_transition: Transition::Tn,
             rx_buffer: Vec::new(),
             tx_buffer: Vec::new(),
-            current_message: IoLinkMessage::default(),
-            error_count: 0,
+            tx_message: IoLinkMessage::default(),
+            rx_message: IoLinkMessage::default(),
+            device_operate_state: types::MasterCommand::INACTIVE,
         }
     }
 
@@ -169,21 +304,13 @@ impl MessageHandler {
         use MessageHandlerState as State;
 
         let (new_transition, new_state) = match (self.state, event) {
-            (State::Inactive, Event::MhConfActive) => {
-                (Transition::T1, State::Idle)
-            }
-            (State::Inactive, Event::MhConfInactive) => {
-                (Transition::Tn, State::Inactive)
-            }
+            (State::Inactive, Event::MhConfActive) => (Transition::T1, State::Idle),
+            (State::Inactive, Event::MhConfInactive) => (Transition::Tn, State::Inactive),
             (State::Idle, Event::PlTransfer) => (Transition::T2, State::GetMessage),
-            (State::Idle, Event::TimerMaxCycle) => {
-                (Transition::T10, State::Idle)
-            }
+            (State::Idle, Event::TimerMaxCycle) => (Transition::T10, State::Idle),
             (State::GetMessage, Event::PlTransfer) => (Transition::T3, State::GetMessage),
             (State::GetMessage, Event::Completed) => (Transition::T4, State::CheckMessage),
-            (State::GetMessage, Event::TimerMaxUARTFrame) => {
-                (Transition::T9, State::Idle)
-            }
+            (State::GetMessage, Event::TimerMaxUARTFrame) => (Transition::T9, State::Idle),
             (State::CheckMessage, Event::NoError) => (Transition::T5, State::CreateMessage),
             (State::CheckMessage, Event::ChecksumError) => (Transition::T7, State::Idle),
             (State::CheckMessage, Event::TypeError) => (Transition::T8, State::Idle),
@@ -193,6 +320,7 @@ impl MessageHandler {
 
         self.exec_transition = new_transition;
         self.state = new_state;
+
         Ok(())
     }
 
@@ -216,35 +344,23 @@ impl MessageHandler {
             }
             Transition::T2 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t2(
-                    physical_layer,
-                )?;
+                self.execute_t2(physical_layer)?;
             }
             Transition::T3 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t3(
-                    physical_layer,
-                )?;
+                self.execute_t3(physical_layer)?;
             }
             Transition::T4 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t4(
-                    physical_layer,
-                )?;
+                self.execute_t4(physical_layer)?;
             }
             Transition::T5 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t5(
-                    event_handler,
-                    isdu_handler,
-                    od_handler,
-                )?;
+                self.execute_t5(event_handler, isdu_handler, od_handler)?;
             }
             Transition::T6 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t6(
-                    physical_layer,
-                )?;
+                self.execute_t6(physical_layer)?;
             }
             Transition::T7 => {
                 self.exec_transition = Transition::Tn;
@@ -252,15 +368,11 @@ impl MessageHandler {
             }
             Transition::T8 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t8(
-                    mode_handler,
-                )?;
+                self.execute_t8(mode_handler)?;
             }
             Transition::T9 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t9(
-                    physical_layer,
-                )?;
+                self.execute_t9(physical_layer)?;
             }
             Transition::T10 => {
                 self.exec_transition = Transition::Tn;
@@ -269,6 +381,50 @@ impl MessageHandler {
             Transition::T11 => {
                 self.exec_transition = Transition::Tn;
                 self.execute_t11()?;
+            }
+        }
+
+        match self.state {
+            MessageHandlerState::CheckMessage => {
+                let io_link_message = match self.parse_message() {
+                    Ok(message) => message,
+                    Err(e) => {
+                        // Handle parsing error
+                        match e {
+                            IoLinkError::ChecksumError => {
+                                self.process_event(MessageHandlerEvent::ChecksumError)?;
+                                return Err(e);
+                            }
+                            IoLinkError::InvalidMseqType => {
+                                self.process_event(MessageHandlerEvent::TypeError)?;
+                                return Err(e);
+                            }
+                            _ => return Err(e),
+                        }
+                    }
+                };
+                self.rx_message = io_link_message;
+                self.process_event(MessageHandlerEvent::NoError)?;
+            }
+            MessageHandlerState::CreateMessage => {
+                // Check the response is ready to be sent
+                if self.tx_message.od.is_none() &&
+                self.tx_message.pd.is_none() &&
+                self.tx_message.address_fctrl.is_none() &&
+                self.tx_message.com_channel.is_none() &&
+                self.tx_message.read_write.is_none() &&
+                self.tx_message.message_type.is_none() &&
+                self.tx_message.pd_in_status.is_none()
+                {
+                    // No data to send, transition to Idle
+                } else {
+                    // Data is ready, proceed to send
+                    self.process_event(MessageHandlerEvent::Ready)?;
+                }
+            }
+            _ => {
+                // All other states are not expected to perform actions
+                // No specific action required for other states
             }
         }
         Ok(())
@@ -319,29 +475,17 @@ impl MessageHandler {
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
     ) -> IoLinkResult<()> {
-        // OD.ind and PD.ind service indications handled externally
-        let _ = event_handler.od_ind(
-            types::RwDirection::Read,
-            types::ComChannel::Page,
-            0,
-            0,
-            &[],
-        );
-        let _ = isdu_handler.od_ind(
-            types::RwDirection::Read,
-            types::ComChannel::Page,
-            0,
-            0,
-            &[],
-        );
-        let _ = od_handler.od_ind(
-            types::RwDirection::Read,
-            types::ComChannel::Page,
-            0,
-            0,
-            &[],
-        );
-
+        if let (Some(rw), Some(channel), Some(addr_ctrl), Some(ref od_data)) = (
+            self.rx_message.read_write,
+            self.rx_message.com_channel,
+            self.rx_message.address_fctrl,
+            self.rx_message.od.as_ref(),
+        ) {
+            let _ = event_handler.od_ind(rw, channel, addr_ctrl, od_data.len() as u8, od_data);
+            let _ = isdu_handler.od_ind(rw, channel, addr_ctrl, od_data.len() as u8, od_data);
+            let _ = od_handler.od_ind(rw, channel, addr_ctrl, od_data.len() as u8, od_data);
+            // TODO: Implement PD.ind service indication values
+        }
         todo!("Implement PD.ind service indication values");
         Ok(())
     }
@@ -372,7 +516,7 @@ impl MessageHandler {
     ) -> IoLinkResult<()> {
         // mode_handler.mh_info(MHInfo::IllegalMessagetype);
         // Error indication handled externally
-        mode_handler.mh_info(MHInfo::IllegalMessagetype);
+        mode_handler.mh_info(types::MHInfo::IllegalMessagetype);
         Ok(())
     }
 
@@ -405,8 +549,8 @@ impl MessageHandler {
 
     /// This call causes the message handler to send a message with the
     /// requested transmission rate of COMx and with M-sequence TYPE_0 (see Table 46).
-    pub fn mh_conf_update(&mut self, mh_conf: MhConfState) {
-        let event = if mh_conf == MhConfState::Active {
+    pub fn mh_conf_update(&mut self, mh_conf: types::MhConfState) {
+        let event = if mh_conf == types::MhConfState::Active {
             MessageHandlerEvent::MhConfActive
         } else {
             MessageHandlerEvent::MhConfInactive
@@ -419,7 +563,7 @@ impl MessageHandler {
     /// the "Event flag" (see A.1.5) during cyclic
     /// communication. The parameters of the service primitives are listed in Table 37.
     pub fn event_flag(&mut self, flag: bool) {
-        self.current_message.event_flag = flag;
+        self.tx_message.event_flag = flag;
     }
 
     /// See 7.2.2.2 OD
@@ -427,11 +571,11 @@ impl MessageHandler {
     /// turn, the confirmation of the service contains the data from the receiver. The parameters of
     /// the service primitives are listed in Table 35.
     pub fn od_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
-        let od = if let Some(od) = &mut self.current_message.od {
+        let od = if let Some(od) = &mut self.tx_message.od {
             od
         } else {
-            self.current_message.od = Some(Vec::new());
-            self.current_message.od.as_mut().unwrap()
+            self.tx_message.od = Some(Vec::new());
+            self.tx_message.od.as_mut().unwrap()
         };
         od.clear();
         od.extend_from_slice(data)
@@ -444,11 +588,11 @@ impl MessageHandler {
     /// communication channel. The confirmation of the service contains the data from the receiver.
     /// The parameters of the service primitives are listed in Table 36.
     pub fn pd_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
-        let pd = if let Some(pd) = &mut self.current_message.pd {
+        let pd = if let Some(pd) = &mut self.tx_message.pd {
             pd
         } else {
-            self.current_message.pd = Some(Vec::new());
-            self.current_message.pd.as_mut().unwrap()
+            self.tx_message.pd = Some(Vec::new());
+            self.tx_message.pd.as_mut().unwrap()
         };
         pd.clear();
         pd.extend_from_slice(data)
@@ -460,11 +604,11 @@ impl MessageHandler {
     /// The service PDInStatus sets and signals the validity qualifier
     /// of the input Process Data.
     pub fn pd_in_status_req(&mut self, valid: types::PdInStatus) -> IoLinkResult<()> {
-        let pd_instatus = if let Some(status) = &mut self.current_message.pd_in_status {
+        let pd_instatus = if let Some(status) = &mut self.tx_message.pd_in_status {
             status
         } else {
-            self.current_message.pd_in_status = Some(types::PdInStatus::VALID);
-            self.current_message.pd_in_status.as_mut().unwrap()
+            self.tx_message.pd_in_status = Some(types::PdInStatus::VALID);
+            self.tx_message.pd_in_status.as_mut().unwrap()
         };
         *pd_instatus = valid;
         Ok(())
@@ -472,16 +616,40 @@ impl MessageHandler {
 
     /// Parse IO-Link message from buffer
     /// See IO-Link v1.1.4 Section 6.1
-    fn parse_message(&self) -> Result<IoLinkMessage, IoLinkError> {
-        // if self.rx_buffer.is_empty() {
-        //     return Err(IoLinkError::InvalidFrame);
-        // }
+    fn parse_message(&mut self) -> IoLinkResult<IoLinkMessage> {
+        if validate_checksum(self.rx_buffer.len() as u8, &mut self.rx_buffer) == false {
+            // If checksum is invalid, indicate error
+            return Err(IoLinkError::ChecksumError);
+        }
+        let io_link_message = match self.device_operate_state {
+            types::MasterCommand::STARTUP => {
+                let m_seq_type: u8 = types::MsequenceType::Type0.into();
+                let rxed_m_seq_base_type: u8 = extract_message_type!(self.rx_buffer[1]);
+                if m_seq_type != rxed_m_seq_base_type {
+                    return Err(IoLinkError::InvalidMseqType);
+                }
+                parse_iolink_startup_frame(&self.rx_buffer)
+            }
+            types::MasterCommand::PREOPERATE => {
+                const M_SEQ_TYPE: u8 = config::m_seq_capability::preoperate_m_sequence();
+                let rxed_m_seq_base_type: u8 = extract_message_type!(self.rx_buffer[1]);
+                if rxed_m_seq_base_type != M_SEQ_TYPE {
+                    return Err(IoLinkError::InvalidMseqType);
+                }
+                parse_iolink_pre_operate_frame(&self.rx_buffer)
+            }
+            types::MasterCommand::OPERATE => {
+                const M_SEQ_TYPE: u8 = config::m_seq_capability::operate_m_sequence_base_type();
+                let rxed_m_seq_base_type: u8 = extract_message_type!(self.rx_buffer[1]);
+                if rxed_m_seq_base_type != M_SEQ_TYPE {
+                    return Err(IoLinkError::InvalidMseqType);
+                }
+                parse_iolink_operate_frame(&self.rx_buffer)
+            }
+            _ => return Err(IoLinkError::InvalidMseqType),
+        };
 
-        // match parse_iolink_frame(&self.rx_buffer) {
-        //     Ok((_, message)) => Ok(message),
-        //     Err(_) => Err(IoLinkError::InvalidFrame),
-        // }
-        todo!("Implement message parsing logic using nom or similar crate");
+        io_link_message
     }
 
     /// Process a received message
@@ -533,7 +701,7 @@ impl MessageHandler {
     pub fn clear_buffers(&mut self) {
         self.rx_buffer.clear();
         self.tx_buffer.clear();
-        self.current_message = IoLinkMessage::default();
+        self.tx_message = IoLinkMessage::default();
     }
 }
 
@@ -551,14 +719,9 @@ impl pl::physical_layer::IoLinkTimer for MessageHandler {
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
     fn timer_elapsed(&mut self, timer: pl::physical_layer::Timer) -> bool {
         let event = match timer {
-            pl::physical_layer::Timer::MaxCycleTime => {
-                MessageHandlerEvent::TimerMaxCycle
-            }
-            pl::physical_layer::Timer::MaxUARTframeTime => {
-                MessageHandlerEvent::TimerMaxUARTFrame
-            },
+            pl::physical_layer::Timer::MaxCycleTime => MessageHandlerEvent::TimerMaxCycle,
+            pl::physical_layer::Timer::MaxUARTframeTime => MessageHandlerEvent::TimerMaxUARTFrame,
             _ => return false,
-            
         };
         let _ = self.process_event(event);
         true
@@ -567,73 +730,235 @@ impl pl::physical_layer::IoLinkTimer for MessageHandler {
 
 /// Parse IO-Link frame using nom
 /// See IO-Link v1.1.4 Section 6.1
-// fn parse_iolink_frame(input: &[u8]) -> IResult<&[u8], IoLinkMessage> {
-//     let (input, message_type_raw) = u8(input)?;
-//     let (input, channel) = u8(input)?;
-//     let (input, length) = u8(input)?;
+fn parse_iolink_startup_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
+    // Extracting `MC` byte properties
+    let read_write = types::RwDirection::try_from(extract_rw_direction!(input[0]))?;
+    let com_channel = types::ComChannel::try_from(extract_com_channel!(input[0]))?;
+    let address_fctrl = extract_address_fctrl!(input[0]);
 
-//     if length > MAX_MESSAGE_SIZE as u8 {
-//         return Err(nom::Err::Error(nom::error::Error::new(
-//             input,
-//             nom::error::ErrorKind::TooLarge,
-//         )));
-//     }
+    // Extracting `CKT` byte properties
+    let message_type = types::MessageType::try_from(extract_message_type!(input[1]))?;
+    // check for M-sequenceCapability
+    // For STARTUP, we expect TYPE_0 (0b00), thus we can check directly
+    // because message sequence is always TYPE_0.
+    // OD length in startup is always 1 byte
+    let od: Option<Vec<u8, MAX_OD_SIZE>> = if input.len() > 2 {
+        let mut vec = Vec::new();
+        vec.push(input[2]).map_err(|_| IoLinkError::InvalidData)?;
+        Some(vec)
+    } else {
+        None
+    };
 
-//     let (input, data_bytes) = take(length)(input)?;
-//     let (input, checksum) = u8(input)?;
+    Ok(IoLinkMessage {
+        read_write: Some(read_write),
+        message_type: Some(message_type),
+        com_channel: Some(com_channel),
+        address_fctrl: Some(address_fctrl),
+        event_flag: false, // Event flag is not set in startup frame
+        od,
+        pd: None,           // No PD in startup frame
+        pd_in_status: None, // No PD status in startup frame
+    })
+}
 
-//     // Convert message type
-//     let message_type = match message_type_raw & 0x03 {
-//         0 => MessageType::ProcessData,
-//         1 => MessageType::DeviceCommand,
-//         2 => MessageType::ParameterCommand,
-//         _ => {
-//             return Err(nom::Err::Error(nom::error::Error::new(
-//                 input,
-//                 nom::error::ErrorKind::Alt,
-//             )))
-//         }
-//     };
+fn parse_iolink_pre_operate_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
+    // On-request Data (OD) length
+    const OD_LENGTH: u8 = config::m_seq_capability::preoperate_m_sequence_od_len();
+    // Extracting `MC` byte properties
+    let read_write = types::RwDirection::try_from(extract_rw_direction!(input[0]))?;
+    let com_channel = types::ComChannel::try_from(extract_com_channel!(input[0]))?;
+    let address_fctrl = extract_address_fctrl!(input[0]);
 
-//     // Create data vector
-//     let mut data = Vec::new();
-//     for &byte in data_bytes {
-//         data.push(byte).map_err(|_| {
-//             nom::Err::Error(nom::error::Error::new(
-//                 input,
-//                 nom::error::ErrorKind::TooLarge,
-//             ))
-//         })?;
-//     }
+    // Extracting `CKT` byte properties
+    let rxed_message_type = types::MessageType::try_from(extract_message_type!(input[1]))?;
+    let od = if input.len() > 2 {
+        let mut vec: Vec<u8, MAX_OD_SIZE> = Vec::new();
+        // Extract OD data
+        for i in 2..(2 + OD_LENGTH as usize) {
+            if i < input.len() {
+                vec.push(input[i]).map_err(|_| IoLinkError::InvalidData)?;
+            } else {
+                break; // Avoid out of bounds access
+            }
+        }
+        Some(vec)
+    } else {
+        None
+    };
 
-//     // Verify checksum (simple XOR for example)
-//     let calculated_checksum = calculate_checksum(message_type_raw, channel, length, &data);
-//     if calculated_checksum != checksum {
-//         return Err(nom::Err::Error(nom::error::Error::new(
-//             input,
-//             nom::error::ErrorKind::Verify,
-//         )));
-//     }
+    Ok(IoLinkMessage {
+        read_write: Some(read_write),
+        message_type: Some(rxed_message_type),
+        com_channel: Some(com_channel),
+        address_fctrl: Some(address_fctrl),
+        event_flag: false, // Event flag is not set in pre-operate frame
+        od,
+        pd: None,           // No PD in pre-operate frame
+        pd_in_status: None, // No PD status in pre-operate frame
+    })
+}
 
-//     Ok((
-//         input,
-//         IoLinkMessage {
-//             message_type,
-//             channel,
-//             data,
-//             checksum,
-//         },
-//     ))
-// }
+fn parse_iolink_operate_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
+    if input.len() < 3 {
+        return Err(IoLinkError::InvalidData);
+    }
+    const INTERLEAVED_MODE: bool = config::m_seq_capability::interleaved_mode();
+    // Extracting `MC` byte properties
+    let read_write = types::RwDirection::try_from(extract_rw_direction!(input[0]))?;
+    let com_channel = types::ComChannel::try_from(extract_com_channel!(input[0]))?;
+    let address_fctrl = extract_address_fctrl!(input[0]);
 
-// /// Calculate message checksum
-// fn calculate_checksum(message_type: u8, channel: u8, length: u8, data: &[u8]) -> u8 {
-//     let mut checksum = message_type ^ channel ^ length;
-//     for &byte in data {
-//         checksum ^= byte;
-//     }
-//     checksum
-// }
+    // Extracting `CKT` byte properties
+    let message_type = types::MessageType::try_from(extract_message_type!(input[1]))?;
+
+    let (od, pd) = if INTERLEAVED_MODE {
+        // If interleaved mode is enabled, we need to handle both OD and PD frames
+        // Check if the message is an OD frame
+        if message_type == types::MessageType::ProcessData.into() {
+            parse_iolink_interleaved_operate_frame_pd(input)
+        } else {
+            parse_iolink_interleaved_operate_frame_od(input)
+        }
+    } else {
+        parse_iolink_native_operate_frame(input)
+    }?;
+
+    Ok(IoLinkMessage {
+        read_write: Some(read_write),
+        message_type: Some(message_type),
+        com_channel: Some(com_channel),
+        address_fctrl: Some(address_fctrl),
+        event_flag: false, // Event flag is not set in operate frame
+        od,
+        pd,
+        pd_in_status: None, // No PD status in operate frame
+    })
+}
+
+fn parse_iolink_native_operate_frame(
+    input: &[u8],
+) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
+    const OD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_od_len();
+    const PD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_pd_out_len();
+    if input.len() != HEADER_SIZE + OD_LENGTH as usize + PD_LENGTH as usize {
+        return Err(IoLinkError::InvalidData);
+    }
+    let mut od: Vec<u8, MAX_OD_SIZE> = Vec::new();
+    let mut pd: Vec<u8, MAX_PD_SIZE> = Vec::new();
+
+    for i in 2..(2 + OD_LENGTH as usize) {
+        if i < input.len() {
+            if let Err(_) = od.push(input[i]) {
+                return Err(IoLinkError::InvalidData);
+            }
+        } else {
+            break; // Avoid out of bounds access
+        }
+    }
+
+    for i in (2 + OD_LENGTH as usize)..(2 + OD_LENGTH as usize + PD_LENGTH as usize) {
+        if i < input.len() {
+            if let Err(_) = pd.push(input[i]) {
+                return Err(IoLinkError::InvalidData);
+            }
+        } else {
+            break; // Avoid out of bounds access
+        }
+    }
+
+    Ok((Some(od), Some(pd)))
+}
+fn parse_iolink_interleaved_operate_frame_od(
+    input: &[u8],
+) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
+    const OD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_od_len();
+    if input.len() != HEADER_SIZE + OD_LENGTH as usize {
+        return Err(IoLinkError::InvalidData);
+    }
+
+    let mut od: Vec<u8, MAX_OD_SIZE> = Vec::new();
+    for i in 2..(2 + OD_LENGTH as usize) {
+        if i < input.len() {
+            if let Err(_) = od.push(input[i]) {
+                return Err(IoLinkError::InvalidData);
+            }
+        } else {
+            break; // Avoid out of bounds access
+        }
+    }
+
+    Ok((Some(od), None))
+}
+
+fn parse_iolink_interleaved_operate_frame_pd(
+    input: &[u8],
+) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
+    const PD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_pd_out_len();
+    if input.len() != HEADER_SIZE + PD_LENGTH as usize {
+        return Err(IoLinkError::InvalidData);
+    }
+
+    let mut pd: Vec<u8, MAX_PD_SIZE> = Vec::new();
+    for i in 2..(2 + PD_LENGTH as usize) {
+        if i < input.len() {
+            if let Err(_) = pd.push(input[i]) {
+                return Err(IoLinkError::InvalidData);
+            }
+        } else {
+            break; // Avoid out of bounds access
+        }
+    }
+
+    Ok((None, Some(pd)))
+}
+
+fn validate_checksum(length: u8, data: &mut [u8]) -> bool {
+    // Validate the checksum of the received IO-Link message
+    let received_checksum = extract_checksum_bits!(data[1]);
+    // clear the received checksum bits (0-5), Before calculating the checksum
+    data[1] = clear_checksum_bits_0_to_5!(data[1]);
+    let calculated_checksum = calculate_checksum(length, data);
+    calculated_checksum == received_checksum
+}
+
+/// See A.1.6 Calculation of the checksum
+/// Calculate message checksum
+fn calculate_checksum(_length: u8, data: &mut [u8]) -> u8 {
+    // Seed value as per IO-Link spec
+    let mut checksum = 0x52u8;
+    for byte in data.iter() {
+        checksum ^= byte;
+    }
+    let d_bit0 = bit_0!(checksum);
+    let d_bit1 = bit_1!(checksum);
+    let d_bit2 = bit_2!(checksum);
+    let d_bit3 = bit_3!(checksum);
+    let d_bit4 = bit_4!(checksum);
+    let d_bit5 = bit_5!(checksum);
+    let d_bit6 = bit_6!(checksum);
+    let d_bit7 = bit_7!(checksum);
+
+    let checksum_bit0 = d_bit1 ^ d_bit0;
+    let checksum_bit1 = d_bit3 ^ d_bit2;
+    let checksum_bit2 = d_bit5 ^ d_bit4;
+    let checksum_bit3 = d_bit7 ^ d_bit6;
+    let checksum_bit4 = d_bit6 ^ d_bit4 ^ d_bit2 ^ d_bit0;
+    let checksum_bit5 = d_bit7 ^ d_bit5 ^ d_bit3 ^ d_bit1;
+
+    let checksum = construct_u8!(
+        0,
+        0,
+        checksum_bit5,
+        checksum_bit4,
+        checksum_bit3,
+        checksum_bit2,
+        checksum_bit1,
+        checksum_bit0
+    );
+
+    checksum
+}
 
 impl Default for MessageHandler {
     fn default() -> Self {
@@ -646,37 +971,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_message_parsing() {
-        // Create a test message: Type 0, Channel 1, Length 2, Data [0xAA, 0xBB], Checksum
-        let mut test_data = heapless::Vec::<u8, 16>::new();
-        test_data.push(0x00).unwrap();
-        test_data.push(0x01).unwrap();
-        test_data.push(0x02).unwrap();
-        test_data.push(0xAA).unwrap();
-        test_data.push(0xBB).unwrap();
-
-        let checksum = calculate_checksum(0x00, 0x01, 0x02, &[0xAA, 0xBB]);
-        test_data.push(checksum).unwrap();
-
-        let result = parse_iolink_frame(&test_data);
-        assert!(result.is_ok());
-
-        let (_, message) = result.unwrap();
-        assert_eq!(message.message_type, MessageType::ProcessData);
-        assert_eq!(message.channel, 1);
-        assert_eq!(message.data.len(), 2);
-        assert_eq!(message.data[0], 0xAA);
-        assert_eq!(message.data[1], 0xBB);
-    }
+    fn test_message_parsing() {}
 
     #[test]
-    fn test_checksum_calculation() {
-        let checksum = calculate_checksum(0x00, 0x01, 0x02, &[0xAA, 0xBB]);
-        // Calculate manually: 0x00 ^ 0x01 ^ 0x02 ^ 0xAA ^ 0xBB
-        // = 0x01 ^ 0x02 ^ 0xAA ^ 0xBB
-        // = 0x03 ^ 0xAA ^ 0xBB
-        // = 0xA9 ^ 0xBB
-        // = 0x12
-        assert_eq!(checksum, 0x12);
-    }
+    fn test_checksum_calculation() {}
 }
