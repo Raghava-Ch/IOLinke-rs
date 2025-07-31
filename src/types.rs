@@ -371,9 +371,11 @@ impl Into<u8> for MessageType {
 #[derive(Debug, Clone)]
 pub struct ProcessData {
     /// Input data from device
-    pub input: Vec<u8, MAX_PROCESS_DATA_LENGTH>,
+    pub input: [u8; MAX_PROCESS_DATA_LENGTH],
+    pub input_length: u8,
     /// Output data to device
-    pub output: Vec<u8, MAX_PROCESS_DATA_LENGTH>,
+    pub output: [u8; MAX_PROCESS_DATA_LENGTH],
+    pub output_length: u8,
     /// Data validity flag
     pub valid: bool,
 }
@@ -381,8 +383,10 @@ pub struct ProcessData {
 impl Default for ProcessData {
     fn default() -> Self {
         Self {
-            input: Vec::new(),
-            output: Vec::new(),
+            input: [0; MAX_PROCESS_DATA_LENGTH],
+            input_length: 0,
+            output: [0; MAX_PROCESS_DATA_LENGTH],
+            output_length: 0,
             valid: false,
         }
     }

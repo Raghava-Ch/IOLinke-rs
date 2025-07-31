@@ -3,7 +3,9 @@
 //! This module implements the Process Data Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 7.2
 
-use crate::types::{self, IoLinkError, IoLinkResult, ProcessData};
+use heapless::Vec;
+
+use crate::{config, types::{self, IoLinkError, IoLinkResult, ProcessData}};
 
 /// Process Data Handler states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,8 +70,7 @@ enum ProcessDataHandlerEvent {
 pub struct ProcessDataHandler {
     state: ProcessDataHandlerState,
     exec_transition: Transition,
-    input_data: ProcessData,
-    output_data: ProcessData,
+    process_data: ProcessData,
     cycle_time: u16,
 }
 
@@ -79,8 +80,7 @@ impl ProcessDataHandler {
         Self {
             state: ProcessDataHandlerState::Inactive,
             exec_transition: Transition::Tn,
-            input_data: ProcessData::default(),
-            output_data: ProcessData::default(),
+            process_data: ProcessData::default(),
             cycle_time: 100, // 10ms default
         }
     }
@@ -168,14 +168,55 @@ impl ProcessDataHandler {
         Ok(())
     }
 
-    /// Handle Process Data configuration changes
-    /// See 7.3.4.4 State machine of the Device Process Data handler
+    /// See 7.2.2.3 PD
+    /// The PD service is used to setup the Process Data to be sent through the process
+    /// communication channel. The confirmation of the service contains the data from the receiver.
+    /// The parameters of the service primitives are listed in Table 36.
     pub fn pd_conf(&mut self, state: types::PdConfState) -> IoLinkResult<()> {
         match state {
             types::PdConfState::Active => self.process_event(ProcessDataHandlerEvent::PDConfActive),
             types::PdConfState::Inactive => self.process_event(ProcessDataHandlerEvent::PDConfInactive),
         }?;
 
+        Ok(())
+    }
+
+    /// See 7.2.2.3 PD
+    /// The PD service is used to setup the Process Data to be sent through the process
+    /// communication channel. The confirmation of the service contains the data from the receiver.
+    /// The parameters of the service primitives are listed in Table 36.
+     pub fn pd_ind(
+        &mut self,
+        pd_out: &Vec<u8, {types::MAX_PROCESS_DATA_LENGTH}>,
+        pd_out_address: u8,
+        pd_out_length: u8,
+    ) -> IoLinkResult<()> {
+        const INTERLEAVED_MODE: bool = config::m_seq_capability::interleaved_mode();
+        // Push the output data to the `Application Layer`
+        if INTERLEAVED_MODE {
+
+        } else {
+
+        }
+
+        Ok(())
+    }
+
+    /// See 7.2.1.10 DL_PDInputUpdate
+    /// The Device's application layer uses the DL_PDInputUpdate service to update the input data
+    /// (Process Data from Device to Master) on the data link layer. The parameters of the service
+    /// primitives are listed in Table 25.
+    pub fn dl_pd_input_update(&mut self, length: u8, input_data: &[u8]) -> IoLinkResult<()> {
+        self.process_data.input.fill(0);
+        self.process_data.input_length = length;
+        for (i, &byte) in input_data.iter().enumerate() {
+            if i < length as usize {
+                self.process_data.input[i] = byte;
+            } else {
+                break; // Avoid out of bounds access
+            }
+        }
+        self.process_event(ProcessDataHandlerEvent::DlPDInputUpdate)?;
         Ok(())
     }
 
@@ -187,12 +228,13 @@ impl ProcessDataHandler {
 
     /// Set input data
     pub fn set_input_data(&mut self, data: ProcessData) {
-        self.input_data = data;
+        // self.input_data = data;
     }
 
     /// Get output data
     pub fn get_output_data(&self) -> &ProcessData {
-        &self.output_data
+        // &self.output_data
+        todo!("Implement get_output_data")
     }
 
     /// Get current state

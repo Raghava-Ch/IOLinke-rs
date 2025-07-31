@@ -42,6 +42,7 @@ impl DataLinkLayer {
             &mut self.event_handler,
             &mut self.isdu_handler,
             &mut self.od_handler,
+            &mut self.pd_handler,
             &mut self.mode_handler,
             physical_layer,
         );
