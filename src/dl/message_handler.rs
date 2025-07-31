@@ -9,9 +9,7 @@ use crate::pl;
 use crate::types::{self, IoLinkError, IoLinkResult};
 use crate::{
     construct_u8, get_bit_0, get_bit_1, get_bit_2, get_bit_3, get_bit_4, get_bit_5, get_bit_6,
-    get_bit_7, get_bits_0_4, get_bits_5_6, get_bits_6_7, set_bit_0, set_bit_1, set_bit_2,
-    set_bit_3, set_bit_4, set_bit_5, set_bit_6, set_bit_7, set_bits_0_4, set_bits_0_5,
-    set_bits_5_6, set_bits_6_7,
+    get_bit_7, get_bits_0_4, get_bits_5_6, get_bits_6_7, set_bit_6, set_bit_7, set_bits_0_5,
 };
 
 use heapless::Vec;
@@ -42,41 +40,11 @@ macro_rules! extract_rw_direction {
     };
 }
 
-/// Extract RW direction from first byte (bit 2)
-/// 0 = Read, 1 = Write
-macro_rules! compile_rw_direction {
-    ($byte:expr, $rw: expr) => {
-        set_bit_7!($byte, $rw)
-    };
-}
-
 /// Extract communication channel from first byte (bits 5-6)
 /// 00 = Process, 01 = Page, 10 = Diagnosis, 11 = ISDU
 macro_rules! extract_com_channel {
     ($byte:expr) => {
         get_bits_5_6!($byte)
-    };
-}
-
-/// Compile communication channel from first byte (bits 5-6)
-/// 00 = Process, 01 = Page, 10 = Diagnosis, 11 = ISDU
-macro_rules! compile_com_channel {
-    ($byte:expr, $channel: expr) => {
-        set_bits_5_6!($byte, $channel)
-    };
-}
-
-/// Extract reserved bits from first byte (bits 5-7)
-macro_rules! extract_reserved_bits {
-    ($byte:expr) => {
-        (($byte) >> 5) & 0x07
-    };
-}
-
-/// Extract address from second byte for M-sequence TYPE_1 and TYPE_2
-macro_rules! extract_address {
-    ($byte:expr) => {
-        ($byte)
     };
 }
 /// Extract address from first byte for M-sequence byte (bits 0-4)
@@ -86,45 +54,10 @@ macro_rules! extract_address_fctrl {
     };
 }
 
-/// Compile address from first byte for M-sequence byte (bits 0-4)
-macro_rules! compile_address_fctrl {
-    ($byte:expr, $address: expr) => {
-        set_bits_0_4!($byte, $address)
-    };
-}
-
-/// Extract data length from length byte
-macro_rules! extract_data_length {
-    ($byte:expr) => {
-        ($byte)
-    };
-}
-
 /// Extract the message type (TYPE_0, TYPE_1, or TYPE_2)
 macro_rules! extract_message_type {
     ($msg_type:expr) => {
         get_bits_6_7!($msg_type)
-    };
-}
-
-/// compile the message type (TYPE_0, TYPE_1, or TYPE_2)
-macro_rules! compile_message_type {
-    ($byte:expr, $msg_type:expr) => {
-        set_bits_6_7!($byte, $msg_type)
-    };
-}
-
-/// Check if communication channel is valid
-macro_rules! is_valid_com_channel {
-    ($channel:expr) => {
-        ($channel) <= 0x03
-    };
-}
-
-/// Extract checksum field (last byte of message)
-macro_rules! extract_checksum {
-    ($data:expr) => {
-        $data[$data.len() - 1]
     };
 }
 
@@ -621,7 +554,7 @@ impl MessageHandler {
     /// The OD service is used to set up the On-request Data for the next message to be sent. In
     /// turn, the confirmation of the service contains the data from the receiver. The parameters of
     /// the service primitives are listed in Table 35.
-    pub fn od_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
+    pub fn od_rsp(&mut self, _length: u8, data: &[u8]) -> IoLinkResult<()> {
         let od = if let Some(od) = &mut self.tx_message.od {
             od
         } else {
@@ -638,7 +571,7 @@ impl MessageHandler {
     /// The PD service is used to setup the Process Data to be sent through the process
     /// communication channel. The confirmation of the service contains the data from the receiver.
     /// The parameters of the service primitives are listed in Table 36.
-    pub fn pd_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
+    pub fn pd_rsp(&mut self, _length: u8, data: &[u8]) -> IoLinkResult<()> {
         let pd = if let Some(pd) = &mut self.tx_message.pd {
             pd
         } else {
@@ -732,46 +665,6 @@ impl MessageHandler {
         io_link_message
     }
 
-    /// Process a received message
-    fn process_message(&mut self, message: &IoLinkMessage) -> IoLinkResult<()> {
-        // match message.message_type {
-        //     MessageType::ProcessData => {
-        //         // Handle process data message
-        //         self.handle_process_data(message)?;
-        //     }
-        //     MessageType::DeviceCommand => {
-        //         // Handle device command
-        //         self.handle_device_command(message)?;
-        //     }
-        //     MessageType::ParameterCommand => {
-        //         // Handle parameter command
-        //         self.handle_parameter_command(message)?;
-        //     }
-        //     _ => {
-        //         return Err(IoLinkError::InvalidEvent);
-        //     }
-        // }
-        Ok(())
-    }
-
-    /// Handle process data message
-    fn handle_process_data(&mut self, _message: &IoLinkMessage) -> IoLinkResult<()> {
-        // Implementation would handle process data exchange
-        Ok(())
-    }
-
-    /// Handle device command
-    fn handle_device_command(&mut self, _message: &IoLinkMessage) -> IoLinkResult<()> {
-        // Implementation would handle device commands
-        Ok(())
-    }
-
-    /// Handle parameter command
-    fn handle_parameter_command(&mut self, _message: &IoLinkMessage) -> IoLinkResult<()> {
-        // Implementation would handle parameter access
-        Ok(())
-    }
-
     /// Clear buffers
     fn clear_buffers(&mut self) {
         self.buffers.rx_buffer = [0; MAX_FRAME_SIZE];
@@ -786,6 +679,7 @@ impl MessageHandler {
 // when the physical layer module is properly defined
 impl pl::physical_layer::PhysicalLayerInd for MessageHandler {
     fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<()> {
+        self.buffers.rx_buffer = rx_buffer.try_into().map_err(|_| IoLinkError::InvalidData)?;
         let _ = self.process_event(MessageHandlerEvent::PlTransfer);
         Ok(())
     }
