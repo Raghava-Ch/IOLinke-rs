@@ -4,8 +4,8 @@
 //! IO-Link Specification v1.1.4 Section 8.4.4
 
 use crate::{
-    dl::message::OdInd,
-    types::{self, Event, EventType, IoLinkError, IoLinkResult},
+    dl::message_handler::OdInd,
+    types::{self, EventType, IoLinkError, IoLinkResult},
 };
 
 /// {EventRead} See Table 60, Tiggers T4, T6

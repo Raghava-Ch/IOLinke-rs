@@ -1,3 +1,5 @@
+use crate::IoLinkResult;
+
 pub mod application;
 mod event_sm;
 mod on_request;

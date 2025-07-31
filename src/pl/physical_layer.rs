@@ -42,19 +42,23 @@ pub trait IoLinkGpio {
     fn read_cq(&self) -> IoLinkResult<bool>;
 }
 
+/// All the timers used in IO-Link
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Timer {
+    /// See Table 42 – Wake-up procedure and retry characteristics
+    Tdsio,
+    /// See A.3.7 Cycle time
+    MaxCycleTime,
+    /// See Table 47 Internal items
+    MaxUARTFrameTime,
+    /// See Table 47 – Internal items
+    MaxUARTframeTime,
+}
+
 /// Timer abstraction for protocol timing
 pub trait IoLinkTimer {
-    /// Start a timer with the given duration in microseconds
-    fn start_timer(&mut self, duration_us: u32) -> IoLinkResult<()>;
-
     /// Check if timer has expired
-    fn is_timer_expired(&self) -> bool;
-
-    /// Stop the timer
-    fn stop_timer(&mut self);
-
-    /// Get current time in microseconds
-    fn get_time_us(&self) -> u32;
+    fn timer_elapsed(&mut self, timer: Timer) -> bool;
 }
 
 /// UART abstraction for IO-Link communication
@@ -119,5 +123,28 @@ impl PhysicalLayer {
     pub fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<usize> {
 
         Err(IoLinkError::NoImplFound)
+    }
+
+    /// Start a timer with the given duration in microseconds
+    pub fn stop_timer(&mut self, timer: Timer) -> IoLinkResult<()> {
+
+        todo!("Implement timer stop logic");
+    }
+    /// Start a timer with the given duration in microseconds
+    pub fn start_timer(&mut self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+        
+        todo!("Implement timer start logic");
+    }
+    
+    /// Restart a timer with the given duration in microseconds
+    pub fn restart_timer(&mut self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+
+        todo!("Implement timer restart logic");
+    }
+}
+
+impl Default for PhysicalLayer {
+    fn default() -> Self {
+        Self::new()
     }
 }

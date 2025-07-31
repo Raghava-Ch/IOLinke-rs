@@ -1,48 +1,51 @@
-use crate::{
-    pl::physical_layer::{PhysicalLayer, PhysicalLayerInd},
-    sm, IoLinkResult,
-};
+use crate::{pl, sm, IoLinkResult};
 
-mod command;
-mod dl_mode;
+mod command_handler;
+mod mode_handler;
 mod event_handler;
-mod isdu;
-mod message;
-mod on_request;
-mod process_data;
+mod isdu_handler;
+mod message_handler;
+mod od_handler;
+mod pd_handler;
 
-pub use dl_mode::DlInd;
+pub use mode_handler::DlInd;
 
 pub struct DataLinkLayer {
-    command: command::CommandHandler,
-    dl_mode: dl_mode::DlModeHandler,
+    command_handler: command_handler::CommandHandler,
+    mode_handler: mode_handler::DlModeHandler,
     event_handler: event_handler::EventHandler,
-    message: message::MessageHandler,
-    process_data: process_data::ProcessDataHandler,
-    isdu: isdu::IsduHandler,
-    on_request: on_request::OnRequestHandler,
+    message_handler: message_handler::MessageHandler,
+    pd_handler: pd_handler::ProcessDataHandler,
+    isdu_handler: isdu_handler::IsduHandler,
+    od_handler: od_handler::OnRequestDataHandler,
 }
 
 impl DataLinkLayer {
     pub fn poll(
         &mut self,
         system_management: &mut sm::SystemManagement,
-        physical_layer: &mut PhysicalLayer,
+        physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
-        self.command.poll(&mut self.message);
-        self.dl_mode.poll(
-            &mut self.isdu,
+        let _ = self.command_handler.poll(&mut self.message_handler);
+        let _ = self.mode_handler.poll(
+            &mut self.isdu_handler,
             &mut self.event_handler,
-            &mut self.command,
-            &mut self.on_request,
-            &mut self.process_data,
-            &mut self.message,
+            &mut self.command_handler,
+            &mut self.od_handler,
+            &mut self.pd_handler,
+            &mut self.message_handler,
             system_management,
         );
-        self.event_handler.poll();
-        self.event_handler.poll();
-        self.message.poll(&mut self.dl_mode, physical_layer);
-        self.process_data.poll();
+        let _ = self.event_handler.poll();
+        let _ = self.event_handler.poll();
+        let _ = self.message_handler.poll(
+            &mut self.event_handler,
+            &mut self.isdu_handler,
+            &mut self.od_handler,
+            &mut self.mode_handler,
+            physical_layer,
+        );
+        let _ = self.pd_handler.poll();
 
         Ok(())
     }
@@ -51,23 +54,23 @@ impl DataLinkLayer {
 impl Default for DataLinkLayer {
     fn default() -> Self {
         Self {
-            command: command::CommandHandler::new(),
-            dl_mode: dl_mode::DlModeHandler::new(),
+            command_handler: command_handler::CommandHandler::new(),
+            mode_handler: mode_handler::DlModeHandler::new(),
             event_handler: event_handler::EventHandler::new(),
-            message: message::MessageHandler::new(),
-            process_data: process_data::ProcessDataHandler::new(),
-            isdu: isdu::IsduHandler::new(),
-            on_request: on_request::OnRequestHandler::new(),
+            message_handler: message_handler::MessageHandler::new(),
+            pd_handler: pd_handler::ProcessDataHandler::new(),
+            isdu_handler: isdu_handler::IsduHandler::new(),
+            od_handler: od_handler::OnRequestDataHandler::new(),
         }
     }
 }
 
-impl PhysicalLayerInd for DataLinkLayer {
+impl pl::physical_layer::PhysicalLayerInd for DataLinkLayer {
     fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
-        self.dl_mode.pl_wake_up_ind()
+        self.mode_handler.pl_wake_up_ind()
     }
 
     fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<()> {
-        self.message.pl_transfer_ind(rx_buffer)
+        self.message_handler.pl_transfer_ind(rx_buffer)
     }
 }

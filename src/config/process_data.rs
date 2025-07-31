@@ -1,0 +1,161 @@
+/// Constructs the `ProcessDataIn` parameter byte (see IO-Link Spec v1.1.4, Section B.1.6, Figure B.5).
+///
+/// This byte is structured as follows:
+///
+/// ```text
+///  Bit 7   | Bit 6 | Bit 5 | Bits 0-4
+///  BYTE    | SIO   | RES   | LENGTH
+/// ```
+///
+/// ### Bit 7 – `BYTE`
+/// Indicates the length unit for the `LENGTH` field.
+/// - `0`: Length is in bits (bit-oriented process data)
+/// - `1`: Length is in octets (byte-oriented process data)
+///
+/// See Table B.6 for valid combinations:
+// Table B.6 – Permitted combinations of BYTE and Length
+///
+/// | BYTE | Length  | Definition  
+/// |-------|----------|----------------------------------------------|
+/// |   0   |   0     | no Process Data                               |
+/// |   0   |   1     | 1 bit Process Data, structured in bits        |
+/// |   0   | n(2–15) | n bit Process Data, structured in bits        |
+/// |   0   |  16     | 16 bit Process Data, structured in bits       |
+/// |   0   | 17–31   | Reserved                                      |
+/// |   1   | 0, 1    | Reserved                                      |
+/// |   1   |   2     | 3 octets Process Data, structured in octets   |
+/// |   1   | n(3–30) | n+1 octets Process Data, structured in octets |
+/// |   1   |  31     | 32 octets Process Data, structured in octets  |
+///
+/// ### Bit 6 – `SIO`
+/// Indicates if SIO (Standard Input/Output) mode is supported.
+/// - `0`: SIO mode not supported
+/// - `1`: SIO mode supported
+///
+/// ### Bit 5 – `RES` (Reserved)
+/// Reserved for future use. **Must be set to `0`.**
+///
+/// ### Bits 0–4 – `LENGTH`
+/// `Refer the table above which is B.6 Permitted combinations of BYTE and Length`
+///
+/// Encodes the process data length. The meaning depends on the `BYTE` bit:
+/// - If `BYTE == 0`: Length in bits (valid: 0–16, 17–31 reserved)
+/// - If `BYTE == 1`: Length in octets (valid: 2–31; total data = `LENGTH + 1`)
+///
+/// This macro or constant will generate the final `u8` that should be sent to the IO-Link master
+/// to indicate the device's process data input capability.
+///
+/// ### Spec Reference:
+/// - IO-Link Interface and System Spec v1.1.4
+/// - Section B.1.6
+/// - Table B.5 (SIO Values)
+/// - Table B.6 (BYTE + LENGTH combinations)
+mod pd_in {
+    /// See B.1.6 ProcessDataIn or
+    /// check the pd_in module documentation for details
+    /// Configure the Process Data Input length
+    pub const fn length() -> u8 {
+        0x01 // Accepted values from 0 to 31
+    }
+
+    /// Configure the Process Data Input SIO support
+    /// See B.1.6 ProcessDataIn or
+    /// check the pd_in module documentation for details
+    pub const fn sio() -> u8 {
+        0x01 // 0 for not supported, 1 for supported
+    }
+
+    /// Configure the Process Data Input BYTE value
+    /// See B.1.6 ProcessDataIn or
+    /// check the pd_in module documentation for details
+    pub const fn byte() -> u8 {
+        0x00 // 0 for bit-oriented, 1 for byte-oriented
+    }
+
+    /// See B.1.6 ProcessDataIn
+    /// Construct the Process Data Input configuration byte
+    pub const fn pd_in() -> u8 {
+        byte() << 7 |
+        sio() << 6 |
+        0 << 5 | // Reserved bit
+        length()
+    }
+}
+
+/// Constructs the `ProcessDataOut` parameter byte (see IO-Link Spec v1.1.4, Section B.1.6, Figure B.5).
+///
+/// This byte is structured as follows:
+///
+/// ```text
+///  Bit 7   | Bit 6 | Bit 5 | Bits 0-4
+///  BYTE    | RES   | RES   | LENGTH
+/// ```
+///
+/// ### Bit 7 – `BYTE`
+/// Indicates the length unit for the `LENGTH` field.
+/// - `0`: Length is in bits (bit-oriented process data)
+/// - `1`: Length is in octets (byte-oriented process data)
+///
+/// See Table B.6 for valid combinations:
+// Table B.6 – Permitted combinations of BYTE and Length
+///
+/// | BYTE | Length  | Definition  
+/// |-------|----------|----------------------------------------------|
+/// |   0   |   0     | no Process Data                               |
+/// |   0   |   1     | 1 bit Process Data, structured in bits        |
+/// |   0   | n(2–15) | n bit Process Data, structured in bits        |
+/// |   0   |  16     | 16 bit Process Data, structured in bits       |
+/// |   0   | 17–31   | Reserved                                      |
+/// |   1   | 0, 1    | Reserved                                      |
+/// |   1   |   2     | 3 octets Process Data, structured in octets   |
+/// |   1   | n(3–30) | n+1 octets Process Data, structured in octets |
+/// |   1   |  31     | 32 octets Process Data, structured in octets  |
+///
+/// ### Bit 6 – `RES` (Reserved)
+/// Reserved for future use. **Must be set to `0`.**
+///
+/// ### Bit 5 – `RES` (Reserved)
+/// Reserved for future use. **Must be set to `0`.**
+///
+/// ### Bits 0–4 – `LENGTH`
+/// `Refer the table above which is B.6 Permitted combinations of BYTE and Length`
+///
+/// Encodes the process data length. The meaning depends on the `BYTE` bit:
+/// - If `BYTE == 0`: Length in bits (valid: 0–16, 17–31 reserved)
+/// - If `BYTE == 1`: Length in octets (valid: 2–31; total data = `LENGTH + 1`)
+///
+/// This macro or constant will generate the final `u8` that should be sent to the IO-Link master
+/// to indicate the device's process data input capability.
+///
+/// ### Spec Reference:
+/// - IO-Link Interface and System Spec v1.1.4
+/// - Section B.1.6
+/// - Table B.5 (SIO Values)
+/// - Table B.6 (BYTE + LENGTH combinations)
+mod pd_out {
+    /// See B.1.6 ProcessDataOut or
+    /// check the pd_out module documentation for details
+    /// Configure the Process Data Output length
+    /// See B.1.6 ProcessDataOut or
+    /// check the pd_out module documentation for details
+    /// Configure the Process Data Output length
+    pub const fn length() -> u8 {
+        0x01 // Accepted values from 0 to 31
+    }
+
+    /// Configure the Process Data Output BYTE value
+    /// See B.1.6 ProcessDataOut or
+    /// check the pd_out module documentation for details
+    pub const fn byte() -> u8 {
+        0x00 // 0 for bit-oriented, 1 for byte-oriented
+    }
+
+    /// See B.1.7 ProcessDataOut
+    /// Construct the Process Data Output configuration byte
+    pub const fn pd_out() -> u8 {
+        byte() << 7 |
+        0 << 6 | // Reserved bit
+        0 << 5 | // Reserved bit
+        length()
+    }
+}
