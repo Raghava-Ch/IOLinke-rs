@@ -100,8 +100,19 @@ pub const fn operate_m_sequence_legacy_od_len() -> u8 {
 /// ## Returns
 /// The process data length (PDin) for all possible M-sequences.
 /// This is `must be configured as bits`, not octets, so the return value is in bits.
-pub const fn operate_m_sequence_legacy_pd_in_len() -> u8 {
+pub const fn operate_m_sequence_legacy_pd_in_len_in_bits() -> u8 {
     0u8
+}
+
+/// This function literally converts the `operate_m_sequence_legacy_pd_in_len_in_bits` bit length to bytes
+pub const fn operate_m_sequence_legacy_pd_in_len_in_bytes() -> u8 {
+    const PD_IN_LENGTH: u8 = operate_m_sequence_legacy_pd_in_len_in_bits();
+    // The ceiling division technique:
+    // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+    // Formula is ceil(a/b) = (a + b - 1) / b
+    const PD_LENGTH_BYTES: u8 = (PD_IN_LENGTH + 7) / 8; // Integer ceiling division
+
+    PD_LENGTH_BYTES
 }
 
 /// **This is a prerequisite for the `operate_m_sequence_legacy` config parameter check its documentation**.
@@ -109,8 +120,19 @@ pub const fn operate_m_sequence_legacy_pd_in_len() -> u8 {
 /// ## Returns
 /// The process data length (PDout) for all possible M-sequences.
 /// This is `must be configured as bits`, not octets, so the return value is in bits.
-pub const fn operate_m_sequence_legacy_pd_out_len() -> u8 {
+pub const fn operate_m_sequence_legacy_pd_out_len_in_bits() -> u8 {
     0u8
+}
+
+/// This function literally converts the `operate_m_sequence_legacy_pd_out_len_in_bits` bit length to bytes
+pub const fn operate_m_sequence_legacy_pd_out_len_in_bytes() -> u8 {
+    const PD_OUT_LENGTH: u8 = operate_m_sequence_legacy_pd_out_len_in_bits();
+    // The ceiling division technique:
+    // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+    // Formula is ceil(a/b) = (a + b - 1) / b
+    const PD_LENGTH_BYTES: u8 = (PD_OUT_LENGTH + 7) / 8; // Integer ceiling division
+
+    PD_LENGTH_BYTES
 }
 
 /// M-sequence types for the OPERATE mode (standard protocol) as per IO-Link Specification (Table A.9).
@@ -145,8 +167,8 @@ pub const fn operate_m_sequence_legacy() -> crate::types::MsequenceType {
     match (
         operate_m_sequence_code_legacy(),
         operate_m_sequence_legacy_od_len(),
-        operate_m_sequence_legacy_pd_in_len(),
-        operate_m_sequence_legacy_pd_out_len(),
+        operate_m_sequence_legacy_pd_in_len_in_bits(),
+        operate_m_sequence_legacy_pd_out_len_in_bits(),
     ) {
         (0, 1, 0, 0) => crate::types::MsequenceType::Type0, // TYPE_0
         (1, 2, 0, 0) => crate::types::MsequenceType::Type12, // TYPE_1_2
@@ -204,7 +226,7 @@ pub const fn operate_m_sequence_od_len() -> u8 {
 ///
 /// - IO-Link Specification v1.1.4, Table A.10: OPERATE mode M-sequence types
 /// - Section 7.3.4: Process data definitions and bit/octet specifications
-pub const fn operate_m_sequence_pd_in_len() -> (u8, bool) {
+pub const fn operate_m_sequence_pd_in_len_in_bits() -> (u8, bool) {
     (3u8, true) // Default: No process data input
 
     // Example configurations:
@@ -212,6 +234,23 @@ pub const fn operate_m_sequence_pd_in_len() -> (u8, bool) {
     // (16, false  // 16 bits of process data input
     // (2, true)    // 2 octets of process data input
     // (32, true)   // 32 octets of process data input
+}
+
+/// Returns the process data output length (PDin) in bytes for standard OPERATE mode M-sequences.
+/// This function literally returns the length in bytes, not bits. Calculated from `operate_m_sequence_pd_in_len_in_bits`.
+pub const fn operate_m_sequence_pd_in_len_in_bytes() -> u8 {
+    const PD_IN_LENGTH: (u8, bool) = operate_m_sequence_pd_in_len_in_bits();
+    const PD_IN_LENGTH_BITS: bool = PD_IN_LENGTH.1;
+    const PD_LENGTH_BYTES: u8 = if PD_IN_LENGTH_BITS {
+        PD_IN_LENGTH.0 / 8
+    } else {
+        // The ceiling division technique:
+        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+        // Formula is ceil(a/b) = (a + b - 1) / b
+        (PD_IN_LENGTH.0 + 7) / 8 // Integer ceiling division
+    };
+
+    PD_LENGTH_BYTES
 }
 
 /// Returns the process data input length (PDin) for standard OPERATE mode M-sequences.
@@ -235,7 +274,7 @@ pub const fn operate_m_sequence_pd_in_len() -> (u8, bool) {
 /// ## Specification Reference
 /// - IO-Link Specification v1.1.4, Table A.10: OPERATE mode M-sequence types
 /// - Section 7.3.4: Process data definitions and bit/octet specifications
-pub const fn operate_m_sequence_pd_out_len() -> (u8, bool) {
+pub const fn operate_m_sequence_pd_out_len_in_bits() -> (u8, bool) {
     (3u8, true)
 
     // Example configurations:
@@ -243,6 +282,23 @@ pub const fn operate_m_sequence_pd_out_len() -> (u8, bool) {
     // (16, false  // 16 bits of process data input
     // (2, true)    // 2 octets of process data input
     // (32, true)   // 32 octets of process data input
+}
+
+/// Returns the process data output length (PDout) in bytes for standard OPERATE mode M-sequences.
+/// This function literally returns the length in bytes, not bits. Calculated from `operate_m_sequence_pd_out_len_in_bits`.
+pub const fn operate_m_sequence_pd_out_len_in_bytes() -> u8 {
+    const PD_OUT_LENGTH: (u8, bool) = operate_m_sequence_pd_out_len_in_bits();
+    const PD_OUT_LENGTH_BITS: bool = PD_OUT_LENGTH.1;
+    const PD_LENGTH_BYTES: u8 = if PD_OUT_LENGTH_BITS {
+        PD_OUT_LENGTH.0 / 8
+    } else {
+        // The ceiling division technique:
+        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+        // Formula is ceil(a/b) = (a + b - 1) / b
+        (PD_OUT_LENGTH.0 + 7) / 8 // Integer ceiling division
+    };
+
+    PD_LENGTH_BYTES
 }
 
 /// M-sequence types for the OPERATE mode (standard protocol) as per IO-Link Specification (Table A.10).
@@ -288,8 +344,8 @@ pub const fn operate_m_sequence_code() -> u8 {
 ///
 /// ⚠️ **NOTE 3**: Interleaved mode (`TYPE_1_1/1_2`) **must not** be implemented in Devices, but should be supported by Masters.
 pub const fn operate_m_sequence() -> crate::types::MsequenceType {
-    const PD_IN_LEN: (u8, bool) = operate_m_sequence_pd_in_len();
-    const PD_OUT_LEN: (u8, bool) = operate_m_sequence_pd_out_len();
+    const PD_IN_LEN: (u8, bool) = operate_m_sequence_pd_in_len_in_bits();
+    const PD_OUT_LEN: (u8, bool) = operate_m_sequence_pd_out_len_in_bits();
     match (
         operate_m_sequence_code(),
         operate_m_sequence_od_len(),

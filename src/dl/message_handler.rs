@@ -5,6 +5,7 @@
 
 use crate::config;
 use crate::dl;
+use crate::dl::pd_handler;
 use crate::pl;
 use crate::types::{self, IoLinkError, IoLinkResult};
 use crate::{
@@ -141,7 +142,7 @@ struct IoLinkMessage {
     /// Process Data (PD) response data
     pd: Option<Vec<u8, MAX_PD_SIZE>>,
     /// Process Data input status
-    pd_in_status: Option<types::PdInStatus>,
+    pd_status: Option<types::PdInStatus>,
 }
 
 impl Default for IoLinkMessage {
@@ -154,7 +155,7 @@ impl Default for IoLinkMessage {
             event_flag: false,
             od: None,
             pd: None,
-            pd_in_status: None,
+            pd_status: None,
         }
     }
 }
@@ -260,6 +261,7 @@ pub struct MessageHandler {
     rx_message: IoLinkMessage,
     device_operate_state: types::MasterCommand,
     od_transfer_pending: bool,
+    pd_in_valid_status: types::PdInStatus,
 }
 
 impl MessageHandler {
@@ -278,6 +280,7 @@ impl MessageHandler {
             rx_message: IoLinkMessage::default(),
             device_operate_state: types::MasterCommand::INACTIVE,
             od_transfer_pending: false,
+            pd_in_valid_status: types::PdInStatus::INVALID,
         }
     }
 
@@ -314,6 +317,7 @@ impl MessageHandler {
         event_handler: &mut dl::event_handler::EventHandler,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
+        pd_handler: &mut pd_handler::ProcessDataHandler,
         mode_handler: &mut dl::mode_handler::DlModeHandler,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
@@ -339,7 +343,7 @@ impl MessageHandler {
             }
             Transition::T5 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t5(event_handler, isdu_handler, od_handler)?;
+                self.execute_t5(event_handler, isdu_handler, od_handler, pd_handler)?;
             }
             Transition::T6 => {
                 self.exec_transition = Transition::Tn;
@@ -397,7 +401,7 @@ impl MessageHandler {
                     && self.tx_message.com_channel.is_none()
                     && self.tx_message.read_write.is_none()
                     && self.tx_message.message_type.is_none()
-                    && self.tx_message.pd_in_status.is_none()
+                    && self.tx_message.pd_status.is_none()
                 {
                     // No data to send, transition to Idle
                 } else {
@@ -458,17 +462,38 @@ impl MessageHandler {
         event_handler: &mut dl::event_handler::EventHandler,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
+        pd_handler: &mut pd_handler::ProcessDataHandler,
     ) -> IoLinkResult<()> {
-        if let (Some(rw), Some(channel), Some(addr_ctrl), Some(ref od_data)) = (
+        if let (Some(rw), Some(channel), Some(addr_ctrl), Some(ref od_data), Some(ref pd_data)) = (
             self.rx_message.read_write,
             self.rx_message.com_channel,
             self.rx_message.address_fctrl,
             self.rx_message.od.as_ref(),
+            self.rx_message.pd.as_ref(),
         ) {
+            const INTERLEAVED_MODE: bool = config::m_seq_capability::interleaved_mode();
             let _ = event_handler.od_ind(rw, channel, addr_ctrl, od_data.len() as u8, od_data);
             let _ = isdu_handler.od_ind(rw, channel, addr_ctrl, od_data.len() as u8, od_data);
             let _ = od_handler.od_ind(rw, channel, addr_ctrl, od_data.len() as u8, od_data);
-            // TODO: Implement PD.ind service indication values
+            if self.device_operate_state == types::MasterCommand::OPERATE {
+                if INTERLEAVED_MODE {
+                    let pd_out_address = extract_address_fctrl!(addr_ctrl);
+                    let _ = pd_handler.pd_ind(
+                        pd_data,
+                        pd_out_address,
+                        2, /* Interleave mode supports only 2 bytes */
+                    );
+                } else {
+                    const PD_OUT_LEN: u8 =
+                        config::m_seq_capability::operate_m_sequence_pd_out_len_in_bytes();
+                    const PD_IN_LEN: u8 =
+                        config::m_seq_capability::operate_m_sequence_pd_in_len_in_bytes();
+                    // In OPERATE mode, invoke PD.ind service indication
+                    let pd_out_address = extract_address_fctrl!(addr_ctrl);
+                    let pd_out_len = pd_data.len() as u8;
+                    let _ = pd_handler.pd_ind(pd_data, pd_out_address, pd_out_len);
+                }
+            }
         }
         todo!("Implement PD.ind service indication values");
         Ok(())
@@ -586,15 +611,9 @@ impl MessageHandler {
 
     /// 7.2.2.5 PDInStatus
     /// The service PDInStatus sets and signals the validity qualifier
-    /// of the input Process Data.
+    /// of the input Process Data. PD validity `Device to Master`.
     pub fn pd_in_status_req(&mut self, valid: types::PdInStatus) -> IoLinkResult<()> {
-        let pd_instatus = if let Some(status) = &mut self.tx_message.pd_in_status {
-            status
-        } else {
-            self.tx_message.pd_in_status = Some(types::PdInStatus::VALID);
-            self.tx_message.pd_in_status.as_mut().unwrap()
-        };
-        *pd_instatus = valid;
+        self.pd_in_valid_status = valid;
         Ok(())
     }
 
@@ -667,9 +686,9 @@ impl MessageHandler {
 
     /// Clear buffers
     fn clear_buffers(&mut self) {
-        self.buffers.rx_buffer = [0; MAX_FRAME_SIZE];
+        self.buffers.rx_buffer.fill(0);
         self.buffers.rx_buffer_len = 0;
-        self.buffers.tx_buffer = [0; MAX_FRAME_SIZE];
+        self.buffers.tx_buffer.fill(0);
         self.buffers.tx_buffer_len = 0;
         self.tx_message = IoLinkMessage::default();
     }
@@ -710,7 +729,7 @@ fn compile_iolink_startup_frame(
     tx_buffer[1] = compile_checksum_status!(
         tx_buffer[1],
         io_link_message.event_flag,
-        io_link_message.pd_in_status,
+        io_link_message.pd_status,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(2, &tx_buffer);
@@ -736,7 +755,7 @@ fn compile_iolink_preoperate_frame(
     tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[OD_LENGTH as usize],
         io_link_message.event_flag,
-        io_link_message.pd_in_status,
+        io_link_message.pd_status,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(OD_LENGTH + 1, &tx_buffer);
@@ -749,15 +768,8 @@ fn compile_iolink_native_operate_frame(
     io_link_message: &IoLinkMessage,
 ) -> Result<u8, IoLinkError> {
     const OD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_od_len();
-    const PD_LENGTH_BITS: u8 = config::m_seq_capability::operate_m_sequence_legacy_pd_out_len();
-    const PD_LENGTH: u8 = if PD_LENGTH_BITS & 0x01 == 0 {
-        PD_LENGTH_BITS / 8
-    } else {
-        // The ceiling division technique:
-        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
-        // Formula is ceil(a/b) = (a + b - 1) / b
-        (PD_LENGTH_BITS + 7) / 8 // Integer ceiling division
-    };
+    const PD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_pd_out_len_in_bytes();
+
     if io_link_message.od.is_none() {
         return Err(IoLinkError::InvalidData);
     }
@@ -771,13 +783,13 @@ fn compile_iolink_native_operate_frame(
     tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[OD_LENGTH as usize],
         io_link_message.event_flag,
-        io_link_message.pd_in_status,
+        io_link_message.pd_status,
         0 // Checksum will be calculated later
     );
     tx_buffer[PD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[PD_LENGTH as usize],
         io_link_message.event_flag,
-        io_link_message.pd_in_status,
+        io_link_message.pd_status,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(OD_LENGTH + PD_LENGTH + 1, &tx_buffer);
@@ -804,7 +816,7 @@ fn compile_iolink_interleaved_operate_frame_od(
     tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[OD_LENGTH as usize],
         io_link_message.event_flag,
-        io_link_message.pd_in_status,
+        io_link_message.pd_status,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(OD_LENGTH + 1, &tx_buffer);
@@ -816,15 +828,7 @@ fn compile_iolink_interleaved_operate_frame_pd(
     tx_buffer: &mut [u8],
     io_link_message: &IoLinkMessage,
 ) -> Result<u8, IoLinkError> {
-    const PD_LENGTH_BITS: (u8, bool) = config::m_seq_capability::operate_m_sequence_pd_out_len();
-    const PD_LENGTH: u8 = if PD_LENGTH_BITS.1 {
-        PD_LENGTH_BITS.0
-    } else {
-        // The ceiling division technique:
-        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
-        // Formula is ceil(a/b) = (a + b - 1) / b
-        (PD_LENGTH_BITS.0 + 7) / 8 as u8 // Integer ceiling division
-    };
+    const PD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_pd_out_len_in_bytes();
     if io_link_message.od.is_none() {
         return Err(IoLinkError::InvalidData);
     }
@@ -838,7 +842,7 @@ fn compile_iolink_interleaved_operate_frame_pd(
     tx_buffer[PD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[PD_LENGTH as usize],
         io_link_message.event_flag,
-        io_link_message.pd_in_status,
+        io_link_message.pd_status,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(PD_LENGTH + 1, &tx_buffer);
@@ -897,7 +901,7 @@ fn parse_iolink_startup_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
         event_flag: false, // Event flag is not set in startup frame
         od,
         pd: None,           // No PD in startup frame
-        pd_in_status: None, // No PD status in startup frame
+        pd_status: None, // No PD status in startup frame
     })
 }
 
@@ -934,7 +938,7 @@ fn parse_iolink_pre_operate_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
         event_flag: false, // Event flag is not set in pre-operate frame
         od,
         pd: None,           // No PD in pre-operate frame
-        pd_in_status: None, // No PD status in pre-operate frame
+        pd_status: None,    // No PD status in pre-operate frame
     })
 }
 
@@ -971,7 +975,7 @@ fn parse_iolink_operate_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
         event_flag: false, // Event flag is not set in operate frame
         od,
         pd,
-        pd_in_status: None, // No PD status in operate frame
+        pd_status: None, // No PD status in operate frame
     })
 }
 
@@ -979,15 +983,8 @@ fn parse_iolink_native_operate_frame(
     input: &[u8],
 ) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
     const OD_LENGTH_OCTETS: u8 = config::m_seq_capability::operate_m_sequence_od_len();
-    const PD_LENGTH_BITS: (u8, bool) = config::m_seq_capability::operate_m_sequence_pd_out_len();
-    const PD_LENGTH: u8 = if PD_LENGTH_BITS.1 {
-        PD_LENGTH_BITS.0
-    } else {
-        // The ceiling division technique:
-        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
-        // Formula is ceil(a/b) = (a + b - 1) / b
-        (PD_LENGTH_BITS.0 + 7) / 8 as u8 // Integer ceiling division
-    };
+    const PD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_pd_out_len_in_bytes();
+
     if input.len() != HEADER_SIZE + OD_LENGTH_OCTETS as usize + PD_LENGTH as usize {
         return Err(IoLinkError::InvalidData);
     }
@@ -1041,7 +1038,8 @@ fn parse_iolink_interleaved_operate_frame_od(
 fn parse_iolink_interleaved_operate_frame_pd(
     input: &[u8],
 ) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
-    const PD_LENGTH_BITS: u8 = config::m_seq_capability::operate_m_sequence_legacy_pd_out_len();
+    const PD_LENGTH_BITS: u8 =
+        config::m_seq_capability::operate_m_sequence_legacy_pd_out_len_in_bits();
     const PD_LENGTH: u8 = if PD_LENGTH_BITS & 0x01 == 0 {
         PD_LENGTH_BITS / 8
     } else {
