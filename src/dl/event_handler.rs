@@ -4,8 +4,7 @@
 //! IO-Link Specification v1.1.4 Section 8.4.4
 
 use crate::{
-    dl::message_handler::OdInd,
-    types::{self, EventType, IoLinkError, IoLinkResult},
+    dl::{self, message_handler::OdInd}, storage, types::{self, EventType, IoLinkError, IoLinkResult}
 };
 
 /// {EventRead} See Table 60, Tiggers T4, T6
@@ -49,7 +48,7 @@ enum Transition {
     T4(OdIndData),
     /// T5: State: FreezeEventMemory (2) -> Idle (1)
     /// Action: Invoke service EventFlag.req (Flag = FALSE) to indicate Event deactivation to the Master via the "Event flag" bit. Mark all Event slots in memory as invalid according to A.6.3.
-    T5(OdIndData),
+    T5,
     /// T6: State: Idle (1) -> Idle (1)
     /// Action: Send contents of Event memory by invoking OD.rsp with Event data
     T6(OdIndData),
@@ -73,17 +72,18 @@ enum EventHandlerEvent {
     /// {EventRead} See Table 60, Tiggers T4, T6
     EventRead(OdIndData),
     /// {EventConf} See Table 60, Tiggers T5
-    EventConf(OdIndData),
+    EventConf,
     /// {EH_Config_INACTIVE} See Table 60, Tiggers T7, T8
     EhConfInactive,
 }
+
 /// Event Handler implementation
 pub struct EventHandler {
     /// Current state of the Event Handler
     state: EventHandlerState,
     exec_transition: Transition,
     /// See 7.3.8.1 Events and Table 58 – Event memory
-    event_memory: [u8; 18],
+    event_memory: storage::event_memory::EventMemory,
 }
 
 impl EventHandler {
@@ -92,7 +92,7 @@ impl EventHandler {
         Self {
             state: EventHandlerState::Inactive,
             exec_transition: Transition::Tn,
-            event_memory: [0u8; 18],
+            event_memory: storage::event_memory::EventMemory::new(),
         }
     }
 
@@ -108,8 +108,8 @@ impl EventHandler {
             (State::FreezeEventMemory, Event::EventRead(od_ind_data)) => {
                 (Transition::T4(od_ind_data), State::FreezeEventMemory)
             }
-            (State::FreezeEventMemory, Event::EventConf(od_ind_data)) => {
-                (Transition::T5(od_ind_data), State::Idle)
+            (State::FreezeEventMemory, Event::EventConf) => {
+                (Transition::T5, State::Idle)
             }
             (State::Idle, Event::EventRead(od_ind_data)) => {
                 (Transition::T6(od_ind_data), State::Idle)
@@ -125,7 +125,7 @@ impl EventHandler {
     }
 
     /// Poll the handler
-    pub fn poll(&mut self) -> IoLinkResult<()> {
+    pub fn poll(&mut self, message_handler: &mut dl::message_handler::MessageHandler) -> IoLinkResult<()> {
         // Process pending events
         match self.exec_transition {
             Transition::Tn => {
@@ -141,19 +141,19 @@ impl EventHandler {
             }
             Transition::T3 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t3();
+                self.execute_t3(message_handler);
             }
             Transition::T4(od_ind_data) => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t4(od_ind_data);
+                self.execute_t4(od_ind_data, message_handler);
             }
-            Transition::T5(od_ind_data) => {
+            Transition::T5 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t5(od_ind_data);
+                self.execute_t5(message_handler);
             }
             Transition::T6(od_ind_data) => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t6(od_ind_data);
+                self.execute_t6(od_ind_data, message_handler);
             }
             Transition::T7 => {
                 self.exec_transition = Transition::Tn;
@@ -185,32 +185,50 @@ impl EventHandler {
 
     /// Execute T3 transition: Idle (1) -> FreezeEventMemory (2)
     /// Action: Invoke service EventFlag.req (Flag = TRUE) to indicate Event activation to the Master via the "Event flag" bit. Mark all Event slots in memory as not changeable.
-    fn execute_t3(&mut self) -> IoLinkResult<()> {
-        // TODO: Implement EventFlag.req service call with Flag = TRUE
-        // TODO: Mark all Event slots in memory as not changeable
+    fn execute_t3(
+        &mut self,
+        message_handler: &mut dl::message_handler::MessageHandler,
+    ) -> IoLinkResult<()> {
+        self.event_memory.set_read_only(true);
+        message_handler.event_flag(true);
         Ok(())
     }
 
     /// Execute T4 transition: FreezeEventMemory (2) -> FreezeEventMemory (2)
     /// Action: Master requests Event memory data via EventRead (= OD.ind). Send Event data by invoking OD.rsp with Event data of the requested Event memory address.
-    fn execute_t4(&mut self, od_ind_data: OdIndData) -> IoLinkResult<()> {
-        // TODO: Implement OD.rsp service call with Event data from requested memory address
+    fn execute_t4(
+        &mut self,
+        od_ind_data: OdIndData,
+        message_handler: &mut dl::message_handler::MessageHandler,
+    ) -> IoLinkResult<()> {
         // Use od_ind_data.address_ctrl to determine which Event memory address to read
+        let event_data = self.event_memory
+            .get_event_detail(od_ind_data.address_ctrl as usize, od_ind_data.length as usize)
+            .map_err(|_| IoLinkError::InvalidAddress)?;
+        let _ = message_handler.od_rsp(od_ind_data.length, event_data);
         Ok(())
     }
 
     /// Execute T5 transition: FreezeEventMemory (2) -> Idle (1)
     /// Action: Invoke service EventFlag.req (Flag = FALSE) to indicate Event deactivation to the Master via the "Event flag" bit. Mark all Event slots in memory as invalid according to A.6.3.
-    fn execute_t5(&mut self, od_ind_data: OdIndData) -> IoLinkResult<()> {
-        // TODO: Implement EventFlag.req service call with Flag = FALSE
-        // TODO: Mark all Event slots in memory as invalid according to A.6.3
+    fn execute_t5(
+        &mut self, 
+        message_handler: &mut dl::message_handler::MessageHandler,
+    ) -> IoLinkResult<()> {
+        message_handler.event_flag(false);
+        self.event_memory.set_read_only(false);
+        self.event_memory.clear_all_event()?;
         Ok(())
     }
 
     /// Execute T6 transition: Idle (1) -> Idle (1)
     /// Action: Send contents of Event memory by invoking OD.rsp with Event data
-    fn execute_t6(&mut self, od_ind_data: OdIndData) -> IoLinkResult<()> {
-        // TODO: Implement OD.rsp service call with Event memory contents
+    fn execute_t6(
+        &mut self,
+        od_ind_data: OdIndData,
+        message_handler: &mut dl::message_handler::MessageHandler,
+    ) -> IoLinkResult<()> {
+        self.execute_t4(od_ind_data, message_handler);
         // Use od_ind_data.address_ctrl to determine which Event memory data to send
         Ok(())
     }
@@ -225,7 +243,8 @@ impl EventHandler {
     /// Execute T8 transition: FreezeEventMemory (2) -> Inactive (0)
     /// Action: Discard Event memory data
     fn execute_t8(&mut self) -> IoLinkResult<()> {
-        // TODO: Implement Event memory data discard logic
+        self.event_memory.set_read_only(false);
+        self.event_memory.clear_all_event()?;
         Ok(())
     }
 
@@ -246,16 +265,25 @@ impl EventHandler {
     /// is located in a Device and the Device application triggers the Event transfer. The parameters
     /// of the service primitives are listed in Table 30.
     pub fn dl_event_req(
+        &mut self,
         event_instance: types::EventInstance,
         event_type: EventType,
         event_mode: types::EventMode,
         event_code: u16, // device_event_code macro to be used
         events_left: u8,
     ) -> IoLinkResult<()> {
+        // TODO: Implement the DL_Event request to event memory handling
+        // let entry = storage::event_memory::EventEntry {
+        //     event_qualifier: storage::event_memory::EventQualifier::new()
+        //         .with_eq_mode(event_mode.into())
+        //         .with_eq_type(event_type.into())
+        //         .with_eq_source(event_instance.source().into())
+        //         .with_eq_instance(event_instance.instance()),
+        //     event_code,
+        // };
+        // self.event_memory.add_event_detail(entry);
         // Process the DL_Event request
-        let event = EventHandlerEvent::DlEvent;
-        // Here we would typically handle the event based on event_instance and event_type
-        // For now, we just return Ok as a placeholder
+        self.process_event(EventHandlerEvent::DlEvent);
         Ok(())
     }
 
@@ -265,11 +293,9 @@ impl EventHandler {
     /// Events have been processed. Additional DL_EventTrigger requests are ignored until the
     /// previous one has been confirmed (see 7.3.8, 8.3.3 and Figure 66). This service has no
     /// parameters. The service primitives are listed in Table 32.
-    pub fn dl_event_trigger_req() -> IoLinkResult<()> {
+    pub fn dl_event_trigger_req(&mut self) -> IoLinkResult<()> {
         // Process the DL_EventTrigger request
-        let event = EventHandlerEvent::DLEventTrigger;
-        // Here we would typically handle the event triggering logic
-        // For now, we just return Ok as a placeholder
+        self.process_event(EventHandlerEvent::DLEventTrigger);
         Ok(())
     }
 }
@@ -297,8 +323,9 @@ impl OdInd for EventHandler {
             EventHandlerEvent::EventRead(od_ind_data)
         } else if rw_direction == types::RwDirection::Write
             && com_channel == types::ComChannel::Diagnosis
+            && address_ctrl == 0x00
         {
-            EventHandlerEvent::EventConf(od_ind_data)
+            EventHandlerEvent::EventConf
         } else {
             return Err(IoLinkError::InvalidEvent);
         };

@@ -470,6 +470,14 @@ pub enum IoLinkError {
     InvalidMseqChecksum,
     /// Nothing to do, This is a custom error type for dummy trait functions
     NoImplFound,
+    /// Event memory full, This is a custom error type for event handler
+    EventMemoryFull,
+    /// No event details supported in event memory, This is a custom error type for event handler
+    NoEventDetailsSupported,
+    /// Invalid address, This is a custom error type for address handling
+    InvalidAddress,
+    /// Read-only error, This is a custom error type for read-only operations
+    ReadOnlyError,
 }
 
 /// Result type for IO-Link operations

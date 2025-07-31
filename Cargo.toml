@@ -21,6 +21,7 @@ iolinke-macros = { path = "../IOLinke-macros" }
 smlang = "0.8"
 cstr_core = "0.2"
 log = "0.4"
+modular-bitfield = "0.12.0"
 
 [dependencies.cortex-m]
 workspace = true
