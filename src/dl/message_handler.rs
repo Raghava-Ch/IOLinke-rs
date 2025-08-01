@@ -5,7 +5,7 @@
 
 use crate::config;
 use crate::dl;
-use crate::dl::pd_handler;
+use crate::dl::{pd_handler, od_handler::OdInd};
 use crate::pl;
 use crate::types::{self, IoLinkError, IoLinkResult};
 use crate::{
@@ -92,25 +92,6 @@ macro_rules! compile_checksum_status {
         compile_checksum!($data, $checksum);
         $data
     }};
-}
-
-// /// Extract payload data (excluding header and checksum)
-// macro_rules! extract_payload {
-//     ($data:expr, $start_idx:expr, $length:expr) => {
-//         &$data[$start_idx..($start_idx + $length as usize)]
-//     };
-// }
-
-pub trait OdInd {
-    /// Invoke OD.ind service with the provided data
-    fn od_ind(
-        &mut self,
-        rw_direction: types::RwDirection,
-        com_channel: types::ComChannel,
-        address_ctrl: u8,
-        length: u8,
-        data: &[u8],
-    ) -> IoLinkResult<()>;
 }
 
 const HEADER_SIZE: usize = 2; // Header size is 2 bytes (MC and length)
@@ -278,7 +259,7 @@ impl MessageHandler {
             },
             tx_message: IoLinkMessage::default(),
             rx_message: IoLinkMessage::default(),
-            device_operate_state: types::MasterCommand::INACTIVE,
+            device_operate_state: types::MasterCommand::Fallback,
             od_transfer_pending: false,
             pd_in_valid_status: types::PdInStatus::INVALID,
         }
@@ -472,10 +453,18 @@ impl MessageHandler {
             self.rx_message.pd.as_ref(),
         ) {
             const INTERLEAVED_MODE: bool = config::m_seq_capability::interleaved_mode();
-            let _ = event_handler.od_ind(rw, channel, addr_ctrl, od_data.len() as u8, od_data);
-            let _ = isdu_handler.od_ind(rw, channel, addr_ctrl, od_data.len() as u8, od_data);
-            let _ = od_handler.od_ind(rw, channel, addr_ctrl, od_data.len() as u8, od_data);
-            if self.device_operate_state == types::MasterCommand::OPERATE {
+            let mut data_array = [0u8; 32];
+            let copy_len = od_data.len().min(32);
+            data_array[..copy_len].copy_from_slice(&od_data[..copy_len]);
+            let od_ind_data = dl::od_handler::OdIndData {
+                rw_direction: rw,
+                com_channel: channel,
+                address_ctrl: addr_ctrl,
+                length: od_data.len() as u8,
+                data: data_array,
+            };
+            let _ = od_handler.od_ind(&od_ind_data);
+            if self.device_operate_state == types::MasterCommand::DeviceOperate {
                 if INTERLEAVED_MODE {
                     let pd_out_address = extract_address_fctrl!(addr_ctrl);
                     let _ = pd_handler.pd_ind(
@@ -626,13 +615,13 @@ impl MessageHandler {
         let tx_buffer = &mut self.buffers.tx_buffer;
         *tx_buffer = [0; MAX_FRAME_SIZE];
         let length = match self.device_operate_state {
-            types::MasterCommand::STARTUP => {
+            types::MasterCommand::DeviceStartup => {
                 compile_iolink_startup_frame(tx_buffer, io_link_message)?
             }
-            types::MasterCommand::PREOPERATE => {
+            types::MasterCommand::DevicePreOperate => {
                 compile_iolink_preoperate_frame(tx_buffer, io_link_message)?
             }
-            types::MasterCommand::OPERATE => {
+            types::MasterCommand::DeviceOperate => {
                 compile_iolink_operate_frame(tx_buffer, io_link_message, self.od_transfer_pending)?
             }
             _ => return Err(IoLinkError::InvalidMseqType),
@@ -650,7 +639,7 @@ impl MessageHandler {
             return Err(IoLinkError::ChecksumError);
         }
         let io_link_message = match self.device_operate_state {
-            types::MasterCommand::STARTUP => {
+            types::MasterCommand::DeviceStartup => {
                 let m_seq_type: u8 = types::MsequenceType::Type0.into();
                 let rxed_m_seq_base_type: u8 = extract_message_type!(rx_buffer[1]);
                 if m_seq_type != rxed_m_seq_base_type {
@@ -658,7 +647,7 @@ impl MessageHandler {
                 }
                 parse_iolink_startup_frame(rx_buffer)
             }
-            types::MasterCommand::PREOPERATE => {
+            types::MasterCommand::DevicePreOperate => {
                 const M_SEQ_TYPE: u8 = config::m_seq_capability::preoperate_m_sequence();
                 let rxed_m_seq_base_type: u8 = extract_message_type!(rx_buffer[1]);
                 if rxed_m_seq_base_type != M_SEQ_TYPE {
@@ -666,7 +655,7 @@ impl MessageHandler {
                 }
                 parse_iolink_pre_operate_frame(rx_buffer)
             }
-            types::MasterCommand::OPERATE => {
+            types::MasterCommand::DeviceOperate => {
                 const M_SEQ_TYPE: u8 = config::m_seq_capability::operate_m_sequence_base_type();
                 let com_channel = types::ComChannel::try_from(extract_com_channel!(rx_buffer[0]))?;
                 if com_channel != types::ComChannel::Process {
@@ -729,7 +718,7 @@ fn compile_iolink_startup_frame(
     tx_buffer[1] = compile_checksum_status!(
         tx_buffer[1],
         io_link_message.event_flag,
-        io_link_message.pd_status,
+        io_link_message.pd_status.into(),
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(2, &tx_buffer);

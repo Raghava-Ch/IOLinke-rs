@@ -4,20 +4,11 @@
 //! IO-Link Specification v1.1.4 Section 8.4.3
 
 use crate::{
-    dl,
+    dl::{self, od_handler::OdIndData as IsduIdnData},
     types::{self, IoLinkError, IoLinkResult, Isdu},
 };
 use heapless::Vec;
 use iolinke_macros::flow_ctrl;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct OdIndData {
-    rw_direction: types::RwDirection,
-    com_channel: types::ComChannel,
-    address_ctrl: u8,
-    length: u8,
-    data: [u8; 32],
-}
 /// See 7.3.6.4 State machine of the Device ISDU handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IsduHandlerState {
@@ -43,34 +34,34 @@ enum Transition {
     T1,
     /// T2: State: Idle (1) -> ISDURequest (2)
     /// Action: Start receiving of ISDU request data
-    T2(OdIndData),
+    T2(IsduIdnData),
     /// T3: State: ISDURequest (2) -> ISDURequest (2)
     /// Action: Receive ISDU request data
-    T3(OdIndData),
+    T3(IsduIdnData),
     /// T4: State: ISDURequest (2) -> ISDUWait (3)
     /// Action: Invoke DL_ISDUTransport.ind to AL (see 7.2.1.6)
-    T4(OdIndData),
+    T4(IsduIdnData),
     /// T5: State: ISDUWait (3) -> ISDUWait (3)
     /// Action: Invoke OD.rsp with "busy" indication (see Table A.14)
-    T5(OdIndData),
+    T5(IsduIdnData),
     /// T6: State: ISDUWait (3) -> ISDUResponse (4)
     /// Action: -
     T6,
     /// T7: State: ISDUResponse (4) -> ISDUResponse (4)
     /// Action: Invoke OD.rsp with ISDU response data
-    T7(OdIndData),
+    T7(IsduIdnData),
     /// T8: State: ISDUResponse (4) -> Idle (1)
     /// Action: -
-    T8(OdIndData),
+    T8(IsduIdnData),
     /// T9: State: ISDURequest (2) -> Idle (1)
     /// Action: -
-    T9(OdIndData),
+    T9(IsduIdnData),
     /// T10: State: ISDUWait (3) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
-    T10(OdIndData),
+    T10(IsduIdnData),
     /// T11: State: ISDUResponse (4) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
-    T11(OdIndData),
+    T11(IsduIdnData),
     /// T12: State: Idle (1) -> Inactive (0)
     /// Action: -
     T12,
@@ -79,7 +70,7 @@ enum Transition {
     T13,
     /// T14: State: Idle (1) -> Idle (1)
     /// Action: Invoke OD.rsp with "no service" indication (see Table A.12 and Table A.14)
-    T14(OdIndData),
+    T14(IsduIdnData),
     /// T15: State: ISDUWait (3) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
     T15,
@@ -92,23 +83,23 @@ enum Transition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IsduHandlerEvent {
     /// {ISDURead}
-    IsduRead(OdIndData),
+    IsduRead(IsduIdnData),
     /// {IH_Conf_ACTIVE}
     IhConfActive,
     /// {ISDUWrite}
-    IsduWrite(OdIndData),
+    IsduWrite(IsduIdnData),
     /// {ISDUStart}
-    IsduStart(OdIndData),
+    IsduStart(IsduIdnData),
     /// {[ISDUError]}
     IsduError,
     /// {IH_Conf_INACTIVE}
     IhConfInactive,
     /// {[ISDUSendComplete]}
-    IsduSendComplete(OdIndData),
+    IsduSendComplete(IsduIdnData),
     /// {ISDUAbort}
-    IsduAbort(OdIndData),
+    IsduAbort(IsduIdnData),
     /// {[ISDURecComplete]}
-    IsduRecComplete(OdIndData),
+    IsduRecComplete(IsduIdnData),
     /// {ISDURespStart}
     IsduRespStart,
 }
@@ -256,6 +247,192 @@ impl IsduHandler {
         Ok(())
     }
 
+    /// Execute transition T1: Inactive (0) -> Idle (1)
+    /// Action: -
+    fn execute_t1(&mut self) -> IoLinkResult<()> {
+        Ok(())
+    }
+
+    /// Execute transition T2: Idle (1) -> ISDURequest (2)
+    /// Action: Start receiving of ISDU request data
+    fn execute_t2(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        self.start_receiving_isdu_request(od_ind_data)
+    }
+
+    /// Execute transition T3: ISDURequest (2) -> ISDURequest (2)
+    /// Action: Receive ISDU request data
+    fn execute_t3(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        self.receive_isdu_request_data(od_ind_data)
+    }
+
+    /// Execute transition T4: ISDURequest (2) -> ISDUWait (3)
+    /// Action: Invoke DL_ISDUTransport.ind to AL (see 7.2.1.6)
+    fn execute_t4(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        self.invoke_dl_isdu_transport_ind(od_ind_data)
+    }
+
+    /// Execute transition T5: ISDUWait (3) -> ISDUWait (3)
+    /// Action: Invoke OD.rsp with "busy" indication (see Table A.14)
+    fn execute_t5(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        
+        
+        todo!()
+    }
+
+    /// Execute transition T6: ISDUWait (3) -> ISDUResponse (4)
+    /// Action: -
+    fn execute_t6(&mut self) -> IoLinkResult<()> {
+        Ok(())
+    }
+
+    /// Execute transition T7: ISDUResponse (4) -> ISDUResponse (4)
+    /// Action: Invoke OD.rsp with ISDU response data
+    fn execute_t7(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        self.invoke_od_rsp_with_response_data(od_ind_data)
+    }
+
+    /// Execute transition T8: ISDUResponse (4) -> Idle (1)
+    /// Action: -
+    fn execute_t8(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        self.cleanup_isdu_transaction(od_ind_data)
+    }
+
+    /// Execute transition T9: ISDURequest (2) -> Idle (1)
+    /// Action: -
+    fn execute_t9(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        self.cleanup_isdu_transaction(od_ind_data)
+    }
+
+    /// Execute transition T10: ISDUWait (3) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    fn execute_t10(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        self.invoke_dl_isdu_abort(od_ind_data)
+    }
+
+    /// Execute transition T11: ISDUResponse (4) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    fn execute_t11(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        self.invoke_dl_isdu_abort(od_ind_data)
+    }
+
+    /// Execute transition T12: Idle (1) -> Inactive (0)
+    /// Action: -
+    fn execute_t12(&mut self) -> IoLinkResult<()> {
+        Ok(())
+    }
+
+    /// Execute transition T13: ISDURequest (2) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    fn execute_t13(&mut self) -> IoLinkResult<()> {
+        self.invoke_dl_isdu_abort_no_data()
+    }
+
+    /// Execute transition T14: Idle (1) -> Idle (1)
+    /// Action: Invoke OD.rsp with "no service" indication (see Table A.12 and Table A.14)
+    fn execute_t14(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        self.invoke_od_rsp_no_service(od_ind_data)
+    }
+
+    /// Execute transition T15: ISDUWait (3) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    fn execute_t15(&mut self) -> IoLinkResult<()> {
+        self.invoke_dl_isdu_abort_no_data()
+    }
+
+    /// Execute transition T16: ISDUResponse (4) -> Idle (1)
+    /// Action: Invoke DL_ISDUAbort
+    fn execute_t16(&mut self) -> IoLinkResult<()> {
+        self.invoke_dl_isdu_abort_no_data()
+    }
+
+    /// Start receiving ISDU request data
+    /// Action for transition T2
+    fn start_receiving_isdu_request(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        // TODO: Initialize ISDU request reception
+        // TODO: Parse ISDU header from od_ind_data
+        // TODO: Validate ISDU format and length
+        self.current_request = None; // Clear any previous request
+        Ok(())
+    }
+
+    /// Receive ISDU request data
+    /// Action for transition T3
+    fn receive_isdu_request_data(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        // TODO: Continue receiving ISDU request data fragments
+        // TODO: Assemble complete ISDU request
+        // TODO: Validate data integrity
+        Ok(())
+    }
+
+    /// Invoke DL_ISDUTransport.ind to Application Layer
+    /// Action for transition T4 - see IO-Link v1.1.4 Section 7.2.1.6
+    fn invoke_dl_isdu_transport_ind(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        // TODO: Complete ISDU request assembly
+        // TODO: Validate complete ISDU structure
+        // TODO: Forward ISDU to Application Layer via DL_ISDUTransport.ind
+        // TODO: Parse ISDU index, subindex, and data from assembled request
+        Ok(())
+    }
+
+    /// Invoke OD.rsp with "busy" indication
+    /// Action for transition T5 - see IO-Link v1.1.4 Table A.14
+    fn invoke_od_rsp_busy(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        // TODO: Send OD.rsp with busy status
+        // TODO: Use appropriate error code for busy indication
+        // TODO: Maintain current ISDU processing state
+        Ok(())
+    }
+
+    /// Invoke OD.rsp with ISDU response data
+    /// Action for transition T7
+    fn invoke_od_rsp_with_response_data(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        // TODO: Send OD.rsp with prepared response data
+        // TODO: Handle fragmentation if response data exceeds frame size
+        // TODO: Update flow control appropriately
+        Ok(())
+    }
+
+    /// Invoke DL_ISDUAbort with OD indication data
+    /// Action for transitions T10, T11
+    fn invoke_dl_isdu_abort(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        // TODO: Send DL_ISDUAbort indication
+        // TODO: Clean up current ISDU transaction
+        // TODO: Reset internal buffers and state
+        self.current_request = None;
+        self.response_data.clear();
+        Ok(())
+    }
+
+    /// Invoke DL_ISDUAbort without specific OD data
+    /// Action for transitions T13, T15, T16
+    fn invoke_dl_isdu_abort_no_data(&mut self) -> IoLinkResult<()> {
+        // TODO: Send DL_ISDUAbort indication
+        // TODO: Clean up current ISDU transaction
+        // TODO: Reset internal buffers and state
+        self.current_request = None;
+        self.response_data.clear();
+        Ok(())
+    }
+
+    /// Invoke OD.rsp with "no service" indication
+    /// Action for transition T14 - see IO-Link v1.1.4 Table A.12 and Table A.14
+    fn invoke_od_rsp_no_service(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        // TODO: Send OD.rsp with "no service" error code
+        // TODO: Use appropriate error code indicating service not available
+        // TODO: Maintain idle state
+        Ok(())
+    }
+
+    /// Clean up ISDU transaction
+    /// Helper function for transitions that return to idle without abort
+    fn cleanup_isdu_transaction(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
+        // TODO: Clean up completed ISDU transaction
+        // TODO: Reset internal state for next transaction
+        self.current_request = None;
+        self.response_data.clear();
+        Ok(())
+    }
+
     /// Handle ISDU configuration changes
     /// See 7.3.6.4 State machine of the Device ISDU handler
     pub fn ih_conf(&mut self, state: types::IhConfState) -> IoLinkResult<()> {
@@ -304,63 +481,44 @@ impl IsduHandler {
     }
 }
 
-impl dl::message_handler::OdInd for IsduHandler {
-    fn od_ind(
-        &mut self,
-        rw_direction: types::RwDirection,
-        com_channel: types::ComChannel,
-        address_ctrl: u8,
-        length: u8,
-        data: &[u8],
-    ) -> IoLinkResult<()> {
+impl dl::od_handler::OdInd for IsduHandler {
+    fn od_ind(&mut self, od_ind_data: &IsduIdnData) -> IoLinkResult<()> {
         use types::RwDirection::Read;
         use types::RwDirection::Write;
         // Process the ISDU request
-        let mut data_array = [0u8; 32];
-        let copy_len = data.len().min(32);
-        data_array[..copy_len].copy_from_slice(&data[..copy_len]);
-
-        let od_data = OdIndData {
-            rw_direction,
-            com_channel,
-            address_ctrl,
-            length,
-            data: data_array,
-        };
-
-        let event = if com_channel == types::ComChannel::Isdu {
+        let event = if od_ind_data.com_channel == types::ComChannel::Isdu {
             // Determine event based on the OD.ind parameters
-            match (rw_direction, address_ctrl) {
+            match (od_ind_data.rw_direction, od_ind_data.address_ctrl) {
                 // ISDUStart: OD.ind(W, ISDU, Start, Data)
-                (Write, flow_ctrl!(START)) => IsduHandlerEvent::IsduStart(od_data),
+                (Write, flow_ctrl!(START)) => IsduHandlerEvent::IsduStart(od_ind_data.clone()),
 
                 // ISDUWrite: OD.ind(W, ISDU, FlowCtrl, Data)
-                (Write, _) => IsduHandlerEvent::IsduWrite(od_data),
+                (Write, _) => IsduHandlerEvent::IsduWrite(od_ind_data.clone()),
 
                 // ISDURecComplete: If OD.ind(R, ISDU, Start, ...) received
-                (Read, flow_ctrl!(START)) => IsduHandlerEvent::IsduRecComplete(od_data),
+                (Read, flow_ctrl!(START)) => IsduHandlerEvent::IsduRecComplete(od_ind_data.clone()),
 
                 // ISDURead: OD.ind(R, ISDU, Start or FlowCtrl, ...)
                 (types::RwDirection::Read, addr_ctrl)
                     if addr_ctrl == flow_ctrl!(START) || addr_ctrl <= 0x0Fu8 =>
                 {
-                    IsduHandlerEvent::IsduRead(od_data)
+                    IsduHandlerEvent::IsduRead(od_ind_data.clone())
                 }
 
                 // ISDUSendComplete: If OD.ind(R, ISDU, IDLE, ...) received
                 (types::RwDirection::Read, addr_ctrl)
                     if addr_ctrl == flow_ctrl!(IDLE_1) || addr_ctrl == flow_ctrl!(IDLE_2) =>
                 {
-                    IsduHandlerEvent::IsduSendComplete(od_data)
+                    IsduHandlerEvent::IsduSendComplete(od_ind_data.clone())
                 }
 
                 // ISDUAbort: OD.ind(R/W, ISDU, Abort, ...)
-                (_, flow_ctrl!(ABORT)) => IsduHandlerEvent::IsduAbort(od_data),
+                (_, flow_ctrl!(ABORT)) => IsduHandlerEvent::IsduAbort(od_ind_data.clone()),
 
                 // ISDUError: If ISDU structure is incorrect or FlowCTRL error detected
                 _ => {
                     // Check for structure errors
-                    if length > 32 || data.len() != length as usize {
+                    if od_ind_data.length > 32 {
                         IsduHandlerEvent::IsduError
                     } else {
                         return Err(IoLinkError::InvalidParameter);

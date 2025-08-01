@@ -8,13 +8,18 @@ use crate::{
     types::{self, IoLinkError, IoLinkResult},
 };
 
+pub trait OdInd {
+    /// Invoke OD.ind service with the provided data
+    fn od_ind(&mut self, od_ind_data: &OdIndData) -> IoLinkResult<()>;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct OdIndData {
-    rw_direction: types::RwDirection,
-    com_channel: types::ComChannel,
-    address_ctrl: u8,
-    length: u8,
-    data: [u8; 32],
+pub struct OdIndData {
+    pub rw_direction: types::RwDirection,
+    pub com_channel: types::ComChannel,
+    pub address_ctrl: u8,
+    pub length: u8,
+    pub data: [u8; 32],
 }
 
 /// On request Data Handler states
@@ -111,36 +116,97 @@ impl OnRequestDataHandler {
 
     /// Poll the process data handler
     /// See IO-Link v1.1.4 Section 7.2
-    pub fn poll(&mut self) -> IoLinkResult<()> {
+    pub fn poll(
+        &mut self,
+        command_handler: &mut dl::command_handler::CommandHandler,
+        isdu_handler: &mut dl::isdu_handler::IsduHandler,
+        event_handler: &mut dl::event_handler::EventHandler,
+    ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
                 // No transition to execute
             }
             Transition::T1 => {
                 // Transition from Inactive to Idle
-                self.state = OnRequestHandlerState::Idle;
+                self.execute_t1()?;
             }
             Transition::T2(od_ind_data) => {
                 // Provide data content of requested parameter or perform appropriate write action
-                // This is a placeholder for actual implementation
+                self.execute_t2(od_ind_data, command_handler)?;
             }
             Transition::T3(od_ind_data) => {
                 // Redirect to command handler
-                // This is a placeholder for actual implementation
+                self.execute_t3(od_ind_data, command_handler)?;
             }
             Transition::T4(od_ind_data) => {
                 // Redirect to ISDU handler
-                // This is a placeholder for actual implementation
+                self.execute_t4(od_ind_data, isdu_handler)?;
             }
             Transition::T5(od_ind_data) => {
                 // Redirect to Event handler
-                // This is a placeholder for actual implementation
+                self.execute_t5(od_ind_data, event_handler)?;
             }
             Transition::T6 => {
                 // Transition from Idle to Inactive
-                self.state = OnRequestHandlerState::Inactive;
+                self.execute_t6()?;
             }
         }
+        Ok(())
+    }
+
+    /// Handle transition T1: Inactive (0) -> Idle (1)
+    /// Action: -
+    fn execute_t1(&mut self) -> IoLinkResult<()> {
+        Ok(())
+    }
+
+    /// Handle transition T2: Idle (1) -> Idle (1)
+    /// Action: Provide data content of requested parameter or perform appropriate write action
+    fn execute_t2(
+        &mut self,
+        od_ind_data: OdIndData,
+        command_handler: &mut dl::command_handler::CommandHandler,
+    ) -> IoLinkResult<()> {
+        command_handler.od_ind(&od_ind_data)?;
+        Ok(())
+    }
+
+    /// Handle transition T3: Idle (1) -> Idle (1)
+    /// Action: Redirect to command handler
+    fn execute_t3(
+        &mut self,
+        od_ind_data: OdIndData,
+        command_handler: &mut dl::command_handler::CommandHandler,
+    ) -> IoLinkResult<()> {
+        command_handler.od_ind(&od_ind_data)?;
+        Ok(())
+    }
+
+    /// Handle transition T4: Idle (1) -> Idle (1)
+    /// Action: Redirect to ISDU handler
+    fn execute_t4(
+        &mut self,
+        od_ind_data: OdIndData,
+        isdu_handler: &mut dl::isdu_handler::IsduHandler,
+    ) -> IoLinkResult<()> {
+        isdu_handler.od_ind(&od_ind_data)?;
+        Ok(())
+    }
+
+    /// Handle transition T5: Idle (1) -> Idle (1)
+    /// Action: Redirect to Event handler
+    fn execute_t5(
+        &mut self,
+        od_ind_data: OdIndData,
+        event_handler: &mut dl::event_handler::EventHandler,
+    ) -> IoLinkResult<()> {
+        event_handler.od_ind(&od_ind_data)?;
+        Ok(())
+    }
+
+    /// Handle transition T6: Idle (1) -> Inactive (0)
+    /// Action: -
+    fn execute_t6(&mut self) -> IoLinkResult<()> {
         Ok(())
     }
 
@@ -156,34 +222,22 @@ impl OnRequestDataHandler {
     }
 }
 
-impl dl::message_handler::OdInd for OnRequestDataHandler {
-    fn od_ind(
-        &mut self,
-        rw_direction: types::RwDirection,
-        com_channel: types::ComChannel,
-        address_ctrl: u8,
-        length: u8,
-        data: &[u8],
-    ) -> IoLinkResult<()> {
-        let od_ind_data = OdIndData {
-            rw_direction,
-            com_channel,
-            address_ctrl,
-            length,
-            data: data.try_into().map_err(|_| IoLinkError::InvalidData)?,
-        };
-        let event = match com_channel {
+impl OdInd for OnRequestDataHandler {
+    fn od_ind(&mut self, od_ind_data: &OdIndData) -> IoLinkResult<()> {
+        let event = match od_ind_data.com_channel {
             types::ComChannel::Page => {
-                if address_ctrl == 0 {
-                    OnRequestHandlerEvent::OdIndCommand(od_ind_data)
-                } else if rw_direction == types::RwDirection::Write {
-                    OnRequestHandlerEvent::OdIndParam(od_ind_data)
+                if od_ind_data.address_ctrl == 0
+                    && od_ind_data.rw_direction == types::RwDirection::Write
+                {
+                    OnRequestHandlerEvent::OdIndCommand(od_ind_data.clone())
+                } else if (1..=31).contains(&od_ind_data.address_ctrl) {
+                    OnRequestHandlerEvent::OdIndParam(od_ind_data.clone())
                 } else {
                     return Err(IoLinkError::InvalidEvent);
                 }
             }
-            types::ComChannel::Isdu => OnRequestHandlerEvent::OdIndIsdu(od_ind_data),
-            types::ComChannel::Diagnosis => OnRequestHandlerEvent::OdIndEvent(od_ind_data),
+            types::ComChannel::Isdu => OnRequestHandlerEvent::OdIndIsdu(od_ind_data.clone()),
+            types::ComChannel::Diagnosis => OnRequestHandlerEvent::OdIndEvent(od_ind_data.clone()),
             _ => return Err(IoLinkError::InvalidEvent),
         };
 

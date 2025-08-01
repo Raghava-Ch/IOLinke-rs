@@ -477,7 +477,7 @@ impl DlInd for SystemManagement {
     }
 
     fn dl_read_ind(&mut self, address: u8) -> IoLinkResult<()> {
-        if address == direct_parameter!(MinCycleTime) { // MinCycleTime address
+        if address == direct_parameter_address!(MinCycleTime) { // MinCycleTime address
             return self.process_event(SystemManagementEvent::DlReadMincycletime);
         }
         Err(IoLinkError::InvalidEvent)
