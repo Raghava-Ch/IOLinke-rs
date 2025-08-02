@@ -26,7 +26,7 @@ impl DataLinkLayer {
         system_management: &mut sm::SystemManagement,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
-        let _ = self.command_handler.poll(&mut self.message_handler);
+        let _ = self.command_handler.poll(physical_layer, &mut &mut self.message_handler);
         let _ = self.mode_handler.poll(
             &mut self.isdu_handler,
             &mut self.event_handler,
@@ -36,8 +36,7 @@ impl DataLinkLayer {
             &mut self.message_handler,
             system_management,
         );
-        let _ = self.event_handler.poll();
-        let _ = self.event_handler.poll();
+        let _ = self.event_handler.poll(&mut self.message_handler);
         let _ = self.message_handler.poll(
             &mut self.event_handler,
             &mut self.isdu_handler,

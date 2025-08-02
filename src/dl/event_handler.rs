@@ -4,17 +4,10 @@
 //! IO-Link Specification v1.1.4 Section 8.4.4
 
 use crate::{
-    dl::{self, message_handler::OdInd}, storage, types::{self, EventType, IoLinkError, IoLinkResult}
+    dl::{self, od_handler::OdIndData as EventIdnData},
+    storage,
+    types::{self, EventType, IoLinkError, IoLinkResult},
 };
-
-/// {EventRead} See Table 60, Tiggers T4, T6
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct OdIndData {
-    rw_direction: types::RwDirection,
-    com_channel: types::ComChannel,
-    address_ctrl: u8,
-    length: u8,
-}
 /// See Table 60 – State transition tables of the Device Event handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EventHandlerState {
@@ -45,13 +38,13 @@ enum Transition {
     T3,
     /// T4: State: FreezeEventMemory (2) -> FreezeEventMemory (2)
     /// Action: Master requests Event memory data via EventRead (= OD.ind). Send Event data by invoking OD.rsp with Event data of the requested Event memory address.
-    T4(OdIndData),
+    T4(EventIdnData),
     /// T5: State: FreezeEventMemory (2) -> Idle (1)
     /// Action: Invoke service EventFlag.req (Flag = FALSE) to indicate Event deactivation to the Master via the "Event flag" bit. Mark all Event slots in memory as invalid according to A.6.3.
     T5,
     /// T6: State: Idle (1) -> Idle (1)
     /// Action: Send contents of Event memory by invoking OD.rsp with Event data
-    T6(OdIndData),
+    T6(EventIdnData),
     /// T7: State: Idle (1) -> Inactive (0)
     /// Action: -
     T7,
@@ -70,7 +63,7 @@ enum EventHandlerEvent {
     /// {DL_EventTrigger} See Table 60, Tiggers T3
     DLEventTrigger,
     /// {EventRead} See Table 60, Tiggers T4, T6
-    EventRead(OdIndData),
+    EventRead(EventIdnData),
     /// {EventConf} See Table 60, Tiggers T5
     EventConf,
     /// {EH_Config_INACTIVE} See Table 60, Tiggers T7, T8
@@ -108,9 +101,7 @@ impl EventHandler {
             (State::FreezeEventMemory, Event::EventRead(od_ind_data)) => {
                 (Transition::T4(od_ind_data), State::FreezeEventMemory)
             }
-            (State::FreezeEventMemory, Event::EventConf) => {
-                (Transition::T5, State::Idle)
-            }
+            (State::FreezeEventMemory, Event::EventConf) => (Transition::T5, State::Idle),
             (State::Idle, Event::EventRead(od_ind_data)) => {
                 (Transition::T6(od_ind_data), State::Idle)
             }
@@ -125,7 +116,10 @@ impl EventHandler {
     }
 
     /// Poll the handler
-    pub fn poll(&mut self, message_handler: &mut dl::message_handler::MessageHandler) -> IoLinkResult<()> {
+    pub fn poll(
+        &mut self,
+        message_handler: &mut dl::message_handler::MessageHandler,
+    ) -> IoLinkResult<()> {
         // Process pending events
         match self.exec_transition {
             Transition::Tn => {
@@ -198,12 +192,16 @@ impl EventHandler {
     /// Action: Master requests Event memory data via EventRead (= OD.ind). Send Event data by invoking OD.rsp with Event data of the requested Event memory address.
     fn execute_t4(
         &mut self,
-        od_ind_data: OdIndData,
+        od_ind_data: EventIdnData,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         // Use od_ind_data.address_ctrl to determine which Event memory address to read
-        let event_data = self.event_memory
-            .get_event_detail(od_ind_data.address_ctrl as usize, od_ind_data.length as usize)
+        let event_data = self
+            .event_memory
+            .get_event_detail(
+                od_ind_data.address_ctrl as usize,
+                od_ind_data.length as usize,
+            )
             .map_err(|_| IoLinkError::InvalidAddress)?;
         let _ = message_handler.od_rsp(od_ind_data.length, event_data);
         Ok(())
@@ -212,7 +210,7 @@ impl EventHandler {
     /// Execute T5 transition: FreezeEventMemory (2) -> Idle (1)
     /// Action: Invoke service EventFlag.req (Flag = FALSE) to indicate Event deactivation to the Master via the "Event flag" bit. Mark all Event slots in memory as invalid according to A.6.3.
     fn execute_t5(
-        &mut self, 
+        &mut self,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         message_handler.event_flag(false);
@@ -225,7 +223,7 @@ impl EventHandler {
     /// Action: Send contents of Event memory by invoking OD.rsp with Event data
     fn execute_t6(
         &mut self,
-        od_ind_data: OdIndData,
+        od_ind_data: EventIdnData,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         self.execute_t4(od_ind_data, message_handler);
@@ -300,30 +298,17 @@ impl EventHandler {
     }
 }
 
-impl OdInd for EventHandler {
+impl dl::od_handler::OdInd for EventHandler {
     /// Handle the OD.ind event
-    fn od_ind(
-        &mut self,
-        rw_direction: types::RwDirection,
-        com_channel: types::ComChannel,
-        address_ctrl: u8,
-        length: u8,
-        _data: &[u8],
-    ) -> IoLinkResult<()> {
+    fn od_ind(&mut self, od_ind_data: &EventIdnData) -> IoLinkResult<()> {
         // Process the incoming data
-        let od_ind_data = OdIndData {
-            rw_direction,
-            com_channel,
-            address_ctrl,
-            length,
-        };
-        let event = if rw_direction == types::RwDirection::Read
-            && com_channel == types::ComChannel::Diagnosis
+        let event = if od_ind_data.rw_direction == types::RwDirection::Read
+            && od_ind_data.com_channel == types::ComChannel::Diagnosis
         {
-            EventHandlerEvent::EventRead(od_ind_data)
-        } else if rw_direction == types::RwDirection::Write
-            && com_channel == types::ComChannel::Diagnosis
-            && address_ctrl == 0x00
+            EventHandlerEvent::EventRead(od_ind_data.clone())
+        } else if od_ind_data.rw_direction == types::RwDirection::Write
+            && od_ind_data.com_channel == types::ComChannel::Diagnosis
+            && od_ind_data.address_ctrl == 0x00
         {
             EventHandlerEvent::EventConf
         } else {

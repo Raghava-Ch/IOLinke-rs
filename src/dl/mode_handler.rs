@@ -605,16 +605,16 @@ impl dl::command_handler::MasterCommandInd for DlModeHandler {
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
     fn master_command_ind(&mut self, master_command: MasterCommand) -> IoLinkResult<()> {
         match master_command {
-            MasterCommand::PREOPERATE => {
+            MasterCommand::DevicePreOperate => {
                 let _ = self.process_event(DlModeEvent::MasterCommandPreoperate);
             }
-            MasterCommand::OPERATE => {
+            MasterCommand::DeviceOperate => {
                 let _ = self.process_event(DlModeEvent::MasterCommandOperate);
             }
-            MasterCommand::STARTUP => {
+            MasterCommand::DeviceStartup => {
                 let _ = self.process_event(DlModeEvent::MasterCommandStartup);
             }
-            MasterCommand::FALLBACK => {
+            MasterCommand::Fallback => {
                 let _ = self.process_event(DlModeEvent::MasterCommandFallback);
             }
             _ => return Err(IoLinkError::InvalidEvent),

@@ -264,23 +264,42 @@ pub enum PdConfState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MasterCommand {
     /// MasterCommand {Fallback} = 0x5Au8
-    INACTIVE,
-    /// MasterCommand {Fallback} = 0x5Au8
-    FALLBACK,
+    Fallback = 0x5A,
+    /// MasterCommand {MasterIdent} = 0x95u8
+    MasterIdent = 0x95,
+    /// MasterCommand {DeviceIdent} = 0x96u8
+    DeviceIdent = 0x96,
     /// MasterCommand {DeviceStartup} = 0x97u8
-    STARTUP,
-    /// MasterCommand {DevicePreoperate} = 0x9Au8
-    PREOPERATE,
+    DeviceStartup = 0x97,
+    /// MasterCommand {ProcessDataOutputOperate} = 0x98u8
+    ProcessDataOutputOperate = 0x98,
     /// MasterCommand {DeviceOperate} = 0x99u8
     /// This command is also known as PDOUTINVALID
-    OPERATE,
-    /// MasterCommand {MasterIdent} = 0x95u8
-    MASTERIDENT,
-    /// MasterCommand {DeviceIdent} = 0x96u8
-    DEVICEIDENT,
-    /// MasterCommand {ProcessDataOutputOperate} = 0x98u8
-    /// This command aka PDOUTVALID
-    PDOUT,
+    DeviceOperate = 0x99,
+    /// MasterCommand {DevicePreoperate} = 0x9Au8
+    DevicePreOperate = 0x9A,
+}
+
+impl Into<u8> for MasterCommand {
+    fn into(self) -> u8 {
+        self as u8
+    }
+}
+
+impl TryFrom<u8> for MasterCommand {
+    type Error = IoLinkError;
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x5A => Ok(MasterCommand::Fallback),
+            0x95 => Ok(MasterCommand::MasterIdent),
+            0x96 => Ok(MasterCommand::DeviceIdent),
+            0x97 => Ok(MasterCommand::DeviceStartup),
+            0x98 => Ok(MasterCommand::ProcessDataOutputOperate),
+            0x99 => Ok(MasterCommand::DeviceOperate),
+            0x9A => Ok(MasterCommand::DevicePreOperate),
+            _ => Err(IoLinkError::InvalidParameter),
+        }
+    }
 }
 
 /// All the message handler information type
@@ -472,6 +491,10 @@ pub enum IoLinkError {
     NoImplFound,
     /// Event memory full, This is a custom error type for event handler
     EventMemoryFull,
+    /// ISDU memory full, This is a custom error type for ISDU handler
+    IsduVolatileMemoryFull,
+    /// ISDU memory full, This is a custom error type for ISDU handler
+    IsduNonVolatileMemoryFull,
     /// No event details supported in event memory, This is a custom error type for event handler
     NoEventDetailsSupported,
     /// Invalid address, This is a custom error type for address handling
