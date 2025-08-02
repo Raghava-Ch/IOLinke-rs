@@ -491,6 +491,10 @@ pub enum IoLinkError {
     NoImplFound,
     /// Event memory full, This is a custom error type for event handler
     EventMemoryFull,
+    /// ISDU memory full, This is a custom error type for ISDU handler
+    IsduVolatileMemoryFull,
+    /// ISDU memory full, This is a custom error type for ISDU handler
+    IsduNonVolatileMemoryFull,
     /// No event details supported in event memory, This is a custom error type for event handler
     NoEventDetailsSupported,
     /// Invalid address, This is a custom error type for address handling

@@ -124,29 +124,36 @@ impl OnRequestDataHandler {
     ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
+                self.exec_transition = Transition::Tn;
                 // No transition to execute
             }
             Transition::T1 => {
+                self.exec_transition = Transition::Tn;
                 // Transition from Inactive to Idle
                 self.execute_t1()?;
             }
             Transition::T2(od_ind_data) => {
+                self.exec_transition = Transition::Tn;
                 // Provide data content of requested parameter or perform appropriate write action
                 self.execute_t2(od_ind_data, command_handler)?;
             }
             Transition::T3(od_ind_data) => {
+                self.exec_transition = Transition::Tn;
                 // Redirect to command handler
                 self.execute_t3(od_ind_data, command_handler)?;
             }
             Transition::T4(od_ind_data) => {
+                self.exec_transition = Transition::Tn;
                 // Redirect to ISDU handler
                 self.execute_t4(od_ind_data, isdu_handler)?;
             }
             Transition::T5(od_ind_data) => {
+                self.exec_transition = Transition::Tn;
                 // Redirect to Event handler
                 self.execute_t5(od_ind_data, event_handler)?;
             }
             Transition::T6 => {
+                self.exec_transition = Transition::Tn;
                 // Transition from Idle to Inactive
                 self.execute_t6()?;
             }
