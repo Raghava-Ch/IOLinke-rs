@@ -117,6 +117,20 @@ macro_rules! isdu_busy {
     };
 }
 
+pub trait DlIsduAbort {
+    /// See 7.3.6.5 DL_ISDUAbort
+    fn isdu_abort(&mut self) -> IoLinkResult<()>;
+}
+
+pub trait DlIsduTransportInd {
+    /// See 7.2.1.6 DL_ISDUTransport
+    /// The DL_ISDUTransport service is used to transport an ISDU. This service is used by the
+    /// Master to send a service request from the Master application layer to the Device. It is used by
+    /// the Device to send a service response to the Master from the Device application layer. The
+    /// parameters of the service primitives are listed in Table 21.
+    fn isdu_transport_ind(&mut self, isdu: Isdu) -> IoLinkResult<()>;
+}
+
 /// See 7.3.6.4 State machine of the Device ISDU handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IsduHandlerState {
@@ -212,6 +226,22 @@ enum IsduHandlerEvent {
     IsduRespStart,
 }
 
+const MAX_ISDU_LENGTH: usize = 238;
+
+/// ISDU (Index Service Data Unit) structure
+/// See IO-Link v1.1.4 Section 8.4.3
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Isdu {
+    /// Parameter index
+    pub index: u16,
+    /// Sub-index
+    pub sub_index: u8,
+    /// Data payload
+    pub data: Vec<u8, MAX_ISDU_LENGTH>,
+    /// Read/Write operation flag
+    pub is_write: bool,
+}
+
 /// See A.5.2 I-Service
 /// Figure A.16 shows the structure of the I-Service octet.
 #[bitfield]
@@ -226,7 +256,7 @@ struct IsduService {
 pub struct IsduHandler {
     state: IsduHandlerState,
     exec_transition: Transition,
-    message_buffer: Vec<u8, 238>,
+    message_buffer: Vec<u8, MAX_ISDU_LENGTH>,
 }
 
 impl IsduHandler {

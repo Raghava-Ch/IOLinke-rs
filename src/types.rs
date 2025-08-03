@@ -411,20 +411,6 @@ impl Default for ProcessData {
     }
 }
 
-/// ISDU (Index Service Data Unit) structure
-/// See IO-Link v1.1.4 Section 8.4.3
-#[derive(Debug, Clone)]
-pub struct Isdu {
-    /// Parameter index
-    pub index: u16,
-    /// Sub-index
-    pub sub_index: u8,
-    /// Data payload
-    pub data: Vec<u8, MAX_MESSAGE_LENGTH>,
-    /// Read/Write operation flag
-    pub is_write: bool,
-}
-
 /// Event types for IO-Link devices
 /// See IO-Link v1.1.4 Section 8.4.4
 // #[derive(Debug, Clone, Copy, PartialEq, Eq)]

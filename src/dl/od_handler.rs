@@ -13,6 +13,24 @@ pub trait OdInd {
     fn od_ind(&mut self, od_ind_data: &OdIndData) -> IoLinkResult<()>;
 }
 
+pub trait DlWriteParamInd {
+    /// See 7.2.1.3 DL_WriteParam
+    /// The DL_WriteParam service is used by the AL to write a parameter value to the Device via
+    /// the page communication channel. The parameters of the service primitives are listed in Table 18.
+    fn write_param_ind(
+        &mut self,
+        index: u8,
+        data: u8,
+    ) -> IoLinkResult<()>;
+}
+
+pub trait DlReadParamInd {
+    /// See 7.2.1.2 DL_ReadParam
+    /// The DL_ReadParam service is used by the AL to read a parameter value from the Device via
+    /// the page communication channel. The parameters of the service primitives are listed in Table 17.
+    fn read_param_ind(&mut self, address: u8) -> IoLinkResult<()>;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OdIndData {
     pub rw_direction: types::RwDirection,
