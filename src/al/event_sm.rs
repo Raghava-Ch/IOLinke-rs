@@ -3,7 +3,10 @@
 //! This module implements the Event State Machine as defined in
 //! IO-Link Specification v1.1.4
 
-use crate::types::{IoLinkError, IoLinkResult};
+use crate::{
+    al, dl,
+    types::{IoLinkError, IoLinkResult},
+};
 
 /// See 8.3.3.2 Event state machine of the Device AL
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,12 +76,8 @@ impl EventStateMachine {
 
         let (new_transition, new_state) = match (self.state, event) {
             // Valid transitions according to Table 77
-            (State::EventInactive, Event::Activate) => {
-                (Transition::T1, State::EventIdle)
-            }
-            (State::EventIdle, Event::Deactivate) => {
-                (Transition::T2, State::EventInactive)
-            }
+            (State::EventInactive, Event::Activate) => (Transition::T1, State::EventIdle),
+            (State::EventIdle, Event::Deactivate) => (Transition::T2, State::EventInactive),
             (State::EventIdle, Event::AlEventRequest) => {
                 (Transition::T3, State::AwaitEventResponse)
             }
@@ -96,7 +95,11 @@ impl EventStateMachine {
     }
 
     /// Poll the state machine
-    pub fn poll(&mut self) -> IoLinkResult<()> {
+    pub fn poll(
+        &mut self,
+        application: &mut al::application::ApplicationLayerImpl,
+        data_link_layer: &mut dl::DataLinkLayer,
+    ) -> IoLinkResult<()> {
         // Process pending transitions
         match self.exec_transition {
             Transition::Tn => {
@@ -104,22 +107,75 @@ impl EventStateMachine {
             }
             Transition::T1 => {
                 // Transition T1: Activate -> EventIdle
-                // No action needed, state already updated
+                self.execute_t1()?;
             }
             Transition::T2 => {
                 // Transition T2: Deactivate -> EventInactive
-                // No action needed, state already updated
+                self.execute_t2()?;
             }
             Transition::T3 => {
                 // Transition T3: AlEventRequest -> AwaitEventResponse
-                // This is where we would trigger the DL_Event and DL_EventTrigger service
+                self.execute_t3(data_link_layer)?;
             }
             Transition::T4 => {
                 // Transition T4: DlEventTriggerConf -> EventIdle
-                // This is where we would trigger the AL_Event confirmation
+                self.execute_t4(application)?;
             }
         }
         Ok(())
+    }
+
+    /// Execute transition T1: EventInactive -> EventIdle
+    fn execute_t1(&mut self) -> IoLinkResult<()> {
+        // T1: Activate -> EventIdle
+        // No action needed according to specification
+        Ok(())
+    }
+
+    /// Execute transition T2: EventIdle -> EventInactive
+    fn execute_t2(&mut self) -> IoLinkResult<()> {
+        // T2: Deactivate -> EventInactive
+        // No action needed according to specification
+        Ok(())
+    }
+
+    /// Execute transition T3: EventIdle -> AwaitEventResponse
+    fn execute_t3(&mut self, data_link_layer: &mut dl::DataLinkLayer) -> IoLinkResult<()> {
+        // T3: AlEventRequest -> AwaitEventResponse
+        // Action: An AL_Event request triggers a DL_Event and the corresponding
+        // DL_EventTrigger service. The DL_Event carries the diagnosis information
+        // from AL to DL. The DL_EventTrigger sets the Event flag within the cyclic
+        // data exchange.
+
+        // TODO: Implement DL_Event and DL_EventTrigger service calls
+        data_link_layer.event_req()?;
+
+        Ok(())
+    }
+
+    /// Execute transition T4: AwaitEventResponse -> EventIdle
+    fn execute_t4(
+        &mut self,
+        application: &mut al::application::ApplicationLayerImpl,
+    ) -> IoLinkResult<()> {
+        // T4: DlEventTriggerConf -> EventIdle
+        // Action: A DL_EventTrigger confirmation triggers an AL_Event confirmation
+
+        // TODO: Implement AL_Event confirmation
+        application.al_event_cnf()?;
+        Ok(())
+    }
+}
+
+impl al::application::AlEventReq for EventStateMachine {
+    fn event_req(&mut self) -> IoLinkResult<()> {
+        self.process_event(EventStateMachineEvent::AlEventRequest)
+    }
+}
+
+impl dl::DlEventTriggerConf for EventStateMachine {
+    fn event_trigger_conf(&mut self) -> IoLinkResult<()> {
+        self.process_event(EventStateMachineEvent::DlEventTriggerConf)
     }
 }
 
