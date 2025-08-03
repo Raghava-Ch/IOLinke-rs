@@ -49,8 +49,8 @@ pub trait AlGetOutputRsp {
 pub trait AlNewOutputRsp {
     fn new_output_rsp(&mut self, ) -> IoLinkResult<()>;
 }
-pub trait AlEvent {
-    fn event(&mut self, ) -> IoLinkResult<()>;
+pub trait AlEventReq {
+    fn event_req(&mut self, ) -> IoLinkResult<()>;
 }
 pub trait AlControl {
     /// Handle control codes as defined in IO-Link Specification v1.1.4 Section
@@ -259,6 +259,11 @@ impl ApplicationLayerImpl {
     /// Set minimum cycle time
     pub fn set_min_cycle_time(&mut self, cycle_time: u8) {
         self.min_cycle_time = cycle_time;
+    }
+
+    pub fn al_event_cnf(&mut self) -> IoLinkResult<()> {
+
+        todo!("Implement al_event_cnf");
     }
 
     /// Get current state

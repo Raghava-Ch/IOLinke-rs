@@ -12,6 +12,7 @@ pub use od_handler::DlWriteParamInd;
 pub use od_handler::DlReadParamInd;
 pub use mode_handler::DlInd;
 pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, Isdu};
+pub use event_handler::DlEventTriggerConf;
 
 pub struct DataLinkLayer {
     command_handler: command_handler::CommandHandler,
@@ -73,6 +74,12 @@ impl DataLinkLayer {
 
     pub fn negative_isdu_transport(&mut self, error: u8, additional_error: u8) -> IoLinkResult<()> {
         todo!("Implement negative_isdu_transport");
+    }
+
+    pub fn event_req(&mut self) -> IoLinkResult<()> {
+        // self.event_handler.dl_event_req();
+
+        todo!("Implement event_req");
     }
 }
 

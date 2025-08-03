@@ -8,6 +8,11 @@ use crate::{
     storage,
     types::{self, EventType, IoLinkError, IoLinkResult},
 };
+
+pub trait DlEventTriggerConf {
+    fn event_trigger_conf(&mut self) -> IoLinkResult<()>;
+}
+
 /// See Table 60 – State transition tables of the Device Event handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EventHandlerState {
