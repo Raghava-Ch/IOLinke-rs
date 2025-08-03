@@ -9,41 +9,52 @@ use heapless::Vec;
 /// Application Layer trait defining all request/indication methods
 /// See IO-Link v1.1.4 Section 8.4
 pub trait ApplicationLayer {
-    /// Get input data from the device
-    /// See IO-Link v1.1.4 Section 8.4.2.1
-    fn al_get_input_req(&mut self) -> IoLinkResult<ProcessData>;
+    fn read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<Vec<u8, 32>>;
 
-    /// Set output data to the device
-    /// See IO-Link v1.1.4 Section 8.4.2.2
-    fn al_set_output_req(&mut self, data: &ProcessData) -> IoLinkResult<()>;
+    fn write_ind(&mut self, index: u16, sub_index: u8, data: &[u8]) -> IoLinkResult<()>;
 
-    /// Read parameter via ISDU
-    /// See IO-Link v1.1.4 Section 8.4.3.1
-    fn al_read_req(&mut self, index: u16, sub_index: u8) -> IoLinkResult<Vec<u8, 32>>;
+    fn abort_ind(&mut self) -> IoLinkResult<()>;
 
-    /// Write parameter via ISDU
-    /// See IO-Link v1.1.4 Section 8.4.3.2
-    fn al_write_req(&mut self, index: u16, sub_index: u8, data: &[u8]) -> IoLinkResult<()>;
+    fn set_input_ind(&mut self,) -> IoLinkResult<()>;
 
-    /// Get event from device
-    /// See IO-Link v1.1.4 Section 8.4.4.1
-    fn al_get_event_req(&mut self) -> IoLinkResult<Option<Event>>;
+    fn pd_cycle_ind(&mut self);
 
-    /// Control event handling
-    /// See IO-Link v1.1.4 Section 8.4.4.2
-    fn al_control_req(&mut self, control_code: u8) -> IoLinkResult<()>;
+    fn get_output_ind(&mut self) -> IoLinkResult<()>;
 
-    /// Get device identification
-    /// See IO-Link v1.1.4 Section 8.4.5.1
-    fn al_get_device_id_req(&mut self) -> IoLinkResult<crate::types::DeviceIdentification>;
+    fn new_output_ind(&mut self, ) -> IoLinkResult<()>;
 
-    /// Get minimum cycle time
-    /// See IO-Link v1.1.4 Section 8.4.5.2
-    fn al_get_min_cycle_time_req(&mut self) -> IoLinkResult<u8>;
+    fn event(&mut self, ) -> IoLinkResult<()>;
 
-    /// Abort current operation
-    /// See IO-Link v1.1.4 Section 8.4.6
-    fn al_abort_req(&mut self) -> IoLinkResult<()>;
+    fn control(&mut self, control_code: u8) -> IoLinkResult<()>;
+}
+
+pub trait AlReadRsp<'a> {
+    fn read_rsp(&mut self, index: u16, sub_index: u8, data: &'a [u8]) -> IoLinkResult<()>;
+}
+pub trait AlWriteRsp<'a> {
+    fn write_rsp(&mut self, error_code: u8, additional_error_code: u8) -> IoLinkResult<()>;
+}
+pub trait AlAbortRsp {
+    fn abort_rsp(&mut self) -> IoLinkResult<()>;
+}
+pub trait AlSetInputRsp {
+    fn set_input_rsp(&mut self,) -> IoLinkResult<()>;
+}
+pub trait AlPdCycleRsp {
+    fn pd_cycle_rsp(&mut self);
+}
+pub trait AlGetOutputRsp {
+    fn get_output_rsp(&mut self) -> IoLinkResult<()>;
+}
+pub trait AlNewOutputRsp {
+    fn new_output_rsp(&mut self, ) -> IoLinkResult<()>;
+}
+pub trait AlEvent {
+    fn event(&mut self, ) -> IoLinkResult<()>;
+}
+pub trait AlControl {
+    /// Handle control codes as defined in IO-Link Specification v1.1.4 Section
+    fn control(&mut self, control_code: u8) -> IoLinkResult<()>;
 }
 
 /// Application Layer state machine events
