@@ -255,7 +255,7 @@ impl<'a> OnRequestHandler<'a> {
     /// Execute transition T4: Invoke DL_ReadParam (0 to 31)
     fn execute_t4(&mut self, data_link_layer: &mut dl::DataLinkLayer) -> IoLinkResult<()> {
         // TODO: Invoke DL_ReadParam (0 to 31)
-        data_link_layer.read_param_rsp();
+        data_link_layer.dl_read_param_rsp();
         Ok(())
     }
 

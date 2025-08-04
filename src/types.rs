@@ -116,6 +116,12 @@ pub enum EventInstance {
     // 6 to 7 Reserved
 }
 
+impl Into<u8> for EventInstance {
+    fn into(self) -> u8 {
+        self as u8
+    }
+}
+
 /// See A.6.4 EventQualifier
 /// Bits 4 to 5: TYPE
 /// These bits indicate the Event mode. Permissible values for MODE are listed in Table A.20.
@@ -130,6 +136,12 @@ pub enum EventType {
     Error = 3,
 }
 
+impl Into<u8> for EventType {
+    fn into(self) -> u8 {
+        self as u8
+    }
+}
+
 /// See A.6.4 EventQualifier
 /// Bits 6 to 7: MODE
 /// These bits indicate the Event mode. Permissible values for MODE are listed in Table A.20.
@@ -142,6 +154,12 @@ pub enum EventMode {
     Disappears = 2,
     /// {Event appears} = 3
     Appears = 3,
+}
+
+impl Into<u8> for EventMode {
+    fn into(self) -> u8 {
+        self as u8
+    }
 }
 
 /// See Table 94 – SM_DeviceMode

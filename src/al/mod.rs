@@ -1,4 +1,4 @@
-use crate::{dl, IoLinkResult};
+use crate::IoLinkResult;
 
 mod application;
 mod event_sm;
@@ -25,23 +25,23 @@ pub trait ApplicationLayerInd {
 
 }
 
-pub struct ApplicationLayer<'a> {
+pub struct ApplicationLayer {
     event_sm: event_sm::EventStateMachine,
-    on_request: on_request::OnRequestHandler<'a>,
+    on_request: on_request::OnRequestHandler,
     application: application::ApplicationLayerImpl,
 }
 
-impl<'a> ApplicationLayer<'a> {
-    pub fn poll(&mut self, datalink_layer: &mut dl::DataLinkLayer) -> IoLinkResult<()> {
-        self.event_sm.poll(&mut self.application, datalink_layer)?;
-        self.on_request.poll(&mut self.application, datalink_layer)?;
-        self.application.poll()?;
+impl ApplicationLayer {
+    pub fn poll(&mut self) -> IoLinkResult<()> {
+        self.event_sm.poll();
+        self.on_request.poll();
+        self.application.poll();
 
         Ok(())
     }
 }
 
-impl<'a> Default for ApplicationLayer<'a> {
+impl Default for ApplicationLayer {
     fn default() -> Self {
         Self {
             event_sm: event_sm::EventStateMachine::new(),

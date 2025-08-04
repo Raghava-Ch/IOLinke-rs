@@ -1,3 +1,4 @@
+use crate::types;
 use crate::{pl, sm, IoLinkResult};
 
 mod command_handler;
@@ -11,7 +12,7 @@ mod pd_handler;
 pub use od_handler::DlWriteParamInd;
 pub use od_handler::DlReadParamInd;
 pub use mode_handler::DlInd;
-pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, Isdu};
+pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, Isdu, IsduService};
 pub use event_handler::DlEventTriggerConf;
 
 pub struct DataLinkLayer {
@@ -50,36 +51,71 @@ impl DataLinkLayer {
             physical_layer,
         );
         let _ = self.pd_handler.poll();
-
+        let _ = self.isdu_handler.poll();
+        let _ = self.od_handler.poll(
+            &mut self.command_handler,
+            &mut self.isdu_handler,
+            &mut self.event_handler
+        );
         Ok(())
     }
+}
 
-    pub fn write_param_rsp(&mut self) -> IoLinkResult<()> {
-        todo!("Implement write_param_rsp")
+impl od_handler::DlParamRsp for DataLinkLayer {
+    fn dl_read_param_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
+        self.od_handler.dl_read_param_rsp(length, data, &mut self.message_handler)
+    }
+    
+    fn dl_write_param_rsp(&mut self) -> IoLinkResult<()> {
+        // No response is expected in specs
+        Ok(())
+    }
+}
+
+impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
+    fn dl_isdu_transport_read_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
+        self.isdu_handler.dl_isdu_transport_read_rsp(length, data, &mut self.message_handler)
     }
 
-    pub fn read_param_rsp(&mut self) -> IoLinkResult<()> {
-        todo!("Implement read_param_rsp")
+    fn dl_isdu_transport_write_rsp(&mut self) -> IoLinkResult<()> {
+        self.isdu_handler.dl_isdu_transport_write_rsp(&mut self.message_handler)
     }
 
-    pub fn read_isdu_transport(&mut self, index: u8, sub_index: u8, data: &[u8]) -> IoLinkResult<()> {
+    fn dl_isdu_transport_read_error_rsp(&mut self, error: u8, additional_error: u8) -> IoLinkResult<()> {
+        self.isdu_handler.dl_isdu_transport_read_error_rsp(error, additional_error, &mut self.message_handler)
+    }
+    
+    fn dl_isdu_transport_write_error_rsp(&mut self, error: u8, additional_error: u8) -> IoLinkResult<()> {
+        self.isdu_handler.dl_isdu_transport_write_error_rsp(error, additional_error, &mut self.message_handler)
+    }
+}
 
-        todo!("Implement read_isdu_transport");
+impl event_handler::DlEventReq for DataLinkLayer {
+    fn dl_event_req(
+        &mut self,
+        event_instance: types::EventInstance,
+        event_type: types::EventType,
+        event_mode: types::EventMode,
+        event_code: u16, // device_event_code macro to be used
+        events_left: u8,
+    ) -> IoLinkResult<()> {
+        self.event_handler.dl_event_req(
+            event_instance,
+            event_type,
+            event_mode,
+            event_code,
+            events_left,
+        )
     }
 
-    pub fn write_isdu_transport(&mut self, error: u8, additional_error: u8) -> IoLinkResult<()> {
-
-        todo!("Implement read_isdu_transport");
+    fn dl_event_trigger_req(&mut self) -> IoLinkResult<()> {
+        self.event_handler.dl_event_trigger_req()
     }
+}
 
-    pub fn negative_isdu_transport(&mut self, error: u8, additional_error: u8) -> IoLinkResult<()> {
-        todo!("Implement negative_isdu_transport");
-    }
-
-    pub fn event_req(&mut self) -> IoLinkResult<()> {
-        // self.event_handler.dl_event_req();
-
-        todo!("Implement event_req");
+impl pd_handler::DlPDInputUpdate for DataLinkLayer {
+    fn dl_pd_input_update_req(&mut self, length: u8, input_data: &[u8]) -> IoLinkResult<()> {
+        self.pd_handler.dl_pd_input_update_req(length, input_data)
     }
 }
 

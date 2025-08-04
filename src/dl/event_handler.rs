@@ -13,6 +13,20 @@ pub trait DlEventTriggerConf {
     fn event_trigger_conf(&mut self) -> IoLinkResult<()>;
 }
 
+pub trait DlEventReq {
+    fn dl_event_req(
+        &mut self,
+        event_instance: types::EventInstance,
+        event_type: EventType,
+        event_mode: types::EventMode,
+        event_code: u16, // device_event_code macro to be used
+        events_left: u8,
+    ) -> IoLinkResult<()>;
+
+    fn dl_event_trigger_req(&mut self) -> IoLinkResult<()>;
+}
+
+
 /// See Table 60 – State transition tables of the Device Event handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EventHandlerState {
@@ -272,19 +286,19 @@ impl EventHandler {
         event_instance: types::EventInstance,
         event_type: EventType,
         event_mode: types::EventMode,
-        event_code: u16, // device_event_code macro to be used
-        events_left: u8,
+        event_code: u16, // TODO: device_event_code macro to be used
+        events_left: u8, // TODO: Check what to do with this?
     ) -> IoLinkResult<()> {
         // TODO: Implement the DL_Event request to event memory handling
-        // let entry = storage::event_memory::EventEntry {
-        //     event_qualifier: storage::event_memory::EventQualifier::new()
-        //         .with_eq_mode(event_mode.into())
-        //         .with_eq_type(event_type.into())
-        //         .with_eq_source(event_instance.source().into())
-        //         .with_eq_instance(event_instance.instance()),
-        //     event_code,
-        // };
-        // self.event_memory.add_event_detail(entry);
+        let entry = storage::event_memory::EventEntry {
+            event_qualifier: storage::event_memory::EventQualifier::new()
+                .with_eq_mode(event_mode.into())
+                .with_eq_type(event_type.into())
+                .with_eq_source(0)// 0 is source is Device
+                .with_eq_instance(event_instance.into()),
+            event_code,
+        };
+        self.event_memory.add_event_detail(entry);
         // Process the DL_Event request
         self.process_event(EventHandlerEvent::DlEvent);
         Ok(())

@@ -4,7 +4,7 @@
 //! IO-Link Specification v1.1.4 Section 7.3.5.3
 
 use crate::{
-    dl,
+    al, dl,
     types::{self, IoLinkError, IoLinkResult},
 };
 
@@ -13,15 +13,22 @@ pub trait OdInd {
     fn od_ind(&mut self, od_ind_data: &OdIndData) -> IoLinkResult<()>;
 }
 
+pub trait OdRsp {
+    /// Invoke OD.rsp service with the provided data
+    fn od_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()>;
+}
+
 pub trait DlWriteParamInd {
     /// See 7.2.1.3 DL_WriteParam
     /// The DL_WriteParam service is used by the AL to write a parameter value to the Device via
     /// the page communication channel. The parameters of the service primitives are listed in Table 18.
-    fn write_param_ind(
-        &mut self,
-        index: u8,
-        data: u8,
-    ) -> IoLinkResult<()>;
+    fn write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()>;
+}
+
+pub trait DlParamRsp {
+    /// See 7.2.1.4 DL_ReadParam.rsp
+    fn dl_read_param_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()>;
+    fn dl_write_param_rsp(&mut self) -> IoLinkResult<()>;
 }
 
 pub trait DlReadParamInd {
@@ -192,6 +199,19 @@ impl OnRequestDataHandler {
         od_ind_data: OdIndData,
         command_handler: &mut dl::command_handler::CommandHandler,
     ) -> IoLinkResult<()> {
+        if od_ind_data.com_channel == types::ComChannel::Page {
+            if od_ind_data.rw_direction == types::RwDirection::Read {
+                // Provide data content of requested parameter
+                // TODO: Provide data content of requested parameter
+                // application_layer.read_param_ind(od_ind_data.address_ctrl)?;
+            } else if od_ind_data.rw_direction == types::RwDirection::Write {
+                // Perform appropriate write action
+                // TODO: Perform appropriate write action
+                // application_layer.write_param_ind(od_ind_data.address_ctrl, od_ind_data.data[0])?;
+            }
+        } else {
+            return Err(IoLinkError::InvalidEvent);
+        }
         command_handler.od_ind(&od_ind_data)?;
         Ok(())
     }
@@ -244,6 +264,26 @@ impl OnRequestDataHandler {
                 self.process_event(OnRequestHandlerEvent::OhConfInactive)
             }
         }
+    }
+
+    pub fn od_rsp(
+        &mut self,
+        length: u8,
+        data: &[u8],
+        message_handler: &mut dl::message_handler::MessageHandler,
+    ) -> IoLinkResult<()> {
+        message_handler.od_rsp(length, data)?;
+        Ok(())
+    }
+
+    pub fn dl_read_param_rsp(
+        &mut self,
+        length: u8,
+        data: &[u8],
+        message_handler: &mut dl::message_handler::MessageHandler,
+    ) -> IoLinkResult<()> {
+        self.od_rsp(length, data, message_handler);
+        Ok(())
     }
 }
 
