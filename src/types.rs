@@ -116,6 +116,12 @@ pub enum EventInstance {
     // 6 to 7 Reserved
 }
 
+impl Into<u8> for EventInstance {
+    fn into(self) -> u8 {
+        self as u8
+    }
+}
+
 /// See A.6.4 EventQualifier
 /// Bits 4 to 5: TYPE
 /// These bits indicate the Event mode. Permissible values for MODE are listed in Table A.20.
@@ -130,6 +136,12 @@ pub enum EventType {
     Error = 3,
 }
 
+impl Into<u8> for EventType {
+    fn into(self) -> u8 {
+        self as u8
+    }
+}
+
 /// See A.6.4 EventQualifier
 /// Bits 6 to 7: MODE
 /// These bits indicate the Event mode. Permissible values for MODE are listed in Table A.20.
@@ -142,6 +154,12 @@ pub enum EventMode {
     Disappears = 2,
     /// {Event appears} = 3
     Appears = 3,
+}
+
+impl Into<u8> for EventMode {
+    fn into(self) -> u8 {
+        self as u8
+    }
 }
 
 /// See Table 94 – SM_DeviceMode
@@ -329,7 +347,7 @@ pub enum PhysicalLayerStatus {
 
 /// See 7.2.1.18 DL_Control
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DlControlCodes {
+pub enum DlControlCode {
     /// (Input Process Data valid; see 7.2.2.5, 8.2.2.12)
     VALID,
     /// (Input Process Data invalid)
@@ -342,7 +360,7 @@ pub enum DlControlCodes {
 
 /// See 7.2.2.5 PDInStatus
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PdInStatus {
+pub enum PdStatus {
     /// (Input Process Data valid based on PD status flag (see A.1.5); see 7.2.1.18)
     VALID,
     /// (Input Process Data invalid)
@@ -487,6 +505,8 @@ pub enum IoLinkError {
     InvalidAddress,
     /// Read-only error, This is a custom error type for read-only operations
     ReadOnlyError,
+    /// Invalid length, This is a custom error type for length handling
+    InvalidLength,
 }
 
 /// Result type for IO-Link operations

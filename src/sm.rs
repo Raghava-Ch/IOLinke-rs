@@ -3,7 +3,7 @@
 //! This module implements the System Management state machine as defined in
 //! IO-Link Specification v1.1.4
 
-use iolinke_macros::{direct_parameter, master_command};
+use iolinke_macros::{direct_parameter_address, master_command};
 
 use crate::{dl::DlInd, pl, types::{IoLinkError, IoLinkResult}, DeviceMode, DlMode, IoLinkMode};
 

@@ -4,14 +4,25 @@
 //! IO-Link Specification v1.1.4 Section 8.4.4
 
 use crate::{
-    dl::{self, od_handler::OdIndData as EventIdnData},
+    dl::{self, od_handler::OdIndData},
     storage,
-    types::{self, EventType, IoLinkError, IoLinkResult},
+    types::{self, IoLinkError, IoLinkResult},
 };
 
 pub trait DlEventTriggerConf {
     fn event_trigger_conf(&mut self) -> IoLinkResult<()>;
 }
+
+pub trait DlEventReq {
+    fn dl_event_req(
+        &mut self,
+        event_count: u8,
+        event_entries: &[storage::event_memory::EventEntry; 6],
+    ) -> IoLinkResult<()>;
+
+    fn dl_event_trigger_req(&mut self) -> IoLinkResult<()>;
+}
+
 
 /// See Table 60 – State transition tables of the Device Event handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +40,7 @@ enum EventHandlerState {
 
 /// See Table 60 – State transition tables of the Device Event handler
 #[derive(Debug, PartialEq, Eq)]
-enum Transition {
+enum Transition<'a> {
     /// Tn: No transition
     Tn,
     /// T1: State: Inactive (0) -> Idle (1)
@@ -43,13 +54,13 @@ enum Transition {
     T3,
     /// T4: State: FreezeEventMemory (2) -> FreezeEventMemory (2)
     /// Action: Master requests Event memory data via EventRead (= OD.ind). Send Event data by invoking OD.rsp with Event data of the requested Event memory address.
-    T4(EventIdnData),
+    T4(&'a OdIndData<'a>),
     /// T5: State: FreezeEventMemory (2) -> Idle (1)
     /// Action: Invoke service EventFlag.req (Flag = FALSE) to indicate Event deactivation to the Master via the "Event flag" bit. Mark all Event slots in memory as invalid according to A.6.3.
     T5,
     /// T6: State: Idle (1) -> Idle (1)
     /// Action: Send contents of Event memory by invoking OD.rsp with Event data
-    T6(EventIdnData),
+    T6(&'a OdIndData<'a>),
     /// T7: State: Idle (1) -> Inactive (0)
     /// Action: -
     T7,
@@ -60,7 +71,7 @@ enum Transition {
 
 /// Figure 56 – State machine of the Device Event handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum EventHandlerEvent {
+enum EventHandlerEvent<'a> {
     /// {EH_Conf_ACTIVE} See Table 60, Tiggers T1
     EhConfActive,
     /// {DL_Event} See Table 60, Tiggers T2
@@ -68,7 +79,7 @@ enum EventHandlerEvent {
     /// {DL_EventTrigger} See Table 60, Tiggers T3
     DLEventTrigger,
     /// {EventRead} See Table 60, Tiggers T4, T6
-    EventRead(EventIdnData),
+    EventRead(&'a OdIndData<'a>),
     /// {EventConf} See Table 60, Tiggers T5
     EventConf,
     /// {EH_Config_INACTIVE} See Table 60, Tiggers T7, T8
@@ -76,26 +87,28 @@ enum EventHandlerEvent {
 }
 
 /// Event Handler implementation
-pub struct EventHandler {
+pub struct EventHandler<'a> {
     /// Current state of the Event Handler
     state: EventHandlerState,
-    exec_transition: Transition,
+    exec_transition: Transition<'a>,
     /// See 7.3.8.1 Events and Table 58 – Event memory
     event_memory: storage::event_memory::EventMemory,
+    active_event_count: u8,
 }
 
-impl EventHandler {
+impl<'a> EventHandler<'a> {
     /// Create a new Event Handler
     pub fn new() -> Self {
         Self {
             state: EventHandlerState::Inactive,
             exec_transition: Transition::Tn,
             event_memory: storage::event_memory::EventMemory::new(),
+            active_event_count: 0,
         }
     }
 
     /// Process an event
-    pub fn process_event(&mut self, event: EventHandlerEvent) -> IoLinkResult<()> {
+    pub fn process_event(&mut self, event: EventHandlerEvent<'a>) -> IoLinkResult<()> {
         use EventHandlerEvent as Event;
         use EventHandlerState as State;
 
@@ -176,9 +189,8 @@ impl EventHandler {
     /// Execute T2 transition: Idle (1) -> Idle (1)
     /// Action: Change Event memory entries with new Event data (see Table 58)
     fn execute_t2(&mut self) -> IoLinkResult<()> {
-        // TODO: Implement Event memory update with new Event data
-        // TODO: Compose event memory entry for the given data and update it to the event memory in fifo manner
         // This should update the Event memory entries according to Table 58
+        // This transition activity is done in the dl_event_req function aka T2 transition trigger
         Ok(())
     }
 
@@ -197,7 +209,7 @@ impl EventHandler {
     /// Action: Master requests Event memory data via EventRead (= OD.ind). Send Event data by invoking OD.rsp with Event data of the requested Event memory address.
     fn execute_t4(
         &mut self,
-        od_ind_data: EventIdnData,
+        od_ind_data: &'a OdIndData<'a>,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         // Use od_ind_data.address_ctrl to determine which Event memory address to read
@@ -228,11 +240,11 @@ impl EventHandler {
     /// Action: Send contents of Event memory by invoking OD.rsp with Event data
     fn execute_t6(
         &mut self,
-        od_ind_data: EventIdnData,
+        od_ind_data: &'a OdIndData<'a>,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
+        // This transition activity is done in the execute_t4 function aka T4
         self.execute_t4(od_ind_data, message_handler);
-        // Use od_ind_data.address_ctrl to determine which Event memory data to send
         Ok(())
     }
 
@@ -269,22 +281,12 @@ impl EventHandler {
     /// of the service primitives are listed in Table 30.
     pub fn dl_event_req(
         &mut self,
-        event_instance: types::EventInstance,
-        event_type: EventType,
-        event_mode: types::EventMode,
-        event_code: u16, // device_event_code macro to be used
-        events_left: u8,
+        event_count: u8, // TODO: Check what to do with this?
+        event_entries: &[storage::event_memory::EventEntry; 6],
     ) -> IoLinkResult<()> {
         // TODO: Implement the DL_Event request to event memory handling
-        // let entry = storage::event_memory::EventEntry {
-        //     event_qualifier: storage::event_memory::EventQualifier::new()
-        //         .with_eq_mode(event_mode.into())
-        //         .with_eq_type(event_type.into())
-        //         .with_eq_source(event_instance.source().into())
-        //         .with_eq_instance(event_instance.instance()),
-        //     event_code,
-        // };
-        // self.event_memory.add_event_detail(entry);
+        self.active_event_count = event_count;
+        self.event_memory.add_event_details(event_entries)?;
         // Process the DL_Event request
         self.process_event(EventHandlerEvent::DlEvent);
         Ok(())
@@ -303,14 +305,14 @@ impl EventHandler {
     }
 }
 
-impl dl::od_handler::OdInd for EventHandler {
+impl<'a> dl::od_handler::OdInd<'a> for EventHandler<'a> {
     /// Handle the OD.ind event
-    fn od_ind(&mut self, od_ind_data: &EventIdnData) -> IoLinkResult<()> {
+    fn od_ind(&mut self, od_ind_data: &'a OdIndData<'a>) -> IoLinkResult<()> {
         // Process the incoming data
         let event = if od_ind_data.rw_direction == types::RwDirection::Read
             && od_ind_data.com_channel == types::ComChannel::Diagnosis
         {
-            EventHandlerEvent::EventRead(od_ind_data.clone())
+            EventHandlerEvent::EventRead(od_ind_data)
         } else if od_ind_data.rw_direction == types::RwDirection::Write
             && od_ind_data.com_channel == types::ComChannel::Diagnosis
             && od_ind_data.address_ctrl == 0x00
@@ -325,7 +327,7 @@ impl dl::od_handler::OdInd for EventHandler {
     }
 }
 
-impl Default for EventHandler {
+impl<'a> Default for EventHandler<'a> {
     fn default() -> Self {
         Self::new()
     }

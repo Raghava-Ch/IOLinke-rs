@@ -5,7 +5,7 @@
 
 use crate::config;
 use crate::dl;
-use crate::dl::{pd_handler, od_handler::OdInd};
+use crate::dl::{od_handler::OdInd, pd_handler};
 use crate::pl;
 use crate::types::{self, IoLinkError, IoLinkResult};
 use crate::{
@@ -123,7 +123,7 @@ struct IoLinkMessage {
     /// Process Data (PD) response data
     pd: Option<Vec<u8, MAX_PD_SIZE>>,
     /// Process Data input status
-    pd_status: Option<types::PdInStatus>,
+    pd_status: Option<types::PdStatus>,
 }
 
 impl Default for IoLinkMessage {
@@ -234,7 +234,7 @@ struct Buffers {
 }
 
 /// Message Handler implementation
-pub struct MessageHandler {
+pub struct MessageHandler<'a> {
     state: MessageHandlerState,
     exec_transition: Transition,
     buffers: Buffers,
@@ -242,10 +242,12 @@ pub struct MessageHandler {
     rx_message: IoLinkMessage,
     device_operate_state: types::MasterCommand,
     od_transfer_pending: bool,
-    pd_in_valid_status: types::PdInStatus,
+    pd_in_valid_status: types::PdStatus,
+
+    od_ind_data: dl::od_handler::OdIndData<'a>,
 }
 
-impl MessageHandler {
+impl<'a> MessageHandler<'a> {
     /// Create a new Message Handler
     pub fn new() -> Self {
         Self {
@@ -261,7 +263,8 @@ impl MessageHandler {
             rx_message: IoLinkMessage::default(),
             device_operate_state: types::MasterCommand::Fallback,
             od_transfer_pending: false,
-            pd_in_valid_status: types::PdInStatus::INVALID,
+            pd_in_valid_status: types::PdStatus::INVALID,
+            od_ind_data: dl::od_handler::OdIndData::default(),
         }
     }
 
@@ -294,64 +297,68 @@ impl MessageHandler {
     /// Poll the message handler
     /// See IO-Link v1.1.4 Section 6.3
     pub fn poll(
-        &mut self,
+        &'a mut self,
         event_handler: &mut dl::event_handler::EventHandler,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
-        od_handler: &mut dl::od_handler::OnRequestDataHandler,
+        od_handler: &mut dl::od_handler::OnRequestDataHandler<'a>,
         pd_handler: &mut pd_handler::ProcessDataHandler,
         mode_handler: &mut dl::mode_handler::DlModeHandler,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
-        match self.exec_transition {
-            Transition::Tn => {
-                // No transition, remain in current state
+            let _ = self.poll_active_states();
+            match self.exec_transition {
+                Transition::Tn => {
+                    // No transition, remain in current state
+                }
+                Transition::T1 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t1()?;
+                }
+                Transition::T2 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t2(physical_layer)?;
+                }
+                Transition::T3 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t3(physical_layer)?;
+                }
+                Transition::T4 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t4(physical_layer)?;
+                }
+                Transition::T5 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t5(event_handler, isdu_handler, od_handler, pd_handler)?;
+                }
+                Transition::T6 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t6(physical_layer)?;
+                }
+                Transition::T7 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t7()?;
+                }
+                Transition::T8 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t8(mode_handler)?;
+                }
+                Transition::T9 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t9(physical_layer)?;
+                }
+                Transition::T10 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t10()?;
+                }
+                Transition::T11 => {
+                    self.exec_transition = Transition::Tn;
+                    self.execute_t11()?;
+                }
             }
-            Transition::T1 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t1()?;
-            }
-            Transition::T2 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t2(physical_layer)?;
-            }
-            Transition::T3 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t3(physical_layer)?;
-            }
-            Transition::T4 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t4(physical_layer)?;
-            }
-            Transition::T5 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t5(event_handler, isdu_handler, od_handler, pd_handler)?;
-            }
-            Transition::T6 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t6(physical_layer)?;
-            }
-            Transition::T7 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t7()?;
-            }
-            Transition::T8 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t8(mode_handler)?;
-            }
-            Transition::T9 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t9(physical_layer)?;
-            }
-            Transition::T10 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t10()?;
-            }
-            Transition::T11 => {
-                self.exec_transition = Transition::Tn;
-                self.execute_t11()?;
-            }
-        }
+        Ok(())
+    }
 
+    fn poll_active_states(&mut self) -> IoLinkResult<()> {
         match self.state {
             MessageHandlerState::CheckMessage => {
                 let io_link_message = match self.parse_message() {
@@ -398,7 +405,6 @@ impl MessageHandler {
         }
         Ok(())
     }
-
     /// Transition T1: Inactive -> Idle (activation by DL-mode handler)
     /// See Table 47 – State transition tables of the Device message handler
     fn execute_t1(&mut self) -> IoLinkResult<()> {
@@ -439,10 +445,10 @@ impl MessageHandler {
     /// Transition T5: CheckMessage -> CreateMessage
     /// Invoke OD.ind and PD.ind service indications
     fn execute_t5(
-        &mut self,
+        &'a mut self,
         event_handler: &mut dl::event_handler::EventHandler,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
-        od_handler: &mut dl::od_handler::OnRequestDataHandler,
+        od_handler: &mut dl::od_handler::OnRequestDataHandler<'a>,
         pd_handler: &mut pd_handler::ProcessDataHandler,
     ) -> IoLinkResult<()> {
         if let (Some(rw), Some(channel), Some(addr_ctrl), Some(ref od_data), Some(ref pd_data)) = (
@@ -453,17 +459,15 @@ impl MessageHandler {
             self.rx_message.pd.as_ref(),
         ) {
             const INTERLEAVED_MODE: bool = config::m_seq_capability::interleaved_mode();
-            let mut data_array = [0u8; 32];
             let copy_len = od_data.len().min(32);
-            data_array[..copy_len].copy_from_slice(&od_data[..copy_len]);
-            let od_ind_data = dl::od_handler::OdIndData {
+            self.od_ind_data = dl::od_handler::OdIndData {
                 rw_direction: rw,
                 com_channel: channel,
                 address_ctrl: addr_ctrl,
                 length: od_data.len() as u8,
-                data: data_array,
+                data: &od_data[..copy_len],
             };
-            let _ = od_handler.od_ind(&od_ind_data);
+            let _ = od_handler.od_ind(&self.od_ind_data);
             if self.device_operate_state == types::MasterCommand::DeviceOperate {
                 if INTERLEAVED_MODE {
                     let pd_out_address = extract_address_fctrl!(addr_ctrl);
@@ -575,7 +579,6 @@ impl MessageHandler {
             self.tx_message.od = Some(Vec::new());
             self.tx_message.od.as_mut().unwrap()
         };
-        od.clear();
         od.extend_from_slice(data)
             .map_err(|_| IoLinkError::InvalidParameter)?;
         Ok(())
@@ -601,7 +604,7 @@ impl MessageHandler {
     /// 7.2.2.5 PDInStatus
     /// The service PDInStatus sets and signals the validity qualifier
     /// of the input Process Data. PD validity `Device to Master`.
-    pub fn pd_in_status_req(&mut self, valid: types::PdInStatus) -> IoLinkResult<()> {
+    pub fn pd_in_status_req(&mut self, valid: types::PdStatus) -> IoLinkResult<()> {
         self.pd_in_valid_status = valid;
         Ok(())
     }
@@ -685,7 +688,7 @@ impl MessageHandler {
 
 // Physical layer indication trait implementation would go here
 // when the physical layer module is properly defined
-impl pl::physical_layer::PhysicalLayerInd for MessageHandler {
+impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler<'a> {
     fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<()> {
         self.buffers.rx_buffer = rx_buffer.try_into().map_err(|_| IoLinkError::InvalidData)?;
         let _ = self.process_event(MessageHandlerEvent::PlTransfer);
@@ -693,7 +696,7 @@ impl pl::physical_layer::PhysicalLayerInd for MessageHandler {
     }
 }
 
-impl pl::physical_layer::IoLinkTimer for MessageHandler {
+impl<'a> pl::physical_layer::IoLinkTimer for MessageHandler<'a> {
     /// Any MasterCommand received by the Device command handler
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
     fn timer_elapsed(&mut self, timer: pl::physical_layer::Timer) -> bool {
@@ -889,7 +892,7 @@ fn parse_iolink_startup_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
         address_fctrl: Some(address_fctrl),
         event_flag: false, // Event flag is not set in startup frame
         od,
-        pd: None,           // No PD in startup frame
+        pd: None,        // No PD in startup frame
         pd_status: None, // No PD status in startup frame
     })
 }
@@ -926,8 +929,8 @@ fn parse_iolink_pre_operate_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
         address_fctrl: Some(address_fctrl),
         event_flag: false, // Event flag is not set in pre-operate frame
         od,
-        pd: None,           // No PD in pre-operate frame
-        pd_status: None,    // No PD status in pre-operate frame
+        pd: None,        // No PD in pre-operate frame
+        pd_status: None, // No PD status in pre-operate frame
     })
 }
 
@@ -1104,7 +1107,7 @@ fn calculate_checksum(length: u8, data: &[u8]) -> u8 {
     checksum
 }
 
-impl Default for MessageHandler {
+impl<'a> Default for MessageHandler<'a> {
     fn default() -> Self {
         Self::new()
     }

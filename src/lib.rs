@@ -46,24 +46,25 @@ pub mod test_utils;
 pub use test_utils::MockHal;
 
 // Re-export main traits and types
-pub use al::{ApplicationLayer,};
 pub use types::*;
 
 /// Simple IO-Link device implementation
-pub struct IoLinkDevice {
-    system_management: sm::SystemManagement,
+pub struct IoLinkDevice<'a> {
     physical_layer: pl::physical_layer::PhysicalLayer,
-    dl: dl::DataLinkLayer,
-    application: al::ApplicationLayer,
+    dl: dl::DataLinkLayer<'a>,
+    system_management: sm::SystemManagement,
+    services: al::services::ApplicationLayerServices,
+    application: al::ApplicationLayer<'a>,
 }
 
-impl IoLinkDevice {
+impl<'a> IoLinkDevice<'a> {
     /// Create a new simple IO-Link device
     pub fn new() -> Self {
         Self {
             system_management: sm::SystemManagement::default(),
             physical_layer: pl::physical_layer::PhysicalLayer::default(),
             dl: dl::DataLinkLayer::default(),
+            services: al::services::ApplicationLayerServices::default(),
             application: al::ApplicationLayer::default(),
         }
     }
@@ -79,10 +80,10 @@ impl IoLinkDevice {
     }
 
     /// Step 3: Basic polling function
-    pub fn poll(&mut self) -> IoLinkResult<()> {
+    pub fn poll(&'a mut self) -> IoLinkResult<()> {
         // Poll all state machines
-        self.dl.poll(&mut self.system_management, &mut self.physical_layer)?;
-        self.application.poll()?;
+        self.application.poll(&mut self.dl)?;
+        self.dl.poll(&mut self.system_management, &mut self.physical_layer, &mut self.application)?;
         Ok(())
     }
 }

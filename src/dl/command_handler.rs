@@ -4,13 +4,17 @@
 //! IO-Link Specification v1.1.4
 
 use crate::{
-    dl::{self, od_handler::OdIndData as CommandIdnData}, pl, storage, types::{self, IoLinkError, IoLinkResult}, ChConfState, MasterCommand
+    al, dl::{self, od_handler::OdIndData}, types::{self, IoLinkError, IoLinkResult}, ChConfState, MasterCommand
 };
 
 pub trait MasterCommandInd {
     /// Any MasterCommand received by the Device command handler
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
     fn master_command_ind(&mut self, master_command: MasterCommand) -> IoLinkResult<()>;
+}
+
+pub trait DlControlInd {
+    fn dl_control_ind(&mut self, control_code: types::DlControlCode) -> IoLinkResult<()>;
 }
 
 /// See 7.3.7.3 State machine of the Device command handler
@@ -41,16 +45,16 @@ enum Transition {
     /// Action: Invoke DL_Control.ind (PDOUTVALID) if received MasterCommand =
     /// 0x98. Invoke DL_Control.ind (PDOUTINVALID) if received
     /// MasterCommand = 0x99.
-    T2,
+    T2(MasterCommand),
     /// T3: State: Idle (1) -> Idle (1)
     /// Action: If service DL_Control.req (VALID) then invoke PDInStatus.req (VALID).
     /// If service DL_Control.req (INVALID) then invoke PDInStatus.req
     /// (INVALID). Message handler uses PDInStatus service to set/reset the PD
     /// status flag (see A.1.5)
-    T3(types::DlControlCodes),
+    T3(types::DlControlCode),
     /// T4: State: Idle (1) -> CommandHandler (2)
     /// Action: -
-    T4(MasterCommand),
+    T4,
     /// T5: State: CommandHandler (2) -> Idle (1)
     /// Action: -
     T5,
@@ -65,11 +69,11 @@ pub enum CommandHandlerEvent {
     /// {CH_Conf_ACTIVE} See Table 57, Triggers T1
     ChConfActive,
     /// {[Received MasterCmd PDOUT]} See Table 57, Triggers T2
-    ReceivedMasterCmdPdout,
+    ReceivedMasterCmdPdout(MasterCommand),
     /// {DL_Control_PDIn} See Table 57, Triggers T3
-    DlControlPdIn(types::DlControlCodes),
+    DlControlPdIn(types::DlControlCode),
     /// {[Received MasterCmd DEVICEMODE]} See Table 57, Triggers T4
-    ReceivedMasterCmdDevicemode(MasterCommand),
+    ReceivedMasterCmdDevicemode,
     /// {[Accomplished]} See Table 57, Triggers T5
     Accomplished,
     /// {CH_Conf_INACTIVE} See Table 57, Triggers T6
@@ -100,11 +104,9 @@ impl CommandHandler {
         let (new_transition, new_state) = match (self.state, event) {
             // Valid transitions according to Table 57
             (State::Inactive, Event::ChConfActive) => (Transition::T1, State::Idle),
-            (State::Idle, Event::ReceivedMasterCmdPdout) => (Transition::T2, State::Idle),
+            (State::Idle, Event::ReceivedMasterCmdPdout(master_command)) => (Transition::T2(master_command), State::Idle),
             (State::Idle, Event::DlControlPdIn(code)) => (Transition::T3(code), State::Idle),
-            (State::Idle, Event::ReceivedMasterCmdDevicemode(master_command)) => {
-                (Transition::T4(master_command), State::CommandHandler)
-            }
+            (State::Idle, Event::ReceivedMasterCmdDevicemode) => (Transition::T4, State::CommandHandler),
             (State::CommandHandler, Event::Accomplished) => (Transition::T5, State::Idle),
             (State::CommandHandler, Event::ChConfInactive) => (Transition::T6, State::Inactive),
             // Invalid transitions - no state change
@@ -119,8 +121,8 @@ impl CommandHandler {
     /// Poll the handler
     pub fn poll(
         &mut self,
-        physical_layer: &mut pl::physical_layer::PhysicalLayer,
         message_handler: &mut dl::message_handler::MessageHandler,
+        application_layer: &mut al::ApplicationLayer,
     ) -> IoLinkResult<()> {
         // Process pending events
         match self.exec_transition {
@@ -129,17 +131,17 @@ impl CommandHandler {
                 self.exec_transition = Transition::Tn;
                 self.execute_t1();
             }
-            Transition::T2 => {
+            Transition::T2(master_command) => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t2();
+                self.execute_t2(master_command, application_layer);
             }
             Transition::T3(code) => {
                 self.exec_transition = Transition::Tn;
                 self.execute_t3(code, message_handler);
             }
-            Transition::T4(master_command) => {
+            Transition::T4 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t4(physical_layer, master_command);
+                self.execute_t4();
             }
             Transition::T5 => {
                 self.exec_transition = Transition::Tn;
@@ -162,19 +164,28 @@ impl CommandHandler {
     }
 
     /// Execute transition T2: Idle -> Idle (PDOUT commands)
-    fn execute_t2(&mut self) -> IoLinkResult<()> {
+    fn execute_t2(&mut self, master_command: MasterCommand, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // T2: State: Idle (1) -> Idle (1)
         // Action: Invoke DL_Control.ind (PDOUTVALID) if received MasterCommand = 0x98.
         // Invoke DL_Control.ind (PDOUTINVALID) if received MasterCommand = 0x99.
-        // TODO: Implement DL_Control.ind invocation based on received MasterCommand
-        // TODO: Determine how to access the specific MasterCommand that triggered this transition
+        match master_command {
+            MasterCommand::ProcessDataOutputOperate => {
+                application_layer.dl_control_ind(types::DlControlCode::PDOUTVALID)?;
+            }
+            MasterCommand::DeviceOperate => {
+                application_layer.dl_control_ind(types::DlControlCode::PDOUTINVALID)?;
+            }
+            _ => {
+                return Err(IoLinkError::InvalidEvent);
+            }
+        }
         Ok(())
     }
 
     /// Execute transition T3: Idle -> Idle (DL_Control PDIn)
     fn execute_t3(
         &mut self,
-        code: types::DlControlCodes,
+        code: types::DlControlCode,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         // T3: State: Idle (1) -> Idle (1)
@@ -182,11 +193,11 @@ impl CommandHandler {
         // If service DL_Control.req (INVALID) then invoke PDInStatus.req (INVALID).
         // Message handler uses PDInStatus service to set/reset the PD status flag (see A.1.5)
         match code {
-            types::DlControlCodes::VALID => {
-                message_handler.pd_in_status_req(types::PdInStatus::VALID);
+            types::DlControlCode::VALID => {
+                message_handler.pd_in_status_req(types::PdStatus::VALID);
             }
-            types::DlControlCodes::INVALID => {
-                message_handler.pd_in_status_req(types::PdInStatus::INVALID);
+            types::DlControlCode::INVALID => {
+                message_handler.pd_in_status_req(types::PdStatus::INVALID);
             }
             _ => {
                 return Err(IoLinkError::InvalidEvent);
@@ -196,19 +207,9 @@ impl CommandHandler {
     }
 
     /// Execute transition T4: Idle -> CommandHandler
-    fn execute_t4(
-        &mut self,
-        physical_layer: &mut pl::physical_layer::PhysicalLayer,
-        master_command: types::MasterCommand,
-    ) -> IoLinkResult<()> {
+    fn execute_t4(&mut self) -> IoLinkResult<()> {
         // T4: State: Idle (1) -> CommandHandler (2)
         // Action: -
-        storage::direct_parameters::write(
-            physical_layer,
-            iolinke_macros::direct_parameter_address!(MasterCommand),
-            1,
-            &[master_command.into()],
-        );
         self.process_event(CommandHandlerEvent::Accomplished)?;
         Ok(())
     }
@@ -240,27 +241,25 @@ impl CommandHandler {
     }
 
     /// 7.2.1.18 DL_Control
-    pub fn dl_control_req(&mut self, control_code: types::DlControlCodes) -> IoLinkResult<()> {
+    pub fn dl_control_req(&mut self, control_code: types::DlControlCode) -> IoLinkResult<()> {
         self.process_event(CommandHandlerEvent::DlControlPdIn(control_code));
         Ok(())
     }
 }
 
-impl dl::od_handler::OdInd for CommandHandler {
+impl<'a> dl::od_handler::OdInd<'a> for CommandHandler {
     /// Any MasterCommand received by the Device command handler
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
-    fn od_ind(&mut self, od_ind_data: &CommandIdnData) -> IoLinkResult<()> {
+    fn od_ind(&mut self, od_ind_data: &'a OdIndData<'a>) -> IoLinkResult<()> {
         let master_command: types::MasterCommand = od_ind_data.data[0].try_into()?;
         match master_command {
             MasterCommand::Fallback
             | MasterCommand::DeviceStartup
             | MasterCommand::DevicePreOperate => {
-                self.process_event(CommandHandlerEvent::ReceivedMasterCmdDevicemode(
-                    master_command,
-                ));
+                self.process_event(CommandHandlerEvent::ReceivedMasterCmdDevicemode);
             }
             MasterCommand::DeviceOperate | MasterCommand::ProcessDataOutputOperate => {
-                self.process_event(CommandHandlerEvent::ReceivedMasterCmdPdout);
+                self.process_event(CommandHandlerEvent::ReceivedMasterCmdPdout(master_command));
             }
             _ => return Err(IoLinkError::InvalidEvent),
         }

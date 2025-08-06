@@ -83,42 +83,22 @@ impl EventMemory {
     }
 
     /// Add an event entry to the memory
-    pub fn add_event_detail(&mut self, entry: EventEntry) -> IoLinkResult<()> {
+    pub fn add_event_details(&mut self, entries: &[EventEntry; 6]) -> IoLinkResult<()> {
         if self.read_only {
             return Err(IoLinkError::ReadOnlyError);
         }
-        let status_code: &mut StatusCodeType2 = match &mut self.event_code {
-            EventCode::StatusCodeType1(_) => {
-                return Err(IoLinkError::NoEventDetailsSupported);
+
+        // Push all entries to the self.events as bytes
+        for entry in entries.iter() {
+            let bytes = entry.to_bytes();
+            // Only push if there is enough space left
+            if self.events.len() + bytes.len() > self.events.capacity() {
+                return Err(IoLinkError::EventMemoryFull);
             }
-            EventCode::StatusCodeType2(code) => code,
-        };
-        let start_index = if 1 == status_code.activated_event_slot1() {
-            status_code.set_activated_event_slot1(1);
-            0x10
-        } else if 1 == status_code.activated_event_slot2() {
-            status_code.set_activated_event_slot2(1);
-            0x0D
-        } else if 1 == status_code.activated_event_slot3() {
-            status_code.set_activated_event_slot3(1);
-            0x0A
-        } else if 1 == status_code.activated_event_slot4() {
-            status_code.set_activated_event_slot4(1);
-            0x07
-        } else if 1 == status_code.activated_event_slot5() {
-            status_code.set_activated_event_slot5(1);
-            0x04
-        } else if 1 == status_code.activated_event_slot6() {
-            status_code.set_activated_event_slot6(1);
-            0x01
-        } else {
-            return Err(IoLinkError::EventMemoryFull);
-        };
-        // Convert EventEntry to bytes and add to events
-        let bytes = entry.to_bytes();
-        self.events[start_index] = bytes[0];
-        self.events[start_index + 1] = bytes[1];
-        self.events[start_index + 2] = bytes[2];
+            for b in bytes.iter() {
+                self.events.push(*b).map_err(|_| IoLinkError::EventMemoryFull)?;
+            }
+        }
         Ok(())
     }
 
