@@ -347,7 +347,7 @@ pub enum PhysicalLayerStatus {
 
 /// See 7.2.1.18 DL_Control
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DlControlCodes {
+pub enum DlControlCode {
     /// (Input Process Data valid; see 7.2.2.5, 8.2.2.12)
     VALID,
     /// (Input Process Data invalid)
@@ -360,7 +360,7 @@ pub enum DlControlCodes {
 
 /// See 7.2.2.5 PDInStatus
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PdInStatus {
+pub enum PdStatus {
     /// (Input Process Data valid based on PD status flag (see A.1.5); see 7.2.1.18)
     VALID,
     /// (Input Process Data invalid)
@@ -505,6 +505,8 @@ pub enum IoLinkError {
     InvalidAddress,
     /// Read-only error, This is a custom error type for read-only operations
     ReadOnlyError,
+    /// Invalid length, This is a custom error type for length handling
+    InvalidLength,
 }
 
 /// Result type for IO-Link operations

@@ -1,111 +1,155 @@
-use crate::types;
-use crate::{pl, sm, IoLinkResult};
+use crate::{IoLinkResult, pl, sm};
+use crate::{al, storage};
 
 mod command_handler;
-mod mode_handler;
 mod event_handler;
 mod isdu_handler;
 mod message_handler;
+mod mode_handler;
 mod od_handler;
 mod pd_handler;
 
-pub use od_handler::DlWriteParamInd;
-pub use od_handler::DlReadParamInd;
+pub use command_handler::DlControlInd;
+pub use event_handler::{DlEventReq, DlEventTriggerConf};
+pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, DlIsduTransportRsp, Isdu, IsduService};
 pub use mode_handler::DlInd;
-pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, Isdu, IsduService};
-pub use event_handler::DlEventTriggerConf;
+pub use od_handler::{DlParamRsp, DlReadParamInd, DlWriteParamInd};
+pub use pd_handler::{DlPDInputUpdate, DlPDOutputTransportInd};
 
-pub struct DataLinkLayer {
+pub struct DataLinkLayer<'a> {
     command_handler: command_handler::CommandHandler,
     mode_handler: mode_handler::DlModeHandler,
-    event_handler: event_handler::EventHandler,
-    message_handler: message_handler::MessageHandler,
+    event_handler: event_handler::EventHandler<'a>,
+    message_handler: message_handler::MessageHandler<'a>,
     pd_handler: pd_handler::ProcessDataHandler,
-    isdu_handler: isdu_handler::IsduHandler,
-    od_handler: od_handler::OnRequestDataHandler,
+    isdu_handler: isdu_handler::IsduHandler<'a>,
+    od_handler: od_handler::OnRequestDataHandler<'a>,
 }
 
-impl DataLinkLayer {
+impl<'b> DataLinkLayer<'b> {
     pub fn poll(
-        &mut self,
+        &'b mut self,
         system_management: &mut sm::SystemManagement,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
+        application_layer: &mut al::ApplicationLayer,
     ) -> IoLinkResult<()> {
-        let _ = self.command_handler.poll(physical_layer, &mut &mut self.message_handler);
-        let _ = self.mode_handler.poll(
-            &mut self.isdu_handler,
-            &mut self.event_handler,
-            &mut self.command_handler,
-            &mut self.od_handler,
-            &mut self.pd_handler,
-            &mut self.message_handler,
-            system_management,
-        );
-        let _ = self.event_handler.poll(&mut self.message_handler);
-        let _ = self.message_handler.poll(
-            &mut self.event_handler,
-            &mut self.isdu_handler,
-            &mut self.od_handler,
-            &mut self.pd_handler,
-            &mut self.mode_handler,
-            physical_layer,
-        );
-        let _ = self.pd_handler.poll();
-        let _ = self.isdu_handler.poll();
-        let _ = self.od_handler.poll(
-            &mut self.command_handler,
-            &mut self.isdu_handler,
-            &mut self.event_handler
-        );
+        // Command handler poll
+        {
+            let _ = self
+                .command_handler
+                .poll(&mut self.message_handler, application_layer);
+        }
+        
+        // Mode handler poll
+        {
+            let _ = self.mode_handler.poll(
+                &mut self.isdu_handler,
+                &mut self.event_handler,
+                &mut self.command_handler,
+                &mut self.od_handler,
+                &mut self.pd_handler,
+                &mut self.message_handler,
+                system_management,
+            );
+        }
+        
+        // Event handler poll
+        {
+            let _ = self.event_handler.poll(&mut self.message_handler);
+        }
+        
+        // PD handler poll
+        {
+            let _ = self.pd_handler.poll(&mut self.message_handler);
+        }
+        
+        // ISDU handler poll - separate scope to avoid conflicts
+        {
+            let isdu_handler = &mut self.isdu_handler;
+            let _ = isdu_handler.poll(&mut self.message_handler, application_layer);
+        }
+        
+        // Message handler poll - separate scope to avoid conflicts
+        {
+            let _ = self.message_handler.poll(
+                &mut self.event_handler,
+                &mut self.isdu_handler,
+                &mut self.od_handler,
+                &mut self.pd_handler,
+                &mut self.mode_handler,
+                physical_layer,
+            );
+        }
+        
+        // OD handler poll - separate scope to avoid conflicts (moved to the end)
+        {
+            let _ = self.od_handler.poll(
+                &mut self.command_handler,
+                &mut self.isdu_handler,
+                &mut self.event_handler,
+                application_layer,
+            );
+        }
+        
         Ok(())
     }
 }
 
-impl od_handler::DlParamRsp for DataLinkLayer {
+impl<'a> od_handler::DlParamRsp for DataLinkLayer<'a> {
     fn dl_read_param_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
-        self.od_handler.dl_read_param_rsp(length, data, &mut self.message_handler)
+        self.od_handler
+            .dl_read_param_rsp(length, data, &mut self.message_handler)
     }
-    
+
     fn dl_write_param_rsp(&mut self) -> IoLinkResult<()> {
         // No response is expected in specs
         Ok(())
     }
 }
 
-impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
+impl<'a> isdu_handler::DlIsduTransportRsp for DataLinkLayer<'a> {
     fn dl_isdu_transport_read_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
-        self.isdu_handler.dl_isdu_transport_read_rsp(length, data, &mut self.message_handler)
+        self.isdu_handler
+            .dl_isdu_transport_read_rsp(length, data, &mut self.message_handler)
     }
 
     fn dl_isdu_transport_write_rsp(&mut self) -> IoLinkResult<()> {
-        self.isdu_handler.dl_isdu_transport_write_rsp(&mut self.message_handler)
+        self.isdu_handler
+            .dl_isdu_transport_write_rsp(&mut self.message_handler)
     }
 
-    fn dl_isdu_transport_read_error_rsp(&mut self, error: u8, additional_error: u8) -> IoLinkResult<()> {
-        self.isdu_handler.dl_isdu_transport_read_error_rsp(error, additional_error, &mut self.message_handler)
+    fn dl_isdu_transport_read_error_rsp(
+        &mut self,
+        error: u8,
+        additional_error: u8,
+    ) -> IoLinkResult<()> {
+        self.isdu_handler.dl_isdu_transport_read_error_rsp(
+            error,
+            additional_error,
+            &mut self.message_handler,
+        )
     }
-    
-    fn dl_isdu_transport_write_error_rsp(&mut self, error: u8, additional_error: u8) -> IoLinkResult<()> {
-        self.isdu_handler.dl_isdu_transport_write_error_rsp(error, additional_error, &mut self.message_handler)
+
+    fn dl_isdu_transport_write_error_rsp(
+        &mut self,
+        error: u8,
+        additional_error: u8,
+    ) -> IoLinkResult<()> {
+        self.isdu_handler.dl_isdu_transport_write_error_rsp(
+            error,
+            additional_error,
+            &mut self.message_handler,
+        )
     }
 }
 
-impl event_handler::DlEventReq for DataLinkLayer {
+impl<'a> event_handler::DlEventReq for DataLinkLayer<'a> {
     fn dl_event_req(
         &mut self,
-        event_instance: types::EventInstance,
-        event_type: types::EventType,
-        event_mode: types::EventMode,
-        event_code: u16, // device_event_code macro to be used
-        events_left: u8,
+        event_count: u8,
+        event_entries: &[storage::event_memory::EventEntry; 6],
     ) -> IoLinkResult<()> {
-        self.event_handler.dl_event_req(
-            event_instance,
-            event_type,
-            event_mode,
-            event_code,
-            events_left,
-        )
+        self.event_handler.dl_event_req(event_count, event_entries)
     }
 
     fn dl_event_trigger_req(&mut self) -> IoLinkResult<()> {
@@ -113,13 +157,13 @@ impl event_handler::DlEventReq for DataLinkLayer {
     }
 }
 
-impl pd_handler::DlPDInputUpdate for DataLinkLayer {
+impl<'a> pd_handler::DlPDInputUpdate for DataLinkLayer<'a> {
     fn dl_pd_input_update_req(&mut self, length: u8, input_data: &[u8]) -> IoLinkResult<()> {
         self.pd_handler.dl_pd_input_update_req(length, input_data)
     }
 }
 
-impl Default for DataLinkLayer {
+impl<'a> Default for DataLinkLayer<'a> {
     fn default() -> Self {
         Self {
             command_handler: command_handler::CommandHandler::new(),
@@ -133,7 +177,7 @@ impl Default for DataLinkLayer {
     }
 }
 
-impl pl::physical_layer::PhysicalLayerInd for DataLinkLayer {
+impl<'a> pl::physical_layer::PhysicalLayerInd for DataLinkLayer<'a> {
     fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
         self.mode_handler.pl_wake_up_ind()
     }

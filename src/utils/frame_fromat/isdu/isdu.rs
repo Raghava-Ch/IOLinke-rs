@@ -1,6 +1,12 @@
-use crate::{isdu_busy, isdu_extended_length_code, isdu_read_failure_code, isdu_read_request_index_code, isdu_read_request_index_index_subindex_code, isdu_read_request_index_subindex_code, isdu_read_success_code, isdu_write_failure_code, isdu_write_request_index_code, isdu_write_request_index_index_subindex_code, isdu_write_request_index_subindex_code, isdu_write_success_code, IoLinkError, IoLinkResult};
 use crate::dl::IsduService;
-
+use crate::{
+    IoLinkError, IoLinkResult, isdu_busy, isdu_extended_length_code, isdu_no_service,
+    isdu_read_failure_code, isdu_read_request_index_code,
+    isdu_read_request_index_index_subindex_code, isdu_read_request_index_subindex_code,
+    isdu_read_success_code, isdu_write_failure_code, isdu_write_request_index_code,
+    isdu_write_request_index_index_subindex_code, isdu_write_request_index_subindex_code,
+    isdu_write_success_code,
+};
 
 pub fn compile_isdu_write_success_response(buffer: &mut [u8]) -> IoLinkResult<()> {
     let i_service = IsduService::new()
@@ -13,11 +19,16 @@ pub fn compile_isdu_write_success_response(buffer: &mut [u8]) -> IoLinkResult<()
     Ok(())
 }
 
-pub fn compile_isdu_read_success_response(length: u8, data: &[u8], buffer: &mut [u8]) -> IoLinkResult<()> {    
-    if (1..=15).contains(&length) { // Valid data length range (excluding length byte and checksum)
+pub fn compile_isdu_read_success_response(
+    length: u8,
+    data: &[u8],
+    buffer: &mut [u8],
+) -> IoLinkResult<()> {
+    if (1..=15).contains(&length) {
+        // Valid data length range (excluding length byte and checksum)
         let i_service = IsduService::new()
-        .with_i_service(isdu_read_success_code!())
-        .with_length(length + 2); // +2 for length byte and checksum
+            .with_i_service(isdu_read_success_code!())
+            .with_length(length + 2); // +2 for length byte and checksum
         buffer[0] = i_service.into_bytes()[0];
         buffer[1..1 + length as usize].copy_from_slice(&data[..length as usize]);
         let total_length = 1 + length as usize;
@@ -38,7 +49,11 @@ pub fn compile_isdu_read_success_response(length: u8, data: &[u8], buffer: &mut 
     Ok(())
 }
 
-pub fn compile_isdu_read_failure_response(error_code: u8, additional_error_code: u8, buffer: &mut [u8]) {
+pub fn compile_isdu_read_failure_response(
+    error_code: u8,
+    additional_error_code: u8,
+    buffer: &mut [u8],
+) {
     let i_service = IsduService::new()
         .with_i_service(isdu_read_failure_code!())
         .with_length(4);
@@ -73,9 +88,15 @@ pub fn compile_isdu_busy_failure_response() -> IoLinkResult<[u8; 1]> {
     Ok([buffer])
 }
 
-pub fn parse_isdu_write_request(
-    buffer: &[u8],
-) -> IoLinkResult<(IsduService, u16, u8, &[u8])> {
+pub fn compile_isdu_no_service_response() -> IoLinkResult<[u8; 1]> {
+    let i_service = IsduService::new()
+        .with_i_service(0)
+        .with_length(isdu_no_service!());
+    let buffer = i_service.into_bytes()[0];
+    Ok([buffer])
+}
+
+pub fn parse_isdu_write_request(buffer: &[u8]) -> IoLinkResult<(IsduService, u16, u8, &[u8])> {
     if buffer.len() < 3 {
         return Err(IoLinkError::InvalidParameter);
     }
@@ -86,8 +107,7 @@ pub fn parse_isdu_write_request(
     let i_service: IsduService = IsduService::from_bytes([buffer[0]]);
     if i_service.i_service() != isdu_write_request_index_code!() {
         parse_write_request_with_index(buffer)
-    }
-    else if i_service.i_service() == isdu_write_request_index_subindex_code!() {
+    } else if i_service.i_service() == isdu_write_request_index_subindex_code!() {
         parse_write_request_with_index_subindex(buffer)
     } else if i_service.i_service() == isdu_write_request_index_index_subindex_code!() {
         parse_write_request_with_index_index_subindex(buffer)
@@ -96,9 +116,7 @@ pub fn parse_isdu_write_request(
     }
 }
 
-pub fn parse_isdu_read_request(
-    buffer: &[u8],
-) -> IoLinkResult<(IsduService, u16, u8)> {
+pub fn parse_isdu_read_request(buffer: &[u8]) -> IoLinkResult<(IsduService, u16, u8)> {
     if buffer.len() < 3 {
         return Err(IoLinkError::InvalidParameter);
     }
@@ -109,8 +127,7 @@ pub fn parse_isdu_read_request(
     let i_service: IsduService = IsduService::from_bytes([buffer[0]]);
     if i_service.i_service() != isdu_read_request_index_code!() {
         parse_read_request_with_index(buffer)
-    }
-    else if i_service.i_service() == isdu_read_request_index_subindex_code!() {
+    } else if i_service.i_service() == isdu_read_request_index_subindex_code!() {
         parse_read_request_with_index_subindex(buffer)
     } else if i_service.i_service() == isdu_read_request_index_index_subindex_code!() {
         parse_read_request_with_index_index_subindex(buffer)
@@ -119,9 +136,7 @@ pub fn parse_isdu_read_request(
     }
 }
 
-pub fn parse_read_request_with_index(
-    buffer: &[u8],
-) -> IoLinkResult<(IsduService, u16, u8)> {
+pub fn parse_read_request_with_index(buffer: &[u8]) -> IoLinkResult<(IsduService, u16, u8)> {
     let i_service: IsduService = IsduService::from_bytes([buffer[0]]);
     if i_service.i_service() != isdu_read_request_index_code!() {
         return Err(IoLinkError::InvalidParameter);
@@ -166,7 +181,12 @@ pub fn parse_write_request_with_index(
         return Err(IoLinkError::InvalidData);
     }
     let index = buffer[1];
-    Ok((i_service, index as u16, 0, &buffer[2..(3 - length as usize)]))
+    Ok((
+        i_service,
+        index as u16,
+        0,
+        &buffer[2..(3 - length as usize)],
+    ))
 }
 
 pub fn parse_write_request_with_index_subindex(
