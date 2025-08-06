@@ -4,7 +4,7 @@
 //! IO-Link Specification v1.1.4
 
 use crate::{
-    al::{self,},
+    al::{self, services::ApplicationLayerServicesInd},
     dl::{self, DlIsduTransportRsp, DlParamRsp},
     types::{IoLinkError, IoLinkResult},
 };
@@ -178,7 +178,7 @@ impl<'a> OnRequestDataHandler<'a> {
                 self.exec_transition = Transition::Tn;
                 self.execute_t6(isdu, application_layer)?;
             }
-            Transition::T7(index, sub_index, data) => {
+            Transition::T7(index, _, data) => {
                 self.exec_transition = Transition::Tn;
                 self.execute_t7(index, data, data_link_layer)?;
             }
@@ -232,7 +232,7 @@ impl<'a> OnRequestDataHandler<'a> {
         if !(0..=31).contains(&address) {
             return Err(IoLinkError::InvalidAddress);
         }
-        application_layer.read_ind(address as u16, 0)?;
+        application_layer.al_read_ind(address as u16, 0)?;
         Ok(())
     }
 
@@ -256,7 +256,7 @@ impl<'a> OnRequestDataHandler<'a> {
     ) -> IoLinkResult<()> {
         self.read_cycle = true;
         // TODO: Invoke AL_Read
-        application_layer.read_ind(isdu.index, isdu.sub_index)?;
+        application_layer.al_read_ind(isdu.index, isdu.sub_index)?;
         Ok(())
     }
 
@@ -268,7 +268,7 @@ impl<'a> OnRequestDataHandler<'a> {
     ) -> IoLinkResult<()> {
         self.read_cycle = false;
         // TODO: Invoke AL_Write
-        application_layer.write_ind(isdu.index, isdu.sub_index, &isdu.data)?;
+        application_layer.al_write_ind(isdu.index, isdu.sub_index, &isdu.data)?;
         Ok(())
     }
 
@@ -321,7 +321,7 @@ impl<'a> OnRequestDataHandler<'a> {
 }
 
 impl<'a> dl::DlWriteParamInd for OnRequestDataHandler<'a> {
-    fn write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()> {
+    fn dl_write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()> {
         // Handle the write parameter indication
         self.process_event(OnRequestHandlerEvent::DlWriteParamInd(index, data))?;
         Ok(())
@@ -329,7 +329,7 @@ impl<'a> dl::DlWriteParamInd for OnRequestDataHandler<'a> {
 }
 
 impl<'a> dl::DlReadParamInd for OnRequestDataHandler<'a> {
-    fn read_param_ind(&mut self, address: u8) -> IoLinkResult<()> {
+    fn dl_read_param_ind(&mut self, address: u8) -> IoLinkResult<()> {
         // Handle the read parameter indication
         self.process_event(OnRequestHandlerEvent::DlReadParamInd(address))?;
         Ok(())
@@ -337,7 +337,7 @@ impl<'a> dl::DlReadParamInd for OnRequestDataHandler<'a> {
 }
 
 impl<'a> dl::DlIsduAbort for OnRequestDataHandler<'a> {
-    fn isdu_abort(&mut self) -> IoLinkResult<()> {
+    fn dl_isdu_abort(&mut self) -> IoLinkResult<()> {
         // Handle ISDU abort
         self.process_event(OnRequestHandlerEvent::DlIsduAbort)?;
         Ok(())
@@ -345,7 +345,7 @@ impl<'a> dl::DlIsduAbort for OnRequestDataHandler<'a> {
 }
 
 impl<'a> dl::DlIsduTransportInd for OnRequestDataHandler<'a> {
-    fn isdu_transport_ind(&mut self, isdu: dl::Isdu) -> IoLinkResult<()> {
+    fn dl_isdu_transport_ind(&mut self, isdu: dl::Isdu) -> IoLinkResult<()> {
         match isdu.direction {
             true => {
                 self.process_event(OnRequestHandlerEvent::DlIsduTransportIndDirWrite(isdu))?;

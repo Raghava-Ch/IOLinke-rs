@@ -42,26 +42,26 @@ impl<'a> ApplicationLayer<'a> {
 }
 
 impl<'a> dl::DlIsduAbort for ApplicationLayer<'a> {
-    fn isdu_abort(&mut self) -> IoLinkResult<()> {
-        self.od_handler.isdu_abort()
+    fn dl_isdu_abort(&mut self) -> IoLinkResult<()> {
+        self.od_handler.dl_isdu_abort()
     }
 }
 
 impl<'a> dl::DlIsduTransportInd for ApplicationLayer<'a> {
-    fn isdu_transport_ind(&mut self, isdu: dl::Isdu) -> IoLinkResult<()> {
-        self.od_handler.isdu_transport_ind(isdu)
+    fn dl_isdu_transport_ind(&mut self, isdu: dl::Isdu) -> IoLinkResult<()> {
+        self.od_handler.dl_isdu_transport_ind(isdu)
     }
 }
 
 impl<'a> dl::DlReadParamInd for ApplicationLayer<'a> {
-    fn read_param_ind(&mut self, address: u8) -> IoLinkResult<()> {
-        self.od_handler.read_param_ind(address)
+    fn dl_read_param_ind(&mut self, address: u8) -> IoLinkResult<()> {
+        self.od_handler.dl_read_param_ind(address)
     }
 }
 
 impl<'a> dl::DlWriteParamInd for ApplicationLayer<'a> {
-    fn write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()> {
-        self.od_handler.write_param_ind(index, data)
+    fn dl_write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()> {
+        self.od_handler.dl_write_param_ind(index, data)
     }
 }
 

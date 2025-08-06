@@ -4,7 +4,7 @@
 //! IO-Link Specification v1.1.4
 
 use crate::{
-    al, dl::{self, DlEventReq}, storage, types::{self, IoLinkError, IoLinkResult}
+    al::{self, services::AlEventCnf}, dl::{self, DlEventReq}, storage, types::{IoLinkError, IoLinkResult}
 };
 
 /// See 8.3.3.2 Event state machine of the Device AL
@@ -191,11 +191,11 @@ impl<'a> EventHandler<'a> {
     }
 }
 
-impl<'a> al::services::AlEventReq for EventHandler<'a> {
+impl<'a> al::services::AlEventReq<'a> for EventHandler<'a> {
     fn al_event_req(
         &mut self,
         event_count: u8,
-        event_entries: &[storage::event_memory::EventEntry; 6],
+        event_entries: &'a [storage::event_memory::EventEntry; 6],
     ) -> IoLinkResult<()> {
         self.process_event(EventStateMachineEvent::AlEventRequest(
             event_count,

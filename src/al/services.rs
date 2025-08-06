@@ -3,7 +3,7 @@
 //! This module implements the Application Layer interface as defined in
 //! IO-Link Specification v1.1.4 Section 8.4
 
-use crate::{storage, types::{self, IoLinkResult}};
+use crate::{dl, storage, types::{self, IoLinkResult}};
 use heapless::Vec;
 
 /// Application Layer trait defining all request/indication methods
@@ -36,11 +36,11 @@ pub trait AlWriteRsp {
     fn al_write_rsp(&mut self, result: AlResult<()>) -> IoLinkResult<()>;
 }
 
-pub trait AlEventReq {
+pub trait AlEventReq<'a> {
     fn al_event_req(
         &mut self,
         event_count: u8,
-        event_entries: &[storage::event_memory::EventEntry; 6],
+        event_entries: &'a [storage::event_memory::EventEntry; 6],
     ) -> IoLinkResult<()>; 
 }
 pub trait AlControlReq {
@@ -68,6 +68,10 @@ pub trait AlGetOutputCnf {
     fn al_get_output_cnf(&mut self, result: AlResult<()>) -> IoLinkResult<()>;
 }
 
+pub trait AlEventCnf {
+    fn al_event_cnf(&mut self) -> IoLinkResult<()>;
+}
+
 pub struct ApplicationLayerServices {
 }
 
@@ -75,6 +79,18 @@ impl<'a> ApplicationLayerServices {
     pub fn new() -> Self {
         Self {
         }
+    }
+}
+
+impl<'a> Default for ApplicationLayerServices {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a> dl::DlControlInd for ApplicationLayerServices {
+    fn dl_control_ind(&mut self, control_code: types::DlControlCode) -> IoLinkResult<()> {
+        todo!()
     }
 }
 
@@ -100,6 +116,12 @@ impl<'a> ApplicationLayerServicesInd for ApplicationLayerServices {
     }
 
     fn al_control_ind(&mut self, control_code: types::DlControlCode) -> IoLinkResult<()> {
+        todo!()
+    }
+}
+
+impl<'a> AlEventCnf for ApplicationLayerServices {
+    fn al_event_cnf(&mut self) -> IoLinkResult<()> {
         todo!()
     }
 }

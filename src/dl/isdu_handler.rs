@@ -17,7 +17,7 @@ use modular_bitfield::prelude::*;
 
 pub trait DlIsduAbort {
     /// See 7.3.6.5 DL_ISDUAbort
-    fn isdu_abort(&mut self) -> IoLinkResult<()>;
+    fn dl_isdu_abort(&mut self) -> IoLinkResult<()>;
 }
 
 pub trait DlIsduTransportInd {
@@ -26,7 +26,7 @@ pub trait DlIsduTransportInd {
     /// Master to send a service request from the Master application layer to the Device. It is used by
     /// the Device to send a service response to the Master from the Device application layer. The
     /// parameters of the service primitives are listed in Table 21.
-    fn isdu_transport_ind(&mut self, isdu: Isdu) -> IoLinkResult<()>;
+    fn dl_isdu_transport_ind(&mut self, isdu: Isdu) -> IoLinkResult<()>;
 }
 
 pub trait DlIsduTransportRsp {
@@ -372,7 +372,7 @@ impl<'a> IsduHandler<'a> {
             return Err(IoLinkError::InvalidData);
         };
 
-        application_layer.isdu_transport_ind(Isdu {
+        application_layer.dl_isdu_transport_ind(Isdu {
             index,
             sub_index,
             data: Vec::new(),
@@ -434,13 +434,13 @@ impl<'a> IsduHandler<'a> {
     /// Execute transition T10: ISDUWait (3) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
     fn execute_t10(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
-        application_layer.isdu_abort()
+        application_layer.dl_isdu_abort()
     }
 
     /// Execute transition T11: ISDUResponse (4) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
     fn execute_t11(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
-        application_layer.isdu_abort()
+        application_layer.dl_isdu_abort()
     }
 
     /// Execute transition T12: Idle (1) -> Inactive (0)
@@ -452,7 +452,7 @@ impl<'a> IsduHandler<'a> {
     /// Execute transition T13: ISDURequest (2) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
     fn execute_t13(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
-        application_layer.isdu_abort()
+        application_layer.dl_isdu_abort()
     }
 
     /// Execute transition T14: Idle (1) -> Idle (1)
@@ -468,13 +468,13 @@ impl<'a> IsduHandler<'a> {
     /// Execute transition T15: ISDUWait (3) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
     fn execute_t15(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
-        application_layer.isdu_abort()
+        application_layer.dl_isdu_abort()
     }
 
     /// Execute transition T16: ISDUResponse (4) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
     fn execute_t16(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
-        application_layer.isdu_abort()
+        application_layer.dl_isdu_abort()
     }
 
     pub fn dl_isdu_transport_read_rsp(

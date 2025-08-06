@@ -22,7 +22,7 @@ pub trait DlWriteParamInd {
     /// See 7.2.1.3 DL_WriteParam
     /// The DL_WriteParam service is used by the AL to write a parameter value to the Device via
     /// the page communication channel. The parameters of the service primitives are listed in Table 18.
-    fn write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()>;
+    fn dl_write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()>;
 }
 
 pub trait DlParamRsp {
@@ -35,7 +35,7 @@ pub trait DlReadParamInd {
     /// See 7.2.1.2 DL_ReadParam
     /// The DL_ReadParam service is used by the AL to read a parameter value from the Device via
     /// the page communication channel. The parameters of the service primitives are listed in Table 17.
-    fn read_param_ind(&mut self, address: u8) -> IoLinkResult<()>;
+    fn dl_read_param_ind(&mut self, address: u8) -> IoLinkResult<()>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -222,10 +222,10 @@ impl<'a> OnRequestDataHandler<'a> {
         if od_ind_data.com_channel == types::ComChannel::Page {
             if od_ind_data.rw_direction == types::RwDirection::Read {
                 // Provide data content of requested parameter
-                application_layer.read_param_ind(od_ind_data.address_ctrl)?;
+                application_layer.dl_read_param_ind(od_ind_data.address_ctrl)?;
             } else if od_ind_data.rw_direction == types::RwDirection::Write {
                 // Perform appropriate write action
-                application_layer.write_param_ind(od_ind_data.address_ctrl, od_ind_data.data[0])?;
+                application_layer.dl_write_param_ind(od_ind_data.address_ctrl, od_ind_data.data[0])?;
             }
         } else {
             return Err(IoLinkError::InvalidEvent);

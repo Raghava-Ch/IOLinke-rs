@@ -51,7 +51,7 @@ pub use types::*;
 /// Simple IO-Link device implementation
 pub struct IoLinkDevice<'a> {
     physical_layer: pl::physical_layer::PhysicalLayer,
-    dl: dl::DataLinkLayer,
+    dl: dl::DataLinkLayer<'a>,
     system_management: sm::SystemManagement,
     services: al::services::ApplicationLayerServices,
     application: al::ApplicationLayer<'a>,
@@ -80,10 +80,10 @@ impl<'a> IoLinkDevice<'a> {
     }
 
     /// Step 3: Basic polling function
-    pub fn poll(&mut self) -> IoLinkResult<()> {
+    pub fn poll(&'a mut self) -> IoLinkResult<()> {
         // Poll all state machines
-        self.dl.poll(&mut self.system_management, &mut self.physical_layer)?;
         self.application.poll(&mut self.dl)?;
+        self.dl.poll(&mut self.system_management, &mut self.physical_layer, &mut self.application)?;
         Ok(())
     }
 }
