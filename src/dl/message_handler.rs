@@ -87,9 +87,9 @@ macro_rules! compile_checksum {
 /// Compile Checksum / Status (CKS) byte
 macro_rules! compile_checksum_status {
     ($data:expr, $event_flag:expr, $pd_status:expr, $checksum:expr) => {{
-        compile_event_flag!($data, $event_flag);
-        compile_pd_status!($data, $pd_status);
-        compile_checksum!($data, $checksum);
+        compile_event_flag!($data, $event_flag) |
+        compile_pd_status!($data, $pd_status) |
+        compile_checksum!($data, $checksum) |
         $data
     }};
 }
@@ -275,7 +275,7 @@ impl<'a> MessageHandler<'a> {
 
         let (new_transition, new_state) = match (self.state, event) {
             (State::Inactive, Event::MhConfActive) => (Transition::T1, State::Idle),
-            (State::Inactive, Event::MhConfInactive) => (Transition::Tn, State::Inactive),
+            (State::Inactive, Event::MhConfInactive) => (Transition::T11, State::Inactive),
             (State::Idle, Event::PlTransfer) => (Transition::T2, State::GetMessage),
             (State::Idle, Event::TimerMaxCycle) => (Transition::T10, State::Idle),
             (State::GetMessage, Event::PlTransfer) => (Transition::T3, State::GetMessage),
@@ -720,8 +720,8 @@ fn compile_iolink_startup_frame(
         .ok_or(IoLinkError::InvalidData)?[0];
     tx_buffer[1] = compile_checksum_status!(
         tx_buffer[1],
-        io_link_message.event_flag,
-        io_link_message.pd_status.into(),
+        io_link_message.event_flag as u8,
+        io_link_message.pd_status.unwrap_or(types::PdStatus::INVALID) as u8,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(2, &tx_buffer);
@@ -746,8 +746,8 @@ fn compile_iolink_preoperate_frame(
     }
     tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[OD_LENGTH as usize],
-        io_link_message.event_flag,
-        io_link_message.pd_status,
+        io_link_message.event_flag as u8,
+        io_link_message.pd_status.unwrap_or(types::PdStatus::INVALID) as u8,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(OD_LENGTH + 1, &tx_buffer);
@@ -774,14 +774,14 @@ fn compile_iolink_native_operate_frame(
     }
     tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[OD_LENGTH as usize],
-        io_link_message.event_flag,
-        io_link_message.pd_status,
+        io_link_message.event_flag as u8,
+        io_link_message.pd_status.unwrap_or(types::PdStatus::INVALID) as u8,
         0 // Checksum will be calculated later
     );
     tx_buffer[PD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[PD_LENGTH as usize],
-        io_link_message.event_flag,
-        io_link_message.pd_status,
+        io_link_message.event_flag as u8,
+        io_link_message.pd_status.unwrap_or(types::PdStatus::INVALID) as u8,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(OD_LENGTH + PD_LENGTH + 1, &tx_buffer);
@@ -807,8 +807,8 @@ fn compile_iolink_interleaved_operate_frame_od(
     }
     tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[OD_LENGTH as usize],
-        io_link_message.event_flag,
-        io_link_message.pd_status,
+        io_link_message.event_flag as u8,
+        io_link_message.pd_status.unwrap_or(types::PdStatus::INVALID) as u8,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(OD_LENGTH + 1, &tx_buffer);
@@ -833,8 +833,8 @@ fn compile_iolink_interleaved_operate_frame_pd(
     }
     tx_buffer[PD_LENGTH as usize] = compile_checksum_status!(
         tx_buffer[PD_LENGTH as usize],
-        io_link_message.event_flag,
-        io_link_message.pd_status,
+        io_link_message.event_flag as u8,
+        io_link_message.pd_status.unwrap_or(types::PdStatus::INVALID) as u8,
         0 // Checksum will be calculated later
     );
     let checksum = calculate_checksum(PD_LENGTH + 1, &tx_buffer);

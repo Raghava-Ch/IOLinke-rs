@@ -43,6 +43,7 @@
 /// let byte = construct_u8!(5, 2, 0, 0, 0, 0, 0, 1);
 /// assert_eq!(byte, 0xC1); // 5 & 1 = 1, 2 & 1 = 0
 /// ```
+
 #[macro_export]
 macro_rules! construct_u8 {
     ($bit7:expr, $bit6:expr, $bit5:expr, $bit4:expr, $bit3:expr, $bit2:expr, $bit1:expr, $bit0:expr) => {
