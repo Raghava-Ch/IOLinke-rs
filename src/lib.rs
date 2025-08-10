@@ -28,13 +28,14 @@
 pub use iolinke_macros::*;
 
 mod al;
-mod dl;
-mod pl;
-mod parameter;
-mod sm;
-mod storage;
 mod config;
+mod dl;
+mod parameter;
+mod pl;
+mod storage;
+mod system_management;
 mod utils;
+mod data_storage;
 
 #[cfg(feature = "std")]
 pub mod ffi;
@@ -43,8 +44,9 @@ mod types;
 #[cfg(test)]
 pub mod test_utils;
 #[cfg(test)]
-pub use test_utils::MockHal;
+pub use test_utils::*;
 
+use crate::system_management::{SmResult, SystemManagementInd};
 // Re-export main traits and types
 pub use types::*;
 
@@ -52,7 +54,7 @@ pub use types::*;
 pub struct IoLinkDevice<'a> {
     physical_layer: pl::physical_layer::PhysicalLayer,
     dl: dl::DataLinkLayer<'a>,
-    system_management: sm::SystemManagement,
+    system_management: system_management::SystemManagement,
     services: al::services::ApplicationLayerServices,
     application: al::ApplicationLayer<'a>,
 }
@@ -61,7 +63,7 @@ impl<'a> IoLinkDevice<'a> {
     /// Create a new simple IO-Link device
     pub fn new() -> Self {
         Self {
-            system_management: sm::SystemManagement::default(),
+            system_management: system_management::SystemManagement::default(),
             physical_layer: pl::physical_layer::PhysicalLayer::default(),
             dl: dl::DataLinkLayer::default(),
             services: al::services::ApplicationLayerServices::default(),
@@ -83,7 +85,41 @@ impl<'a> IoLinkDevice<'a> {
     pub fn poll(&'a mut self) -> IoLinkResult<()> {
         // Poll all state machines
         self.application.poll(&mut self.dl)?;
-        self.dl.poll(&mut self.system_management, &mut self.physical_layer, &mut self.application)?;
+        self.dl.poll(
+            &mut self.system_management,
+            &mut self.physical_layer,
+            &mut self.application,
+        )?;
         Ok(())
+    }
+}
+
+impl<'a> system_management::SystemManagementInd for IoLinkDevice<'a> {
+    fn sm_device_mode_ind(&mut self, mode: types::DeviceMode) -> SmResult<()> {
+        todo!()
+    }
+}
+
+impl<'a> system_management::SystemManagementCnf for IoLinkDevice<'a> {
+    fn sm_set_device_com_cnf(&self, result: SmResult<()>) -> SmResult<()> {
+        todo!()
+    }
+    fn sm_get_device_com_cnf(
+        &self,
+        result: SmResult<&system_management::DeviceCom>,
+    ) -> SmResult<()> {
+        todo!()
+    }
+    fn sm_set_device_ident_cnf(&self, result: SmResult<()>) -> SmResult<()> {
+        todo!()
+    }
+    fn sm_get_device_ident_cnf(
+        &self,
+        result: SmResult<&system_management::DeviceIdent>,
+    ) -> SmResult<()> {
+        todo!()
+    }
+    fn sm_set_device_mode_cnf(&self, result: SmResult<()>) -> SmResult<()> {
+        todo!()
     }
 }

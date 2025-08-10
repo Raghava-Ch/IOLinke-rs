@@ -166,10 +166,6 @@ impl Into<u8> for EventMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DeviceMode {
-    /// (Device changed to the SM mode "SM_IdentStartup")
-    IdentStartup,
-    /// (Device changed to the SM mode "SM_IdentChange")
-    IdentChange,
     /// (Device changed to waiting for configuration)
     Idle,
     /// (Device changed to the mode defined in service "SM_SetDeviceCom")

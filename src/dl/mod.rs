@@ -1,4 +1,4 @@
-use crate::{IoLinkResult, pl, sm};
+use crate::{IoLinkResult, pl, system_management};
 use crate::{al, storage};
 
 mod command_handler;
@@ -29,7 +29,7 @@ pub struct DataLinkLayer<'a> {
 impl<'b> DataLinkLayer<'b> {
     pub fn poll(
         &'b mut self,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
         application_layer: &mut al::ApplicationLayer,
     ) -> IoLinkResult<()> {
@@ -88,6 +88,7 @@ impl<'b> DataLinkLayer<'b> {
                 &mut self.isdu_handler,
                 &mut self.event_handler,
                 application_layer,
+                system_management,
             );
         }
         

@@ -3,9 +3,10 @@
 //! This module implements the On request Data Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 7.3.5.3
 
+use iolinke_macros::direct_parameter_address;
+
 use crate::{
-    al, dl,
-    types::{self, IoLinkError, IoLinkResult},
+    al, dl::{self, DlInd}, system_management::{self, SystemManagement}, types::{self, IoLinkError, IoLinkResult}
 };
 
 pub trait OdInd<'a> {
@@ -165,6 +166,7 @@ impl<'a> OnRequestDataHandler<'a> {
         isdu_handler: &mut dl::isdu_handler::IsduHandler<'a>,
         event_handler: &mut dl::event_handler::EventHandler<'a>,
         application_layer: &mut al::ApplicationLayer,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
@@ -179,12 +181,12 @@ impl<'a> OnRequestDataHandler<'a> {
             Transition::T2(od_ind_data) => {
                 self.exec_transition = Transition::Tn;
                 // Provide data content of requested parameter or perform appropriate write action
-                self.execute_t2(od_ind_data, command_handler, application_layer)?;
+                self.execute_t2(od_ind_data, command_handler, application_layer, system_management)?;
             }
             Transition::T3(od_ind_data) => {
                 self.exec_transition = Transition::Tn;
                 // Redirect to command handler
-                self.execute_t3(od_ind_data, command_handler)?;
+                self.execute_t3(od_ind_data, command_handler, system_management)?;
             }
             Transition::T4(od_ind_data) => {
                 self.exec_transition = Transition::Tn;
@@ -218,11 +220,14 @@ impl<'a> OnRequestDataHandler<'a> {
         od_ind_data: &OdIndData,
         command_handler: &mut dl::command_handler::CommandHandler,
         application_layer: &mut al::ApplicationLayer,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         if od_ind_data.com_channel == types::ComChannel::Page {
             if od_ind_data.rw_direction == types::RwDirection::Read {
                 // Provide data content of requested parameter
                 application_layer.dl_read_param_ind(od_ind_data.address_ctrl)?;
+                // Informing system management about MinCycleTime is read.
+                system_management.dl_read_ind(od_ind_data.address_ctrl);
             } else if od_ind_data.rw_direction == types::RwDirection::Write {
                 // Perform appropriate write action
                 application_layer.dl_write_param_ind(od_ind_data.address_ctrl, od_ind_data.data[0])?;
@@ -240,8 +245,12 @@ impl<'a> OnRequestDataHandler<'a> {
         &mut self,
         od_ind_data: &OdIndData,
         command_handler: &mut dl::command_handler::CommandHandler,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         command_handler.od_ind(od_ind_data)?;
+        let address = od_ind_data.address_ctrl;
+        let value = od_ind_data.data[0];
+        system_management.dl_write_ind(address, value);
         Ok(())
     }
 

@@ -4,7 +4,7 @@
 //! IO-Link Specification v1.1.4 Section 6.2
 
 use crate::types::{IoLinkError, IoLinkMode, IoLinkResult};
-use crate::{dl, pl, sm, types};
+use crate::{dl, pl, system_management, types};
 use crate::{DlMode, MHInfo, MasterCommand};
 
 /// DL indications to other modules
@@ -191,7 +191,7 @@ impl DlModeHandler {
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
         pd_handler: &mut dl::pd_handler::ProcessDataHandler,
         message_handler: &mut dl::message_handler::MessageHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
@@ -293,7 +293,7 @@ impl DlModeHandler {
     fn execute_t1(
         &mut self,
         message_handler: &mut dl::message_handler::MessageHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         // Activate message handler (call MH_Conf_ACTIVE in Figure 44)
         message_handler.mh_conf_update(crate::MhConfState::Active);
@@ -310,7 +310,7 @@ impl DlModeHandler {
         &mut self,
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
         command_handler: &mut dl::command_handler::CommandHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!(
             "DL-Mode: T2 - Communication mode {:?} established",
@@ -340,7 +340,7 @@ impl DlModeHandler {
         &mut self,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
         event_handler: &mut dl::event_handler::EventHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T3 - PREOPERATE command received");
         // Activate ISDU (call IH_Conf_ACTIVE in Figure 52)
@@ -358,7 +358,7 @@ impl DlModeHandler {
     fn execute_t4(
         &mut self,
         pd_handler: &mut dl::pd_handler::ProcessDataHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T4 - OPERATE command received from PREOPERATE");
         // Activate Process Data handler (call PD_Conf_ACTIVE in Figure 47)
@@ -376,7 +376,7 @@ impl DlModeHandler {
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
         event_handler: &mut dl::event_handler::EventHandler,
         pd_handler: &mut dl::pd_handler::ProcessDataHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T5 - OPERATE command received from STARTUP");
         // Activate Process Data handler (call PD_Conf_ACTIVE in Figure 47)
@@ -397,7 +397,7 @@ impl DlModeHandler {
         &mut self,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
         event_handler: &mut dl::event_handler::EventHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T6 - STARTUP command received from PREOPERATE");
         // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
@@ -417,7 +417,7 @@ impl DlModeHandler {
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
         event_handler: &mut dl::event_handler::EventHandler,
         pd_handler: &mut dl::pd_handler::ProcessDataHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T7 - STARTUP command received from OPERATE");
         // Deactivate Process Data handler (call PD_Conf_INACTIVE in Figure 47)
@@ -442,7 +442,7 @@ impl DlModeHandler {
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
         pd_handler: &mut dl::pd_handler::ProcessDataHandler,
         message_handler: &mut dl::message_handler::MessageHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T8 - FALLBACK command received from PREOPERATE");
         // Wait until TFBD elapsed,
@@ -470,7 +470,7 @@ impl DlModeHandler {
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
         pd_handler: &mut dl::pd_handler::ProcessDataHandler,
         message_handler: &mut dl::message_handler::MessageHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T9 - FALLBACK command received from OPERATE");
         // Wait until TFBD elapsed, 
@@ -498,7 +498,7 @@ impl DlModeHandler {
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
         pd_handler: &mut dl::pd_handler::ProcessDataHandler,
         message_handler: &mut dl::message_handler::MessageHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T10 - Unsuccessful wakeup, establishing SIO mode");
         self.current_mode = IoLinkMode::Sio;
@@ -523,7 +523,7 @@ impl DlModeHandler {
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
         event_handler: &mut dl::event_handler::EventHandler,
         pd_handler: &mut dl::pd_handler::ProcessDataHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T11 - Illegal M-sequence type from OPERATE");
         // Deactivate Process Data (call PD_Conf_INACTIVE in Figure 47)
@@ -544,7 +544,7 @@ impl DlModeHandler {
         &mut self,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
         event_handler: &mut dl::event_handler::EventHandler,
-        system_management: &mut sm::SystemManagement,
+        system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T12 - Illegal M-sequence type from PREOPERATE");
         // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
@@ -616,6 +616,12 @@ impl dl::command_handler::MasterCommandInd for DlModeHandler {
             }
             MasterCommand::Fallback => {
                 let _ = self.process_event(DlModeEvent::MasterCommandFallback);
+            }
+            MasterCommand::DeviceIdent => {
+                todo!()
+            }
+            MasterCommand::MasterIdent => {
+                todo!()
             }
             _ => return Err(IoLinkError::InvalidEvent),
         }
