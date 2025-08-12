@@ -1,3 +1,35 @@
+
+pub const MAX_WRITE_BUFFER_SIZE: usize = 65535;
+pub const MAX_PARAM_ENTRIES: usize = 100;
+
+/// Macro to configure block parameterization support and conditional code sections.
+///
+/// Usage:
+/// ```ignore
+/// block_param_support! {
+///     supported {
+///         // code if block parameterization is supported
+///     }
+///     not_supported {
+///         // code if block parameterization is NOT supported
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! block_param_support {
+    (supported { $($supported_code:tt)* } not_supported { $($not_supported_code:tt)* }) => {
+        #[cfg(feature = "block_parameterization")]
+        {
+            $($supported_code)*
+        }
+        #[cfg(not(feature = "block_parameterization"))]
+        {
+            $($not_supported_code)*
+        }
+    };
+}
+
+
 /// Macro to configure basic IO-Link device parameters.
 #[macro_export]
 macro_rules! iolink_device_config {

@@ -4,6 +4,40 @@
 //! IO-Link Specification v1.1.4
 
 use crate::types::{IoLinkError, IoLinkResult};
+use modular_bitfield::prelude::*;
+
+
+/// Data Storage State Property (8 bits)
+/// Bit 0: Reserved
+/// Bit 1-2: State of Data Storage (see `DsState`)
+/// Bit 3-6: Reserved
+/// Bit 7: DS_UPLOAD_FLAG ("1": DS_UPLOAD_REQ pending)
+#[bitfield(bits = 8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StateProperty {
+    /// Bit 0: Reserved
+    #[skip] __: B1,
+    /// Bits 1-2: State of Data Storage
+    #[bits = 2]
+    pub ds_state: DsState,
+    /// Bits 3-6: Reserved
+    #[skip] __: B4,
+    /// Bit 7: DS_UPLOAD_FLAG
+    pub ds_upload_flag: bool,
+}
+
+/// State of Data Storage (for bits 1-2 of StateProperty)
+#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
+#[bits = 2]
+pub enum DsState {
+    Inactive = 0b00,
+    Upload = 0b01,
+    Download = 0b10,
+    Locked = 0b11,
+}
+
+
+
 /// See 8.3.3.2 Event state machine of the Device AL
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DtatStorageStateMachineState {
@@ -186,4 +220,106 @@ impl DataStorage {
 
         Ok(())
     }
+
+
+    /// Executes transition T1: DSStateCheck -> DSLocked
+    ///
+    /// Action: Set State_Property = "Data Storage access locked"
+    /// TODO: Implement setting the state property to locked.
+    pub fn execute_t1(&mut self) -> IoLinkResult<()> {
+        // TODO: Set State_Property = "Data Storage access locked"
+        Ok(())
+    }
+
+    /// Executes transition T2: DSLocked -> DSLocked
+    ///
+    /// Action: Set DS_UPLOAD_FLAG = TRUE
+    /// TODO: Implement setting the DS_UPLOAD_FLAG.
+    pub fn execute_t2(&mut self) -> IoLinkResult<()> {
+        // TODO: Set DS_UPLOAD_FLAG = TRUE
+        Ok(())
+    }
+
+    /// Executes transition T3: DSLocked -> DSIdle
+    ///
+    /// Action: Set State_Property = "Inactive"
+    /// TODO: Implement setting the state property to inactive.
+    pub fn execute_t3(&mut self) -> IoLinkResult<()> {
+        // TODO: Set State_Property = "Inactive"
+        Ok(())
+    }
+
+    /// Executes transition T4: DSLocked -> DSIdle
+    ///
+    /// Action: Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ), Set State_Property = "Inactive"
+    /// TODO: Implement event invocation and set state property to inactive.
+    pub fn execute_t4(&mut self) -> IoLinkResult<()> {
+        // TODO: Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
+        // TODO: Set State_Property = "Inactive"
+        Ok(())
+    }
+
+    /// Executes transition T5: DSIdle -> DSLocked
+    ///
+    /// Action: Set State_Property = "Data Storage access locked"
+    /// TODO: Implement setting the state property to locked.
+    pub fn execute_t5(&mut self) -> IoLinkResult<()> {
+        // TODO: Set State_Property = "Data Storage access locked"
+        Ok(())
+    }
+
+    /// Executes transition T6: DSStateCheck -> DSIdle
+    ///
+    /// Action: Set State_Property = "Inactive"
+    /// TODO: Implement setting the state property to inactive.
+    pub fn execute_t6(&mut self) -> IoLinkResult<()> {
+        // TODO: Set State_Property = "Inactive"
+        Ok(())
+    }
+
+    /// Executes transition T7: DSIdle -> DSIdle
+    ///
+    /// Action: Set DS_UPLOAD_FLAG = TRUE, invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
+    /// TODO: Implement setting DS_UPLOAD_FLAG and event invocation.
+    pub fn execute_t7(&mut self) -> IoLinkResult<()> {
+        // TODO: Set DS_UPLOAD_FLAG = TRUE
+        // TODO: Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
+        Ok(())
+    }
+
+    /// Executes transition T8: DsIdle -> DsActivity
+    ///
+    /// Action: Lock local parameter access
+    /// TODO: Implement parameter access locking.
+    pub fn execute_t8(&mut self) -> IoLinkResult<()> {
+        // TODO: Lock local parameter access
+        Ok(())
+    }
+
+    /// Executes transition T9: DsActivity -> DsIdle
+    ///
+    /// Action: Unlock local parameter access
+    /// TODO: Implement parameter access unlocking.
+    pub fn execute_t9(&mut self) -> IoLinkResult<()> {
+        // TODO: Unlock local parameter access
+        Ok(())
+    }
+
+    /// Executes transition T10: DsActivity -> DsIdle
+    ///
+    /// Action: Unlock local parameter access
+    /// TODO: Implement parameter access unlocking.
+    pub fn execute_t10(&mut self) -> IoLinkResult<()> {
+        // TODO: Unlock local parameter access
+        Ok(())
+    }
+
+    /// Executes transition T11: DsIdle -> DsIdle
+    ///
+    /// Action: No operation (no transition)
+    pub fn execute_t11(&mut self) -> IoLinkResult<()> {
+        // No operation for T11
+        Ok(())
+    }
+
 }

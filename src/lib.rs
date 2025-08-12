@@ -28,14 +28,13 @@
 pub use iolinke_macros::*;
 
 mod al;
-mod config;
 mod dl;
-mod parameter;
 mod pl;
-mod storage;
-mod system_management;
 mod utils;
+mod config;
+mod storage;
 mod data_storage;
+mod system_management;
 
 #[cfg(feature = "std")]
 pub mod ffi;
@@ -91,35 +90,5 @@ impl<'a> IoLinkDevice<'a> {
             &mut self.application,
         )?;
         Ok(())
-    }
-}
-
-impl<'a> system_management::SystemManagementInd for IoLinkDevice<'a> {
-    fn sm_device_mode_ind(&mut self, mode: types::DeviceMode) -> SmResult<()> {
-        todo!()
-    }
-}
-
-impl<'a> system_management::SystemManagementCnf for IoLinkDevice<'a> {
-    fn sm_set_device_com_cnf(&self, result: SmResult<()>) -> SmResult<()> {
-        todo!()
-    }
-    fn sm_get_device_com_cnf(
-        &self,
-        result: SmResult<&system_management::DeviceCom>,
-    ) -> SmResult<()> {
-        todo!()
-    }
-    fn sm_set_device_ident_cnf(&self, result: SmResult<()>) -> SmResult<()> {
-        todo!()
-    }
-    fn sm_get_device_ident_cnf(
-        &self,
-        result: SmResult<&system_management::DeviceIdent>,
-    ) -> SmResult<()> {
-        todo!()
-    }
-    fn sm_set_device_mode_cnf(&self, result: SmResult<()>) -> SmResult<()> {
-        todo!()
     }
 }
