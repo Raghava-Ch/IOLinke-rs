@@ -24,7 +24,7 @@ pub enum OnRequestDataHandlerState {
 
 /// See Table 75 – States and transitions for the OD state machine of the Device AL
 #[derive(Debug, PartialEq, Eq, Clone)]
-enum Transition<'a> {
+enum Transition {
     /// Tn: No transition
     Tn,
     /// T1: State: Idle (0) -> AwaitAlWriteRsp (1)
@@ -38,7 +38,7 @@ enum Transition<'a> {
     T3(u8), // (address)
     /// T4: State: AwaitAlReadRsp (2) -> Idle (0)
     /// Action: Invoke DL_ReadParam (0 to 31)
-    T4(u8, &'a [u8]), // (address, data)
+    T4(u8, [u8; dl::MAX_ISDU_LENGTH]), // (address, data)
     /// T5: State: Idle (0) -> AwaitAlRwRsp (3)
     /// Action: Invoke AL_Read
     T5(dl::Isdu),
@@ -47,7 +47,7 @@ enum Transition<'a> {
     T6(dl::Isdu),
     /// T7: State: AwaitAlRwRsp (3) -> Idle (0)
     /// Action: Invoke DL_ISDUTransport (read)
-    T7(u16, u8, &'a [u8]), // (index, sub_index, data)
+    T7(u16, u8, [u8; dl::MAX_ISDU_LENGTH]), // (index, sub_index, data)
     /// T8: State: AwaitAlRwRsp (3) -> Idle (0)
     /// Action: Invoke DL_ISDUTransport (write)
     T8,
@@ -66,7 +66,7 @@ enum Transition<'a> {
 
 /// See 8.3.2.2 OD state machine of the Device AL
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OnRequestHandlerEvent<'a> {
+pub enum OnRequestHandlerEvent {
     /// {AL_Abort}
     AlAbort,
     /// {DL_WriteParam_ind}
@@ -76,7 +76,7 @@ pub enum OnRequestHandlerEvent<'a> {
     /// {DL_ReadParam_ind}
     DlReadParamInd(u8), // (address)
     /// {AL_Read_rsp}
-    AlReadRsp(&'a [u8]), // (data)
+    AlReadRsp([u8; dl::MAX_ISDU_LENGTH]), // (data)
     /// {DL_ISDUTransport_ind[DirRead]}
     DlIsduTransportIndDirRead(dl::Isdu),
     /// {DL_ISDUTransport_ind[DirWrite]}
@@ -86,13 +86,13 @@ pub enum OnRequestHandlerEvent<'a> {
 }
 
 /// On-request Data Handler implementation
-pub struct OnRequestDataHandler<'a> {
+pub struct OnRequestDataHandler {
     state: OnRequestDataHandlerState,
-    exec_transition: Transition<'a>,
+    exec_transition: Transition,
     read_cycle: bool,
 }
 
-impl<'a> OnRequestDataHandler<'a> {
+impl OnRequestDataHandler {
     /// Create a new On-request Data Handler
     pub fn new() -> Self {
         Self {
@@ -103,7 +103,7 @@ impl<'a> OnRequestDataHandler<'a> {
     }
 
     /// Process an event
-    pub fn process_event(&mut self, event: OnRequestHandlerEvent<'a>) -> IoLinkResult<()> {
+    pub fn process_event(&mut self, event: OnRequestHandlerEvent) -> IoLinkResult<()> {
         use OnRequestHandlerEvent as Event;
         use OnRequestDataHandlerState as State;
 
@@ -168,7 +168,7 @@ impl<'a> OnRequestDataHandler<'a> {
             }
             Transition::T4(address, data) => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t4(address, data, data_link_layer)?;
+                self.execute_t4(address, &data, data_link_layer)?;
             }
             Transition::T5(isdu) => {
                 self.exec_transition = Transition::Tn;
@@ -180,7 +180,7 @@ impl<'a> OnRequestDataHandler<'a> {
             }
             Transition::T7(index, _, data) => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t7(index, data, data_link_layer)?;
+                self.execute_t7(index, &data, data_link_layer)?;
             }
             Transition::T8 => {
                 self.exec_transition = Transition::Tn;
@@ -240,7 +240,7 @@ impl<'a> OnRequestDataHandler<'a> {
     fn execute_t4(
         &mut self,
         address: u8,
-        data: &[u8],
+        data: &[u8; dl::MAX_ISDU_LENGTH],
         data_link_layer: &mut dl::DataLinkLayer,
     ) -> IoLinkResult<()> {
         // TODO: Invoke DL_ReadParam (0 to 31)
@@ -276,7 +276,7 @@ impl<'a> OnRequestDataHandler<'a> {
     fn execute_t7(
         &mut self,
         index: u16,
-        data: &[u8],
+        data: &[u8; dl::MAX_ISDU_LENGTH],
         data_link_layer: &mut dl::DataLinkLayer,
     ) -> IoLinkResult<()> {
         // TODO: Invoke DL_ISDUTransport (read)
@@ -320,7 +320,7 @@ impl<'a> OnRequestDataHandler<'a> {
     }
 }
 
-impl<'a> dl::DlWriteParamInd for OnRequestDataHandler<'a> {
+impl dl::DlWriteParamInd for OnRequestDataHandler {
     fn dl_write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()> {
         // Handle the write parameter indication
         self.process_event(OnRequestHandlerEvent::DlWriteParamInd(index, data))?;
@@ -328,7 +328,7 @@ impl<'a> dl::DlWriteParamInd for OnRequestDataHandler<'a> {
     }
 }
 
-impl<'a> dl::DlReadParamInd for OnRequestDataHandler<'a> {
+impl dl::DlReadParamInd for OnRequestDataHandler {
     fn dl_read_param_ind(&mut self, address: u8) -> IoLinkResult<()> {
         // Handle the read parameter indication
         self.process_event(OnRequestHandlerEvent::DlReadParamInd(address))?;
@@ -336,7 +336,7 @@ impl<'a> dl::DlReadParamInd for OnRequestDataHandler<'a> {
     }
 }
 
-impl<'a> dl::DlIsduAbort for OnRequestDataHandler<'a> {
+impl dl::DlIsduAbort for OnRequestDataHandler {
     fn dl_isdu_abort(&mut self) -> IoLinkResult<()> {
         // Handle ISDU abort
         self.process_event(OnRequestHandlerEvent::DlIsduAbort)?;
@@ -344,7 +344,7 @@ impl<'a> dl::DlIsduAbort for OnRequestDataHandler<'a> {
     }
 }
 
-impl<'a> dl::DlIsduTransportInd for OnRequestDataHandler<'a> {
+impl dl::DlIsduTransportInd for OnRequestDataHandler {
     fn dl_isdu_transport_ind(&mut self, isdu: dl::Isdu) -> IoLinkResult<()> {
         match isdu.direction {
             true => {
@@ -358,16 +358,18 @@ impl<'a> dl::DlIsduTransportInd for OnRequestDataHandler<'a> {
     }
 }
 
-impl<'a> al::services::AlReadRsp<'a> for OnRequestDataHandler<'a> {
+impl<'a> al::services::AlReadRsp<'a> for OnRequestDataHandler {
     fn al_read_rsp(&mut self, result: al::services::AlResult<&'a [u8]>) -> IoLinkResult<()> {
         // Handle AL_Read response
         let data = result.map_err(|_| IoLinkError::InvalidData)?;
-        self.process_event(OnRequestHandlerEvent::AlReadRsp(data))?;
+        let mut data_array = [0; dl::MAX_ISDU_LENGTH];
+        data_array[..data.len()].copy_from_slice(data);
+        self.process_event(OnRequestHandlerEvent::AlReadRsp(data_array))?;
         Ok(())
     }
 }
 
-impl<'a> al::services::AlWriteRsp for OnRequestDataHandler<'a> {
+impl al::services::AlWriteRsp for OnRequestDataHandler {
     fn al_write_rsp(&mut self, result: al::services::AlResult<()>) -> IoLinkResult<()> {
         // Handle AL_Write response
         match result {
@@ -383,7 +385,7 @@ impl<'a> al::services::AlWriteRsp for OnRequestDataHandler<'a> {
     }
 }
 
-impl<'a> al::services::AlAbortReq for OnRequestDataHandler<'a> {
+impl al::services::AlAbortReq for OnRequestDataHandler {
     fn al_abort_req(&mut self) -> IoLinkResult<()> {
         // Handle AL_Abort response
         self.process_event(OnRequestHandlerEvent::AlAbort)?;
@@ -391,7 +393,7 @@ impl<'a> al::services::AlAbortReq for OnRequestDataHandler<'a> {
     }
 }
 
-impl<'a> Default for OnRequestDataHandler<'a> {
+impl Default for OnRequestDataHandler {
     fn default() -> Self {
         Self::new()
     }

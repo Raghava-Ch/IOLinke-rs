@@ -1,10 +1,11 @@
-use crate::{IoLinkResult, al, dl, system_management, types};
+use crate::{al, dl, storage::parameters_memory::ParameterStorage, system_management, types, IoLinkResult};
 
 mod event_handler;
 pub mod od_handler;
 mod parameter_manager;
 mod pd_handler;
 pub mod services;
+mod data_storage;
 
 pub trait ApplicationLayerInd {
     fn al_read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<()>;
@@ -28,7 +29,7 @@ pub trait ApplicationLayerInd {
 
 pub struct ApplicationLayer<'a> {
     event_handler: event_handler::EventHandler<'a>,
-    od_handler: od_handler::OnRequestDataHandler<'a>,
+    od_handler: od_handler::OnRequestDataHandler,
     services: services::ApplicationLayerServices,
     parameter_manager: parameter_manager::ParameterManager,
 }
@@ -38,7 +39,7 @@ impl<'a> ApplicationLayer<'a> {
         self.event_handler
             .poll(&mut self.services, data_link_layer)?;
         self.od_handler.poll(&mut self.services, data_link_layer)?;
-
+        self.parameter_manager.poll(&mut self.od_handler)?;
         Ok(())
     }
 }

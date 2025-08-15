@@ -33,7 +33,6 @@ mod pl;
 mod utils;
 mod config;
 mod storage;
-mod data_storage;
 mod system_management;
 
 #[cfg(feature = "std")]
@@ -45,7 +44,6 @@ pub mod test_utils;
 #[cfg(test)]
 pub use test_utils::*;
 
-use crate::system_management::{SmResult, SystemManagementInd};
 // Re-export main traits and types
 pub use types::*;
 

@@ -11,7 +11,7 @@ mod pd_handler;
 
 pub use command_handler::DlControlInd;
 pub use event_handler::{DlEventReq, DlEventTriggerConf};
-pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, DlIsduTransportRsp, Isdu, IsduService};
+pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, DlIsduTransportRsp, Isdu, MAX_ISDU_LENGTH, IsduService};
 pub use mode_handler::DlInd;
 pub use od_handler::{DlParamRsp, DlReadParamInd, DlWriteParamInd};
 pub use pd_handler::{DlPDInputUpdate, DlPDOutputTransportInd};

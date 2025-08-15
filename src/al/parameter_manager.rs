@@ -3,31 +3,18 @@
 //! This module implements the Parameter Manager as defined in
 //! IO-Link Specification v1.1.4
 
-use crate::config::vendor_specifics::{MAX_PARAM_ENTRIES, MAX_WRITE_BUFFER_SIZE};
+use crate::al::services::AlReadRsp;
+use crate::storage::parameters_memory::ParameterStorage;
 use crate::{
     al::{self, od_handler, services::AlWriteRsp},
     block_param_support, isdu_error_code,
     system_management::{self, SystemManagementInd},
     types::{self, IoLinkError, IoLinkResult},
 };
-use heapless::Vec;
 use iolinke_macros::{device_parameter_index, system_commands};
 
 device_parameter_index!(DeviceParametersIndex);
 system_commands!(SystemCommand);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-struct DataRange {
-    start: usize,
-    end: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-struct ParamEntry {
-    index: u16,
-    sub_index: u8,
-    data_range: DataRange,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LockState {
@@ -49,6 +36,16 @@ pub enum ParameterManagerState {
     Download,
     /// {Upload_3}
     Upload,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValidityCheckResult {
+    /// Parameter is valid
+    Valid,
+    /// Parameter is invalid
+    Invalid,
+    /// Parameter is validation yet to be done
+    YetToBeValidated,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -179,12 +176,11 @@ pub struct ParameterManager {
     state: ParameterManagerState,
     exec_transition: Transition,
     store_request: bool,
-    data_valid: bool,
+    data_valid: ValidityCheckResult,
     local_parameter_access: LockState,
     ds_store_request: bool,
-
-    param_entries: Vec<ParamEntry, MAX_PARAM_ENTRIES>,
-    write_buffer: Vec<u8, MAX_WRITE_BUFFER_SIZE>,
+    param_storage: ParameterStorage,
+    read_cycle: Option<(u16, u8)>, // (index, sub_index)
 }
 
 impl ParameterManager {
@@ -194,13 +190,18 @@ impl ParameterManager {
             state: ParameterManagerState::Idle,
             exec_transition: Transition::Tn,
             store_request: false,
-            data_valid: false,
+            data_valid: ValidityCheckResult::YetToBeValidated,
             local_parameter_access: LockState::Unlocked,
             ds_store_request: false,
-            param_entries: Vec::new(),
-            write_buffer: Vec::new(),
+            param_storage: ParameterStorage::new(),
+            read_cycle: None,
         }
     }
+
+    // pub fn set_param_storage(&mut self, param_storage: &'b mut ParameterStorage) -> IoLinkResult<()> {
+    //     self.param_storage = Some(param_storage);
+    //     Ok(())
+    // }
 
     /// Process an event
     pub fn process_event(&mut self, event: ParameterManagerEvent) -> IoLinkResult<()> {
@@ -291,9 +292,10 @@ impl ParameterManager {
 
     /// Poll the process data handler
     /// See IO-Link v1.1.4 Section 7.2
-    pub fn poll(&mut self) -> IoLinkResult<()> {
-        let _ = self.poll_active_state();
-
+    pub fn poll(
+        &mut self,
+        od_handler: &mut od_handler::OnRequestDataHandler,
+    ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
                 // No transition to execute
@@ -408,24 +410,48 @@ impl ParameterManager {
                 // TODO: Implement parameter access unlocking
             }
         }
+        let _ = self.poll_active_state(od_handler);
         Ok(())
     }
 
-    fn poll_active_state(&mut self) -> IoLinkResult<()> {
+    fn poll_active_state(
+        &mut self,
+        od_handler: &mut od_handler::OnRequestDataHandler,
+    ) -> IoLinkResult<()> {
         use ParameterManagerEvent as Event;
         use ParameterManagerState as State;
 
         match self.state {
             State::ValidityCheck => {
-                if self.data_valid && self.ds_store_request {
+                if self.data_valid == ValidityCheckResult::Valid && self.ds_store_request {
                     self.process_event(Event::DataValidAndStoreRequest)?;
-                } else if self.data_valid && !self.ds_store_request {
+                } else if self.data_valid == ValidityCheckResult::Valid && !self.ds_store_request {
                     self.process_event(Event::DataValidAndNotStoreRequest)?;
-                } else if !self.data_valid {
+                } else if self.data_valid == ValidityCheckResult::Invalid {
                     self.process_event(Event::DataInvalid)?;
                 }
             }
-            _ => return Ok(()),
+            _ => {}
+        }
+        match self.read_cycle {
+            Some((index, sub_index)) => {
+                // Avoid creating a temporary that is dropped while borrowed
+                let param: Result<&[u8], _> = self.param_storage.get_parameter(index, sub_index);
+                match param {
+                    Ok(data) => {
+                        let result: Result<&[u8], al::services::AlRspError> =
+                            al::services::AlResult::Ok(data);
+                        od_handler.al_read_rsp(result)?;
+                    }
+                    Err(_) => {
+                        let result = al::services::AlResult::Err(al::services::AlRspError::Error(
+                            0x81, 0xFF,
+                        ));
+                        od_handler.al_read_rsp(result)?;
+                    }
+                }
+            }
+            None => {}
         }
         Ok(())
     }
@@ -465,12 +491,13 @@ impl ParameterManager {
         od_handler: &mut od_handler::OnRequestDataHandler,
     ) -> IoLinkResult<()> {
         // Mark parameter set as valid
-        self.data_valid = true;
+        self.data_valid = ValidityCheckResult::Valid;
         // TODO: Invoke DS_ParUpload.req to DS.
         // Send positive acknowledge of transmission
         od_handler.al_write_rsp(Ok(()))?;
         // Reset StoreRequest flag to false.
         self.store_request = false;
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         Ok(())
     }
 
@@ -481,6 +508,8 @@ impl ParameterManager {
     pub fn execute_t5(&mut self) -> IoLinkResult<()> {
         // TODO: Mark parameter set as valid.
         // TODO: Enable positive acknowledge of transmission.
+
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         Ok(())
     }
 
@@ -493,14 +522,14 @@ impl ParameterManager {
         od_handler: &mut od_handler::OnRequestDataHandler,
     ) -> IoLinkResult<()> {
         // Mark parameter set as invalid
-        self.data_valid = false;
+        self.data_valid = ValidityCheckResult::Invalid;
         // Enable negative acknowledgment of transmission
         od_handler.al_write_rsp(Err(al::services::AlRspError::Error(0x81, 0xFF)))?; // TODO: Check if this is the correct error code
         // Reset StoreRequest flag to false.
         self.store_request = false;
         // Discard parameter buffer
-        self.param_entries.clear();
-        self.write_buffer.clear();
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
+        self.param_storage.clear();
         Ok(())
     }
 
@@ -520,9 +549,9 @@ impl ParameterManager {
     pub fn execute_t8(&mut self) -> IoLinkResult<()> {
         // Unlock local parameter access.
         self.local_parameter_access = LockState::Unlocked;
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         // Discard parameter buffer.
-        self.param_entries.clear();
-        self.write_buffer.clear();
+        self.param_storage.clear();
         Ok(())
     }
 
@@ -533,9 +562,9 @@ impl ParameterManager {
     pub fn execute_t9(&mut self) -> IoLinkResult<()> {
         // Unlock local parameter access.
         self.local_parameter_access = LockState::Unlocked;
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         // Discard parameter buffer.
-        self.param_entries.clear();
-        self.write_buffer.clear();
+        self.param_storage.clear();
         Ok(())
     }
 
@@ -554,6 +583,7 @@ impl ParameterManager {
     pub fn execute_t11(&mut self) -> IoLinkResult<()> {
         // Unlock local parameter access.
         self.local_parameter_access = LockState::Unlocked;
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         Ok(())
     }
 
@@ -563,9 +593,9 @@ impl ParameterManager {
     pub fn execute_t12(&mut self) -> IoLinkResult<()> {
         // Unlock local parameter access.
         self.local_parameter_access = LockState::Unlocked;
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         // Discard parameter buffer.
-        self.param_entries.clear();
-        self.write_buffer.clear();
+        self.param_storage.clear();
         Ok(())
     }
 
@@ -602,9 +632,9 @@ impl ParameterManager {
     ///
     /// Action: Discard parameter buffer, so that a possible second start will not be blocked
     pub fn execute_t16(&mut self) -> IoLinkResult<()> {
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         // Discard parameter buffer.
-        self.param_entries.clear();
-        self.write_buffer.clear();
+        self.param_storage.clear();
         Ok(())
     }
 
@@ -623,9 +653,9 @@ impl ParameterManager {
     ///
     /// Action: Discard parameter buffer, so that a possible second start will not be blocked
     pub fn execute_t18(&mut self) -> IoLinkResult<()> {
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         // Discard parameter buffer.
-        self.param_entries.clear();
-        self.write_buffer.clear();
+        self.param_storage.clear();
         Ok(())
     }
 
@@ -633,6 +663,7 @@ impl ParameterManager {
     ///
     /// Action: -
     pub fn execute_t19(&mut self) -> IoLinkResult<()> {
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         Ok(())
     }
 
@@ -655,6 +686,7 @@ impl ParameterManager {
                 od_handler.al_write_rsp(Err(al::services::AlRspError::Error(error_code, additional_code)))?;
             }
         }
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         Ok(())
     }
 
@@ -665,8 +697,8 @@ impl ParameterManager {
         // Unlock local parameter access.
         self.local_parameter_access = LockState::Unlocked;
         // Discard parameter buffer.
-        self.param_entries.clear();
-        self.write_buffer.clear();
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
+        self.param_storage.clear();
         Ok(())
     }
 
@@ -676,6 +708,8 @@ impl ParameterManager {
     pub fn execute_t22(&mut self) -> IoLinkResult<()> {
         // Unlock local parameter access.
         self.local_parameter_access = LockState::Unlocked;
+
+        self.data_valid = ValidityCheckResult::YetToBeValidated;
         Ok(())
     }
 
@@ -726,12 +760,6 @@ impl ParameterManager {
     }
 }
 
-impl Default for ParameterManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl al::ApplicationLayerInd for ParameterManager {
     fn al_read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<()> {
         // For demonstration, return a zeroed array. Replace with actual parameter read logic.
@@ -742,22 +770,19 @@ impl al::ApplicationLayerInd for ParameterManager {
     fn al_write_ind(&mut self, index: u16, sub_index: u8, data: &[u8]) -> IoLinkResult<()> {
         // For demonstration, accept the write. Replace with actual parameter write logic.
         // In a real implementation, you would update the parameter by index/sub_index.
-        if self.write_buffer.len() + data.len() > MAX_WRITE_BUFFER_SIZE {
-            return Err(IoLinkError::BufferOverflow);
+        if self.data_valid == ValidityCheckResult::YetToBeValidated
+            || self.data_valid == ValidityCheckResult::Valid
+        {
+            match self.param_storage.set_parameter(index, sub_index, data) {
+                Ok(_) => {
+                    self.data_valid = ValidityCheckResult::Valid;
+                }
+                Err(e) => {
+                    log::error!("Failed to set parameter: {:?}", e);
+                    self.data_valid = ValidityCheckResult::Invalid;
+                }
+            }
         }
-
-        let start = self.write_buffer.len();
-        let end = start + data.len();
-        self.write_buffer
-            .extend_from_slice(data)
-            .map_err(|_| IoLinkError::BufferOverflow)?;
-        self.param_entries
-            .push(ParamEntry {
-                index,
-                sub_index,
-                data_range: DataRange { start, end },
-            })
-            .map_err(|_| IoLinkError::BufferOverflow)?;
 
         let param_index = DeviceParametersIndex::from_index(index);
         match param_index {
