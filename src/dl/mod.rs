@@ -148,7 +148,7 @@ impl<'a> event_handler::DlEventReq for DataLinkLayer<'a> {
     fn dl_event_req(
         &mut self,
         event_count: u8,
-        event_entries: &[storage::event_memory::EventEntry; 6],
+        event_entries: &[storage::event_memory::EventEntry],
     ) -> IoLinkResult<()> {
         self.event_handler.dl_event_req(event_count, event_entries)
     }

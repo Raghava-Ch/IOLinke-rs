@@ -52,7 +52,6 @@ pub struct IoLinkDevice<'a> {
     physical_layer: pl::physical_layer::PhysicalLayer,
     dl: dl::DataLinkLayer<'a>,
     system_management: system_management::SystemManagement,
-    services: al::services::ApplicationLayerServices,
     application: al::ApplicationLayer<'a>,
 }
 
@@ -63,7 +62,6 @@ impl<'a> IoLinkDevice<'a> {
             system_management: system_management::SystemManagement::default(),
             physical_layer: pl::physical_layer::PhysicalLayer::default(),
             dl: dl::DataLinkLayer::default(),
-            services: al::services::ApplicationLayerServices::default(),
             application: al::ApplicationLayer::default(),
         }
     }
@@ -89,4 +87,41 @@ impl<'a> IoLinkDevice<'a> {
         )?;
         Ok(())
     }
+}
+
+impl<'a> al::ApplicationLayerReadWriteInd for IoLinkDevice<'a> {
+    fn al_read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<()> {
+        self.application.al_read_ind(index, sub_index)
+    }
+
+    fn al_write_ind(&mut self, index: u16, sub_index: u8, data: &[u8]) -> IoLinkResult<()> {
+        self.application.al_write_ind(index, sub_index, data)
+    }
+
+    fn al_abort_ind(&mut self) -> IoLinkResult<()> {
+        Err(IoLinkError::FuncNotAvailable)
+    }
+}
+
+impl<'a> al::ApplicationLayerProcessDataInd for IoLinkDevice<'a> {
+    fn al_set_input_ind(&mut self) -> IoLinkResult<()> {
+        todo!();
+    }
+
+    fn al_pd_cycle_ind(&mut self) {
+        todo!();
+    }
+
+    fn al_get_output_ind(&mut self) -> IoLinkResult<()> {
+        todo!();
+    }
+
+    fn al_new_output_ind(&mut self) -> IoLinkResult<()> {
+        todo!();
+    }
+
+    fn al_control(&mut self, control_code: u8) -> IoLinkResult<()> {
+        todo!();
+    }
+    
 }

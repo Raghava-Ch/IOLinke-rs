@@ -50,7 +50,7 @@
 /// - Section B.1.6
 /// - Table B.5 (SIO Values)
 /// - Table B.6 (BYTE + LENGTH combinations)
-mod pd_in {
+pub mod pd_in {
     /// See B.1.6 ProcessDataIn or
     /// check the pd_in module documentation for details
     /// Configure the Process Data Input length
@@ -132,7 +132,7 @@ mod pd_in {
 /// - Section B.1.6
 /// - Table B.5 (SIO Values)
 /// - Table B.6 (BYTE + LENGTH combinations)
-mod pd_out {
+pub mod pd_out {
     /// See B.1.6 ProcessDataOut or
     /// check the pd_out module documentation for details
     /// Configure the Process Data Output length

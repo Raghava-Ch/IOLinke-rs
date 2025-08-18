@@ -3,40 +3,13 @@
 //! This module implements the Data Storage functionality as defined in
 //! IO-Link Specification v1.1.4
 
-use crate::types::{IoLinkError, IoLinkResult};
-use modular_bitfield::prelude::*;
-
-
-/// Data Storage State Property (8 bits)
-/// Bit 0: Reserved
-/// Bit 1-2: State of Data Storage (see `DsState`)
-/// Bit 3-6: Reserved
-/// Bit 7: DS_UPLOAD_FLAG ("1": DS_UPLOAD_REQ pending)
-#[bitfield(bits = 8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StateProperty {
-    /// Bit 0: Reserved
-    #[skip] __: B1,
-    /// Bits 1-2: State of Data Storage
-    #[bits = 2]
-    pub ds_state: DsState,
-    /// Bits 3-6: Reserved
-    #[skip] __: B4,
-    /// Bit 7: DS_UPLOAD_FLAG
-    pub ds_upload_flag: bool,
-}
-
-/// State of Data Storage (for bits 1-2 of StateProperty)
-#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
-#[bits = 2]
-pub enum DsState {
-    Inactive = 0b00,
-    Upload = 0b01,
-    Download = 0b10,
-    Locked = 0b11,
-}
-
-
+use crate::{
+    al::{self, services::AlEventReq},
+    event_qualifier_macro, storage,
+    system_management::{self, SystemManagementInd},
+    types::{self, IoLinkError, IoLinkResult},
+};
+use iolinke_macros::device_event_code;
 
 /// See 8.3.3.2 Event state machine of the Device AL
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +21,7 @@ pub enum DtatStorageStateMachineState {
     /// Waiting on Data Storage state machine to become unlocked.
     /// This state will become obsolete in future releases since Device access lock "Data Storage"
     /// shall not be used anymore (see Table B.12)
+    /// {Obsolete}
     DSLocked,
     /// {DSIdle_2}
     /// Waiting on Data Storage activities.
@@ -58,7 +32,6 @@ pub enum DtatStorageStateMachineState {
     DSActivity,
 }
 
-
 /// Data Storage State Machine Transitions
 #[derive(Debug, PartialEq, Eq)]
 pub enum DataStorageTransition {
@@ -66,18 +39,23 @@ pub enum DataStorageTransition {
     Tn,
     /// T1: DSStateCheck -> DSLocked
     /// Set State_Property = "Data Storage access locked"
+    /// {Obsolete}
     T1,
     /// T2: DSLocked -> DSLocked
     /// Set DS_UPLOAD_FLAG = TRUE
+    /// {Obsolete}
     T2,
     /// T3: DSLocked -> DSIdle
     /// Set State_Property = "Inactive"
+    /// {Obsolete}
     T3,
     /// T4: DSLocked -> DSIdle
     /// Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ), Set State_Property = "Inactive"
+    /// {Obsolete}
     T4,
     /// T5: DSIdle -> DSLocked
     /// Set State_Property = "Data Storage access locked"
+    /// {Obsolete}
     T5,
     /// T6: DSStateCheck -> DSIdle
     /// Set State_Property = "Inactive"
@@ -87,7 +65,7 @@ pub enum DataStorageTransition {
     T7,
     /// T8: DsIdle -> DsActivity
     /// Lock local parameter access, set State_Property = "Upload" or "Download"
-    T8,
+    T8(DsCommand),
     /// T9: DsActivity -> DsIdle
     /// Set DS_UPLOAD_FLAG = FALSE, unlock local parameter access, set State_Property = "Inactive"
     T9,
@@ -99,23 +77,62 @@ pub enum DataStorageTransition {
     T11,
 }
 
+/// See Table B.10 – DataStorageIndex assignments
+/// Index 0x0003 and 0x0001
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum DsCommand {
+    // Reserved = 0x00,
+    /// {DS_UploadStart} 0x01
+    UploadStart = 0x01,
+    /// {DS_UploadEnd} 0x02
+    UploadEnd = 0x02,
+    /// {DS_DownloadStart} 0x03
+    DownloadStart = 0x03,
+    /// {DS_DownloadEnd} 0x04
+    DownloadEnd = 0x04,
+    /// {DS_Break} 0x05
+    Break = 0x05,
+    // 0x06 to 0xFF: Reserved
+}
+
+impl TryFrom<u8> for DsCommand {
+    type Error = IoLinkError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            x if x == Self::UploadStart as u8 => Self::UploadStart,
+
+            x if x == Self::UploadEnd as u8 => Self::UploadEnd,
+            x if x == Self::DownloadStart as u8 => Self::DownloadStart,
+            x if x == Self::DownloadEnd as u8 => Self::DownloadEnd,
+            x if x == Self::Break as u8 => Self::Break,
+            _ => return Err(IoLinkError::InvalidData),
+        })
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataStorageStateMachineEvent {
     /// [Unlocked] Event for DSStateCheck_0 (Triggers T1 or T6)
+    /// {Obsolete}
     Unlocked,
     /// [Locked] Event for DSStateCheck_0 (Triggers T1)
+    /// {Obsolete}
     Locked,
     /// DS_ParUpload_ind event (Triggers T2, T4, or T7)
     DsParUploadInd,
     /// [Unlocked & not DS_UPLOAD_FLAG] (Triggers T3)
+    /// {Obsolete}
     UnlockedAndNotDsUploadFlag,
     /// [Unlocked & DS_UPLOAD_FLAG] (Triggers T4)
+    /// {Obsolete}
     UnlockedAndDsUploadFlag,
     /// [Locked] (Triggers T5)
+    /// {Obsolete}
     LockedEvent,
     /// [TransmissionStart] (Triggers T8)
-    TransmissionStart,
+    TransmissionStart(DsCommand),
     /// [TransmissionEnd] (Triggers T9 or T11)
     TransmissionEnd,
     /// [TransmissionBreak] (Triggers T10)
@@ -137,8 +154,8 @@ impl DataStorage {
 
     pub fn process_event(&mut self, event: DataStorageStateMachineEvent) -> IoLinkResult<()> {
         use DataStorageStateMachineEvent as Event;
-        use DtatStorageStateMachineState as State;
         use DataStorageTransition as Transition;
+        use DtatStorageStateMachineState as State;
 
         let (new_transition, new_state) = match (self.state, event) {
             // DSStateCheck_0
@@ -150,7 +167,9 @@ impl DataStorage {
             (State::DSLocked, Event::UnlockedAndDsUploadFlag) => (Transition::T4, State::DSIdle),
             // DSIdle_2
             (State::DSIdle, Event::DsParUploadInd) => (Transition::T7, State::DSIdle),
-            (State::DSIdle, Event::TransmissionStart) => (Transition::T8, State::DSActivity),
+            (State::DSIdle, Event::TransmissionStart(direction)) => {
+                (Transition::T8(direction), State::DSActivity)
+            }
             (State::DSIdle, Event::LockedEvent) => (Transition::T5, State::DSLocked),
             (State::DSIdle, Event::TransmissionEnd) => (Transition::T11, State::DSIdle),
             // DSActivity_3
@@ -165,7 +184,11 @@ impl DataStorage {
         Ok(())
     }
 
-    pub fn poll(&mut self) -> IoLinkResult<()> {
+    pub fn poll(
+        &mut self,
+        event_handler: &mut al::event_handler::EventHandler,
+        parameter_manager: &mut al::parameter_manager::ParameterManager,
+    ) -> IoLinkResult<()> {
         use DataStorageTransition as Transition;
 
         match self.exec_transition {
@@ -175,105 +198,112 @@ impl DataStorage {
             Transition::T1 => {
                 // Transition T1: DSStateCheck -> DSLocked
                 self.exec_transition = Transition::Tn;
+                self.execute_t1()?;
             }
             Transition::T2 => {
                 // Transition T2: DSLocked -> DSLocked
                 self.exec_transition = Transition::Tn;
+                self.execute_t2()?;
             }
             Transition::T3 => {
                 // Transition T3: DSLocked -> DSIdle
                 self.exec_transition = Transition::Tn;
+                self.execute_t3()?;
             }
             Transition::T4 => {
                 // Transition T4: DSLocked -> DSIdle
                 self.exec_transition = Transition::Tn;
+                self.execute_t4()?;
             }
             Transition::T5 => {
                 // Transition T5: DSIdle -> DSLocked
                 self.exec_transition = Transition::Tn;
+                self.execute_t5()?;
             }
             Transition::T6 => {
                 // Transition T6: DSStateCheck -> DSIdle
                 self.exec_transition = Transition::Tn;
+                self.execute_t6(parameter_manager)?;
             }
             Transition::T7 => {
                 // Transition T7: DSIdle -> DSIdle
                 self.exec_transition = Transition::Tn;
+                self.execute_t7(event_handler, parameter_manager)?;
             }
-            Transition::T8 => {
+            Transition::T8(direction) => {
                 // Transition T8: DsIdle -> DsActivity
                 self.exec_transition = Transition::Tn;
+                self.execute_t8(parameter_manager, direction)?;
             }
             Transition::T9 => {
                 // Transition T9: DsActivity -> DsIdle
                 self.exec_transition = Transition::Tn;
+                self.execute_t9(parameter_manager)?;
             }
             Transition::T10 => {
                 // Transition T10: DsActivity -> DsIdle
                 self.exec_transition = Transition::Tn;
+                self.execute_t10(parameter_manager)?;
             }
             Transition::T11 => {
                 // Transition T11: DsIdle -> DsIdle
                 self.exec_transition = Transition::Tn;
+                self.execute_t11()?;
             }
         };
 
         Ok(())
     }
 
-
     /// Executes transition T1: DSStateCheck -> DSLocked
     ///
     /// Action: Set State_Property = "Data Storage access locked"
-    /// TODO: Implement setting the state property to locked.
     pub fn execute_t1(&mut self) -> IoLinkResult<()> {
-        // TODO: Set State_Property = "Data Storage access locked"
+        // Obsolete transition
         Ok(())
     }
 
     /// Executes transition T2: DSLocked -> DSLocked
     ///
     /// Action: Set DS_UPLOAD_FLAG = TRUE
-    /// TODO: Implement setting the DS_UPLOAD_FLAG.
     pub fn execute_t2(&mut self) -> IoLinkResult<()> {
-        // TODO: Set DS_UPLOAD_FLAG = TRUE
+        // Obsolete transition
         Ok(())
     }
 
     /// Executes transition T3: DSLocked -> DSIdle
     ///
     /// Action: Set State_Property = "Inactive"
-    /// TODO: Implement setting the state property to inactive.
     pub fn execute_t3(&mut self) -> IoLinkResult<()> {
-        // TODO: Set State_Property = "Inactive"
+        // Obsolete transition
         Ok(())
     }
 
     /// Executes transition T4: DSLocked -> DSIdle
     ///
     /// Action: Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ), Set State_Property = "Inactive"
-    /// TODO: Implement event invocation and set state property to inactive.
     pub fn execute_t4(&mut self) -> IoLinkResult<()> {
-        // TODO: Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
-        // TODO: Set State_Property = "Inactive"
+        // Obsolete transition
         Ok(())
     }
 
     /// Executes transition T5: DSIdle -> DSLocked
     ///
     /// Action: Set State_Property = "Data Storage access locked"
-    /// TODO: Implement setting the state property to locked.
     pub fn execute_t5(&mut self) -> IoLinkResult<()> {
-        // TODO: Set State_Property = "Data Storage access locked"
+        // Obsolete transition
         Ok(())
     }
 
     /// Executes transition T6: DSStateCheck -> DSIdle
     ///
     /// Action: Set State_Property = "Inactive"
-    /// TODO: Implement setting the state property to inactive.
-    pub fn execute_t6(&mut self) -> IoLinkResult<()> {
-        // TODO: Set State_Property = "Inactive"
+    pub fn execute_t6(
+        &mut self,
+        parameter_manager: &mut al::parameter_manager::ParameterManager,
+    ) -> IoLinkResult<()> {
+        // Set State_Property = "Inactive"
+        parameter_manager.set_state_property(al::parameter_manager::DsState::Inactive)?;
         Ok(())
     }
 
@@ -281,9 +311,29 @@ impl DataStorage {
     ///
     /// Action: Set DS_UPLOAD_FLAG = TRUE, invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
     /// TODO: Implement setting DS_UPLOAD_FLAG and event invocation.
-    pub fn execute_t7(&mut self) -> IoLinkResult<()> {
-        // TODO: Set DS_UPLOAD_FLAG = TRUE
-        // TODO: Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
+    pub fn execute_t7(
+        &mut self,
+        event_handler: &mut al::event_handler::EventHandler,
+        parameter_manager: &mut al::parameter_manager::ParameterManager,
+    ) -> IoLinkResult<()> {
+        // Set DS_UPLOAD_FLAG = TRUE
+        parameter_manager.set_upload_flag(true)?;
+        // Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
+        const EVENT_QUALIFIER: u8 = event_qualifier_macro!(
+            storage::event_memory::EventMode::SingleShot,
+            storage::event_memory::EventType::Notification,
+            storage::event_memory::EventSource::Device,
+            storage::event_memory::EventInstance::System
+        );
+
+        const ENTRY: &'static [storage::event_memory::EventEntry] =
+            &[storage::event_memory::EventEntry {
+                event_qualifier: storage::event_memory::EventQualifier::from_bytes([
+                    EVENT_QUALIFIER,
+                ]),
+                event_code: device_event_code!(DS_UPLOAD_REQ),
+            }];
+        event_handler.al_event_req(1, ENTRY)?;
         Ok(())
     }
 
@@ -291,8 +341,24 @@ impl DataStorage {
     ///
     /// Action: Lock local parameter access
     /// TODO: Implement parameter access locking.
-    pub fn execute_t8(&mut self) -> IoLinkResult<()> {
-        // TODO: Lock local parameter access
+    pub fn execute_t8(
+        &mut self,
+        parameter_manager: &mut al::parameter_manager::ParameterManager,
+        ds_command: DsCommand,
+    ) -> IoLinkResult<()> {
+        // Lock local parameter access
+        parameter_manager.lock_local_parameter_access()?;
+        // Set State_Property = "Upload" or "Download"
+        match ds_command {
+            DsCommand::UploadStart => {
+                parameter_manager.set_state_property(al::parameter_manager::DsState::Upload)?
+            }
+            DsCommand::DownloadStart => {
+                parameter_manager.set_state_property(al::parameter_manager::DsState::Download)?
+            }
+            _ => return Err(IoLinkError::InvalidEvent),
+        }
+
         Ok(())
     }
 
@@ -300,8 +366,14 @@ impl DataStorage {
     ///
     /// Action: Unlock local parameter access
     /// TODO: Implement parameter access unlocking.
-    pub fn execute_t9(&mut self) -> IoLinkResult<()> {
-        // TODO: Unlock local parameter access
+    pub fn execute_t9(
+        &mut self,
+        parameter_manager: &mut al::parameter_manager::ParameterManager,
+    ) -> IoLinkResult<()> {
+        parameter_manager.set_upload_flag(false)?;
+        // Unlock local parameter access
+        parameter_manager.unlock_local_parameter_access()?;
+        parameter_manager.set_state_property(al::parameter_manager::DsState::Inactive)?;
         Ok(())
     }
 
@@ -309,8 +381,13 @@ impl DataStorage {
     ///
     /// Action: Unlock local parameter access
     /// TODO: Implement parameter access unlocking.
-    pub fn execute_t10(&mut self) -> IoLinkResult<()> {
-        // TODO: Unlock local parameter access
+    pub fn execute_t10(
+        &mut self,
+        parameter_manager: &mut al::parameter_manager::ParameterManager,
+    ) -> IoLinkResult<()> {
+        // Unlock local parameter access
+        parameter_manager.unlock_local_parameter_access()?;
+        parameter_manager.set_state_property(al::parameter_manager::DsState::Inactive)?;
         Ok(())
     }
 
@@ -322,4 +399,35 @@ impl DataStorage {
         Ok(())
     }
 
+    pub fn ds_command(&mut self, command: DsCommand) -> IoLinkResult<()> {
+        match command {
+            DsCommand::UploadStart | DsCommand::DownloadStart => {
+                self.process_event(DataStorageStateMachineEvent::TransmissionStart(command))
+            }
+            DsCommand::UploadEnd | DsCommand::DownloadEnd => {
+                self.process_event(DataStorageStateMachineEvent::TransmissionEnd)
+            }
+            DsCommand::Break => self.process_event(DataStorageStateMachineEvent::TransmissionBreak),
+        }
+    }
+
+    pub fn ds_par_upload_ind(&mut self) -> IoLinkResult<()> {
+        self.process_event(DataStorageStateMachineEvent::DsParUploadInd)
+    }
+}
+
+impl SystemManagementInd for DataStorage {
+    fn sm_device_mode_ind(
+        &mut self,
+        device_mode: types::DeviceMode,
+    ) -> system_management::SmResult<()> {
+        match device_mode {
+            // Control gets here when the dl_mode_ind(INACTIVE) is invoked.
+            types::DeviceMode::Idle => {
+                let _ = self.process_event(DataStorageStateMachineEvent::TransmissionBreak);
+            }
+            _ => return Ok(()),
+        }
+        Ok(())
+    }
 }

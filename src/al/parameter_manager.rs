@@ -3,6 +3,7 @@
 //! This module implements the Parameter Manager as defined in
 //! IO-Link Specification v1.1.4
 
+use crate::al::data_storage;
 use crate::al::services::AlReadRsp;
 use crate::storage::parameters_memory::ParameterStorage;
 use crate::{
@@ -12,6 +13,7 @@ use crate::{
     types::{self, IoLinkError, IoLinkResult},
 };
 use iolinke_macros::{device_parameter_index, system_commands};
+use modular_bitfield::prelude::*;
 
 device_parameter_index!(DeviceParametersIndex);
 system_commands!(SystemCommand);
@@ -22,6 +24,37 @@ pub enum LockState {
     Locked,
     /// Access is unlocked
     Unlocked,
+}
+
+/// State of Data Storage (for bits 1-2 of StateProperty)
+#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
+#[bits = 2]
+pub enum DsState {
+    Inactive = 0b00,
+    Upload = 0b01,
+    Download = 0b10,
+    Locked = 0b11,
+}
+
+/// Data Storage State Property (8 bits)
+/// Bit 0: Reserved
+/// Bit 1-2: State of Data Storage (see `DsState`)
+/// Bit 3-6: Reserved
+/// Bit 7: DS_UPLOAD_FLAG ("1": DS_UPLOAD_REQ pending)
+#[bitfield(bits = 8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StateProperty {
+    /// Bit 0: Reserved
+    #[skip]
+    __: B1,
+    /// Bits 1-2: State of Data Storage
+    #[bits = 2]
+    pub ds_state: DsState,
+    /// Bits 3-6: Reserved
+    #[skip]
+    __: B4,
+    /// Bit 7: DS_UPLOAD_FLAG
+    pub ds_upload_flag: bool,
 }
 
 /// On request Data Handler states
@@ -181,6 +214,7 @@ pub struct ParameterManager {
     ds_store_request: bool,
     param_storage: ParameterStorage,
     read_cycle: Option<(u16, u8)>, // (index, sub_index)
+    ds_command: Option<data_storage::DsCommand>,
 }
 
 impl ParameterManager {
@@ -195,6 +229,7 @@ impl ParameterManager {
             ds_store_request: false,
             param_storage: ParameterStorage::new(),
             read_cycle: None,
+            ds_command: None,
         }
     }
 
@@ -295,128 +330,153 @@ impl ParameterManager {
     pub fn poll(
         &mut self,
         od_handler: &mut od_handler::OnRequestDataHandler,
+        data_storage: &mut data_storage::DataStorage,
     ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
                 // No transition to execute
             }
             Transition::T1 => {
+                self.exec_transition = Transition::Tn;
                 // T1: Idle -> ValidityCheck on [Single Parameter]
                 // Action: -
+                self.execute_t1()?;
             }
             Transition::T2 => {
+                self.exec_transition = Transition::Tn;
                 // T2: Idle -> ValidityCheck on [DownloadStore]
                 // Action: Set "StoreRequest" (= TRUE)
-                // TODO: Implement store request setting
+                self.execute_t2()?;
             }
             Transition::T3 => {
+                self.exec_transition = Transition::Tn;
                 // T3: Idle -> ValidityCheck on [Local Parameter]
                 // Action: Set "StoreRequest" (= TRUE)
-                // TODO: Implement store request setting
+                self.execute_t3()?;
             }
             Transition::T4 => {
+                self.exec_transition = Transition::Tn;
                 // T4: ValidityCheck -> Idle on [DataValid & DS_StoreRequest]
                 // Action: Mark parameter set as valid; invoke DS_ParUpload.req to DS; enable positive acknowledge of transmission; reset "StoreRequest" (= FALSE)
-                // TODO: Implement parameter validation, data storage upload, and acknowledgment
+                self.execute_t4(od_handler, data_storage)?;
             }
             Transition::T5 => {
+                self.exec_transition = Transition::Tn;
                 // T5: ValidityCheck -> Idle on [DataValid & not DS_StoreRequest]
                 // Action: Mark parameter set as valid; enable positive acknowledge of transmission
-                // TODO: Implement parameter validation and acknowledgment
+                self.execute_t5()?;
             }
             Transition::T6 => {
+                self.exec_transition = Transition::Tn;
                 // T6: ValidityCheck -> Idle on [DataInvalid]
                 // Action: Mark parameter set as invalid; enable negative acknowledgment of transmission; reset "StoreRequest" (= FALSE); discard parameter buffer
-                // TODO: Implement parameter invalidation, negative acknowledgment, and buffer cleanup
+                self.execute_t6(od_handler)?;
             }
             Transition::T7 => {
+                self.exec_transition = Transition::Tn;
                 // T7: Idle -> Download on [DownloadStart]
                 // Action: Lock local parameter access
-                // TODO: Implement parameter access locking
+                self.execute_t7()?;
             }
             Transition::T8 => {
+                self.exec_transition = Transition::Tn;
                 // T8: Download -> Idle on [ParamBreak or UploadEnd]
                 // Action: Unlock local parameter access; discard parameter buffer
-                // TODO: Implement parameter access unlocking and buffer cleanup
+                self.execute_t8()?;
             }
             Transition::T9 => {
+                self.exec_transition = Transition::Tn;
                 // T9: Download -> Idle on DeviceMode_Change
                 // Action: Unlock local parameter access; discard parameter buffer
-                // TODO: Implement parameter access unlocking and buffer cleanup
+                self.execute_t9()?;
             }
             Transition::T10 => {
+                self.exec_transition = Transition::Tn;
                 // T10: Idle -> Upload on [UploadStart]
                 // Action: Lock local parameter access
-                // TODO: Implement parameter access locking
+                self.execute_t10()?;
             }
             Transition::T11 => {
+                self.exec_transition = Transition::Tn;
                 // T11: Upload -> Idle on [UploadEnd or ParamBreak or DownloadEnd]
                 // Action: Unlock local parameter access
-                // TODO: Implement parameter access unlocking
+                self.execute_t11()?;
             }
             Transition::T12 => {
+                self.exec_transition = Transition::Tn;
                 // T12: Upload -> Idle on DeviceMode_Change
                 // Action: Unlock local parameter access
-                // TODO: Implement parameter access unlocking
+                self.execute_t12()?;
             }
             Transition::T13 => {
+                self.exec_transition = Transition::Tn;
                 // T13: Download -> ValidityCheck on [DownloadEnd]
                 // Action: Unlock local parameter access
-                // TODO: Implement parameter access unlocking
+                self.execute_t13()?;
             }
             Transition::T14 => {
+                self.exec_transition = Transition::Tn;
                 // T14: Download -> ValidityCheck on [DownloadStore]
                 // Action: Unlock local parameter access; set "StoreRequest" (= TRUE)
-                // TODO: Implement parameter access unlocking and store request setting
+                self.execute_t14()?;
             }
             Transition::T15 => {
+                self.exec_transition = Transition::Tn;
                 // T15: Upload -> Upload on [UploadStart]
                 // Action: Lock local parameter access
-                // TODO: Implement parameter access locking
+                self.execute_t15()?;
             }
             Transition::T16 => {
+                self.exec_transition = Transition::Tn;
                 // T16: Download -> Download on [DownloadStart]
                 // Action: Discard parameter buffer, so that a possible second start will not be blocked
-                // TODO: Implement parameter buffer cleanup
+                self.execute_t16()?;
             }
             Transition::T17 => {
+                self.exec_transition = Transition::Tn;
                 // T17: Upload -> ValidityCheck on [DownloadStore]
                 // Action: Unlock local parameter access; set "StoreRequest" (= TRUE)
-                // TODO: Implement parameter access unlocking and store request setting
+                self.execute_t17()?;
             }
             Transition::T18 => {
+                self.exec_transition = Transition::Tn;
                 // T18: Download -> Upload on [UploadStart]
                 // Action: Discard parameter buffer, so that a possible second start will not be blocked
-                // TODO: Implement parameter buffer cleanup
+                self.execute_t18()?;
             }
             Transition::T19 => {
+                self.exec_transition = Transition::Tn;
                 // T19: Upload -> Download on [DownloadStart]
                 // Action: -
+                self.execute_t19()?;
             }
             Transition::T20 => {
+                self.exec_transition = Transition::Tn;
                 // T20: Idle -> Idle on [UploadEnd or ParamBreak or DownloadEnd]
                 // Action: Return ErrorType 0x8036 – Function temporarily unavailable if Block Parameterization supported or ErrorType 0x8035 – Function not available if Block Parameterization is not supported
-                // TODO: Implement error response based on Block Parameterization support
-                // return Err(IoLinkError::FunctionNotAvailable);
+                self.execute_t20(od_handler)?;
             }
             Transition::T21 => {
+                self.exec_transition = Transition::Tn;
                 // T21: Download -> Idle on [SysCmdReset]
                 // Action: Unlock local parameter access; discard parameter buffer
-                // TODO: Implement parameter access unlocking and buffer cleanup
+                self.execute_t21()?;
             }
             Transition::T22 => {
+                self.exec_transition = Transition::Tn;
                 // T22: Upload -> Idle on [SysCmdReset]
                 // Action: Unlock local parameter access
-                // TODO: Implement parameter access unlocking
+                self.execute_t22()?;
             }
         }
-        let _ = self.poll_active_state(od_handler);
+        let _ = self.poll_active_state(od_handler, data_storage);
         Ok(())
     }
 
     fn poll_active_state(
         &mut self,
         od_handler: &mut od_handler::OnRequestDataHandler,
+        data_storage: &mut data_storage::DataStorage,
     ) -> IoLinkResult<()> {
         use ParameterManagerEvent as Event;
         use ParameterManagerState as State;
@@ -452,6 +512,10 @@ impl ParameterManager {
                 }
             }
             None => {}
+        }
+        if let Some(ds_command) = self.ds_command {
+            data_storage.ds_command(ds_command)?;
+            self.ds_command = None;
         }
         Ok(())
     }
@@ -489,10 +553,12 @@ impl ParameterManager {
     pub fn execute_t4(
         &mut self,
         od_handler: &mut od_handler::OnRequestDataHandler,
+        data_storage: &mut data_storage::DataStorage,
     ) -> IoLinkResult<()> {
         // Mark parameter set as valid
         self.data_valid = ValidityCheckResult::Valid;
-        // TODO: Invoke DS_ParUpload.req to DS.
+        // Invoke DS_ParUpload.req to DS.
+        data_storage.ds_par_upload_ind()?;
         // Send positive acknowledge of transmission
         od_handler.al_write_rsp(Ok(()))?;
         // Reset StoreRequest flag to false.
@@ -516,7 +582,6 @@ impl ParameterManager {
     /// Executes transition T6: ValidityCheck -> Idle on [DataInvalid]
     ///
     /// Action: Mark parameter set as invalid; enable negative acknowledgment of transmission; reset "StoreRequest" (= FALSE); discard parameter buffer
-    /// TODO: Mark parameter set as invalid, enable negative ack, reset StoreRequest, discard buffer.
     pub fn execute_t6(
         &mut self,
         od_handler: &mut od_handler::OnRequestDataHandler,
@@ -536,7 +601,6 @@ impl ParameterManager {
     /// Executes transition T7: Idle -> Download on [DownloadStart]
     ///
     /// Action: Lock local parameter access; discard parameter buffer
-    /// TODO: Lock parameter access and discard buffer.
     pub fn execute_t7(&mut self) -> IoLinkResult<()> {
         // Lock local parameter access.
         self.local_parameter_access = LockState::Locked;
@@ -558,7 +622,6 @@ impl ParameterManager {
     /// Executes transition T9: Download -> ValidityCheck on [DownloadStore]
     ///
     /// Action: Unlock local parameter access; set "StoreRequest" (= TRUE)
-    /// TODO: Unlock parameter access and set StoreRequest.
     pub fn execute_t9(&mut self) -> IoLinkResult<()> {
         // Unlock local parameter access.
         self.local_parameter_access = LockState::Unlocked;
@@ -758,12 +821,81 @@ impl ParameterManager {
 
         Ok(())
     }
+
+    /// Set the upload flag in the data storage state property
+    ///
+    /// # Arguments
+    ///
+    /// * `upload_flag` - The upload flag to set
+    ///
+    /// # Returns
+    pub fn set_upload_flag(&mut self, upload_flag: bool) -> IoLinkResult<()> {
+        const STATE_PROPERTY_INDEX: u16 = al::DeviceParametersIndex::DataStorageIndex.index();
+        const STATE_PROPERTY_SUBINDEX: u8 = al::DeviceParametersIndex::DataStorageIndex.subindex(
+            al::SubIndex::DataStorageIndex(al::DataStorageIndexSubIndex::StateProperty),
+        );
+
+        let state_property = self
+            .param_storage
+            .get_parameter(STATE_PROPERTY_INDEX, STATE_PROPERTY_SUBINDEX)
+            .map_err(|_| IoLinkError::FailedToGetParameter)?;
+
+        let mut state_property = StateProperty::from_bytes([state_property[0]]);
+        state_property.set_ds_upload_flag(upload_flag);
+
+        self.param_storage
+            .set_parameter(
+                STATE_PROPERTY_INDEX,
+                STATE_PROPERTY_SUBINDEX,
+                &state_property.into_bytes(),
+            )
+            .map_err(|_| IoLinkError::FailedToSetParameter)?;
+        Ok(())
+    }
+
+    /// Set the state of data storage in the state property
+    ///
+    /// # Arguments
+    ///
+    /// * `state_of_ds` - The state of data storage to set
+    ///
+    /// # Returns
+    pub fn set_state_property(&mut self, state_of_ds: DsState) -> IoLinkResult<()> {
+        const STATE_PROPERTY_INDEX: u16 = al::DeviceParametersIndex::DataStorageIndex.index();
+        const STATE_PROPERTY_SUBINDEX: u8 = al::DeviceParametersIndex::DataStorageIndex.subindex(
+            al::SubIndex::DataStorageIndex(al::DataStorageIndexSubIndex::StateProperty),
+        );
+        
+        let state_property = self
+            .param_storage
+            .get_parameter(STATE_PROPERTY_INDEX, STATE_PROPERTY_SUBINDEX)
+            .map_err(|_| IoLinkError::FailedToGetParameter)?;
+
+        let mut state_property = StateProperty::from_bytes([state_property[0]]);
+        state_property.set_ds_state(state_of_ds);
+
+        self.param_storage
+            .set_parameter(STATE_PROPERTY_INDEX, STATE_PROPERTY_SUBINDEX, &state_property.into_bytes())
+            .map_err(|_| IoLinkError::FailedToSetParameter)?;
+        Ok(())
+    }
+
+    pub fn lock_local_parameter_access(&mut self) -> IoLinkResult<()> {
+        self.local_parameter_access = LockState::Locked;
+        Ok(())
+    }
+
+    pub fn unlock_local_parameter_access(&mut self) -> IoLinkResult<()> {
+        self.local_parameter_access = LockState::Unlocked;
+        Ok(())
+    }
 }
 
-impl al::ApplicationLayerInd for ParameterManager {
+impl al::ApplicationLayerReadWriteInd for ParameterManager {
     fn al_read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<()> {
         // For demonstration, return a zeroed array. Replace with actual parameter read logic.
         // In a real implementation, you would look up the parameter by index/sub_index.
+        self.read_cycle = Some((index, sub_index));
         Ok(())
     }
 
@@ -792,6 +924,16 @@ impl al::ApplicationLayerInd for ParameterManager {
                 self.handle_system_command(system_command)?;
                 return Ok(());
             }
+            Some(DeviceParametersIndex::DataStorageIndex) => {
+                const DS_COMMAND_SUBINDEX: u8 = al::DeviceParametersIndex::DataStorageIndex.subindex(
+                    al::SubIndex::DataStorageIndex(al::DataStorageIndexSubIndex::DsCommand),
+                );
+                if sub_index == DS_COMMAND_SUBINDEX {
+                    self.ds_command = Some(data_storage::DsCommand::try_from(data[0])?);
+                }
+
+                return Ok(());
+            }
             _ => {
                 // Handling single parameter
                 self.process_event(ParameterManagerEvent::SingleParameter)?;
@@ -803,35 +945,7 @@ impl al::ApplicationLayerInd for ParameterManager {
 
     fn al_abort_ind(&mut self) -> IoLinkResult<()> {
         // Handle abort indication, e.g., reset state or abort current operation.
-        Ok(())
-    }
-
-    fn al_set_input_ind(&mut self) -> IoLinkResult<()> {
-        // Handle set input indication.
-        Ok(())
-    }
-
-    fn al_pd_cycle_ind(&mut self) {
-        // Handle process data cycle indication.
-    }
-
-    fn al_get_output_ind(&mut self) -> IoLinkResult<()> {
-        // Handle get output indication.
-        Ok(())
-    }
-
-    fn al_new_output_ind(&mut self) -> IoLinkResult<()> {
-        // Handle new output indication.
-        Ok(())
-    }
-
-    fn al_event(&mut self) -> IoLinkResult<()> {
-        // Handle event indication.
-        Ok(())
-    }
-
-    fn al_control(&mut self, control_code: u8) -> IoLinkResult<()> {
-        // Handle control indication with the given control code.
+        self.read_cycle = None;
         Ok(())
     }
 }

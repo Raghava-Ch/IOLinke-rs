@@ -4,7 +4,6 @@
 //! IO-Link Specification v1.1.4 Section 8.4
 
 use crate::{dl, storage, types::{self, IoLinkResult}};
-use heapless::Vec;
 
 /// Application Layer trait defining all request/indication methods
 /// See IO-Link v1.1.4 Section 8.4
@@ -40,7 +39,7 @@ pub trait AlEventReq<'a> {
     fn al_event_req(
         &mut self,
         event_count: u8,
-        event_entries: &'a [storage::event_memory::EventEntry; 6],
+        event_entries: &'a [storage::event_memory::EventEntry],
     ) -> IoLinkResult<()>; 
 }
 pub trait AlControlReq {
