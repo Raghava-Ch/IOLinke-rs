@@ -36,7 +36,7 @@ enum Transition<'a> {
     /// data exchange (see A.1.5).
     T3(
         u8, // event_count
-        &'a [storage::event_memory::EventEntry; 6], // event_entries
+        &'a [storage::event_memory::EventEntry], // event_entries
     ),
     /// T4: State: AwaitEventResponse (2) -> EventIdle (1)
     /// Action: A DL_EventTrigger confirmation triggers an AL_Event confirmation.
@@ -53,7 +53,7 @@ pub enum EventStateMachineEvent<'a> {
     /// {AL_Event_request} See 8.3.3.2, Triggers T3
     AlEventRequest(
         u8, // event_count
-        &'a [storage::event_memory::EventEntry; 6], // event_entries
+        &'a [storage::event_memory::EventEntry], // event_entries
     ),
     /// {DL_EventTrigger_conf} See 8.3.3.2, Triggers T4
     DlEventTriggerConf,
@@ -162,7 +162,7 @@ impl<'a> EventHandler<'a> {
     fn execute_t3(
         &mut self,
         event_count: u8,
-        event_entries: &[storage::event_memory::EventEntry; 6],
+        event_entries: &[storage::event_memory::EventEntry],
         data_link_layer: &mut dl::DataLinkLayer,
     ) -> IoLinkResult<()> {
         // T3: AlEventRequest -> AwaitEventResponse
@@ -195,7 +195,7 @@ impl<'a> al::services::AlEventReq<'a> for EventHandler<'a> {
     fn al_event_req(
         &mut self,
         event_count: u8,
-        event_entries: &'a [storage::event_memory::EventEntry; 6],
+        event_entries: &'a [storage::event_memory::EventEntry],
     ) -> IoLinkResult<()> {
         self.process_event(EventStateMachineEvent::AlEventRequest(
             event_count,

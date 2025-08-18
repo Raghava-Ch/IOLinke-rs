@@ -28,14 +28,12 @@
 pub use iolinke_macros::*;
 
 mod al;
-mod config;
 mod dl;
-mod parameter;
 mod pl;
+mod utils;
+mod config;
 mod storage;
 mod system_management;
-mod utils;
-mod data_storage;
 
 #[cfg(feature = "std")]
 pub mod ffi;
@@ -46,7 +44,6 @@ pub mod test_utils;
 #[cfg(test)]
 pub use test_utils::*;
 
-use crate::system_management::{SmResult, SystemManagementInd};
 // Re-export main traits and types
 pub use types::*;
 
@@ -55,7 +52,6 @@ pub struct IoLinkDevice<'a> {
     physical_layer: pl::physical_layer::PhysicalLayer,
     dl: dl::DataLinkLayer<'a>,
     system_management: system_management::SystemManagement,
-    services: al::services::ApplicationLayerServices,
     application: al::ApplicationLayer<'a>,
 }
 
@@ -66,7 +62,6 @@ impl<'a> IoLinkDevice<'a> {
             system_management: system_management::SystemManagement::default(),
             physical_layer: pl::physical_layer::PhysicalLayer::default(),
             dl: dl::DataLinkLayer::default(),
-            services: al::services::ApplicationLayerServices::default(),
             application: al::ApplicationLayer::default(),
         }
     }
@@ -94,32 +89,39 @@ impl<'a> IoLinkDevice<'a> {
     }
 }
 
-impl<'a> system_management::SystemManagementInd for IoLinkDevice<'a> {
-    fn sm_device_mode_ind(&mut self, mode: types::DeviceMode) -> SmResult<()> {
-        todo!()
+impl<'a> al::ApplicationLayerReadWriteInd for IoLinkDevice<'a> {
+    fn al_read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<()> {
+        self.application.al_read_ind(index, sub_index)
+    }
+
+    fn al_write_ind(&mut self, index: u16, sub_index: u8, data: &[u8]) -> IoLinkResult<()> {
+        self.application.al_write_ind(index, sub_index, data)
+    }
+
+    fn al_abort_ind(&mut self) -> IoLinkResult<()> {
+        Err(IoLinkError::FuncNotAvailable)
     }
 }
 
-impl<'a> system_management::SystemManagementCnf for IoLinkDevice<'a> {
-    fn sm_set_device_com_cnf(&self, result: SmResult<()>) -> SmResult<()> {
-        todo!()
+impl<'a> al::ApplicationLayerProcessDataInd for IoLinkDevice<'a> {
+    fn al_set_input_ind(&mut self) -> IoLinkResult<()> {
+        todo!();
     }
-    fn sm_get_device_com_cnf(
-        &self,
-        result: SmResult<&system_management::DeviceCom>,
-    ) -> SmResult<()> {
-        todo!()
+
+    fn al_pd_cycle_ind(&mut self) {
+        todo!();
     }
-    fn sm_set_device_ident_cnf(&self, result: SmResult<()>) -> SmResult<()> {
-        todo!()
+
+    fn al_get_output_ind(&mut self) -> IoLinkResult<()> {
+        todo!();
     }
-    fn sm_get_device_ident_cnf(
-        &self,
-        result: SmResult<&system_management::DeviceIdent>,
-    ) -> SmResult<()> {
-        todo!()
+
+    fn al_new_output_ind(&mut self) -> IoLinkResult<()> {
+        todo!();
     }
-    fn sm_set_device_mode_cnf(&self, result: SmResult<()>) -> SmResult<()> {
-        todo!()
+
+    fn al_control(&mut self, control_code: u8) -> IoLinkResult<()> {
+        todo!();
     }
+    
 }

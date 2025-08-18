@@ -7,10 +7,7 @@ use iolinke_macros::{direct_parameter_address, master_command};
 use modular_bitfield::prelude::*;
 
 use crate::{
-    IoLinkDevice, IoLinkMode,
-    dl::DlInd,
-    pl,
-    types::{self, IoLinkError, IoLinkResult},
+    al, dl::DlInd, pl, types::{self, IoLinkError, IoLinkResult}, IoLinkDevice, IoLinkMode
 };
 
 pub enum SmError {
@@ -256,9 +253,9 @@ impl Default for DeviceIdent {
 
 pub trait SystemManagementReq {
     fn sm_set_device_com_req(&mut self, device_com: &DeviceCom) -> SmResult<()>;
-    fn sm_get_device_com_req(&mut self, iolink_device: &IoLinkDevice) -> SmResult<()>;
+    fn sm_get_device_com_req(&mut self, application_layer: &al::ApplicationLayer) -> SmResult<()>;
     fn sm_set_device_ident_req(&mut self, device_ident: &DeviceIdent) -> SmResult<()>;
-    fn sm_get_device_ident_req(&mut self, iolink_device: &IoLinkDevice) -> SmResult<()>;
+    fn sm_get_device_ident_req(&mut self, application_layer: &al::ApplicationLayer) -> SmResult<()>;
     fn sm_set_device_mode_req(&mut self, mode: DeviceMode) -> SmResult<()>;
 }
 
@@ -534,7 +531,7 @@ impl SystemManagement {
     /// Poll the system management
     pub fn poll(
         &mut self,
-        iolink_device: &mut IoLinkDevice,
+        application_layer: &mut al::ApplicationLayer,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
         if self.reconfig.revision_id.is_some()
@@ -542,7 +539,7 @@ impl SystemManagement {
             && self.reconfig.device_id2.is_some()
             && self.reconfig.device_id3.is_some()
             {
-                let _ = self.poll_active_state(iolink_device);
+                let _ = self.poll_active_state(application_layer);
             }
         match self.exec_transition {
             Transition::Tn => {
@@ -553,37 +550,37 @@ impl SystemManagement {
                 // Execute T1 transition logic
                 // Set device mode to SIO
                 self.exec_transition = Transition::Tn;
-                self.execute_t1(iolink_device, physical_layer)?;
+                self.execute_t1(application_layer, physical_layer)?;
             }
             Transition::T2 => {
                 // Execute T2 transition logic
                 // Set device mode to COMx
                 self.exec_transition = Transition::Tn;
-                self.execute_t2(iolink_device, physical_layer)?;
+                self.execute_t2(application_layer, physical_layer)?;
             }
             Transition::T3 => {
                 // Execute T3 transition logic
                 // Set device mode to INACTIVE
                 self.exec_transition = Transition::Tn;
-                self.execute_t3(iolink_device, physical_layer)?;
+                self.execute_t3(application_layer, physical_layer)?;
             }
             Transition::T4(mode) => {
                 // Execute T4 transition logic
                 // Set device mode to COMx
                 self.exec_transition = Transition::Tn;
-                self.execute_t4(mode, iolink_device)?;
+                self.execute_t4(mode, application_layer)?;
             }
             Transition::T5 => {
                 // Execute T5 transition logic
                 // Set device mode to IDENTSTARTUP
                 self.exec_transition = Transition::Tn;
-                self.execute_t5(iolink_device)?;
+                self.execute_t5(application_layer)?;
             }
             Transition::T6 => {
                 // Execute T6 transition logic
                 // Set device mode to IDENTCHANGE
                 self.exec_transition = Transition::Tn;
-                self.execute_t6(iolink_device)?;
+                self.execute_t6(application_layer)?;
             }
             Transition::T7 => {
                 // Execute T7 transition logic
@@ -595,49 +592,49 @@ impl SystemManagement {
                 // Execute T8 transition logic
                 // Set device mode to PREOPERATE
                 self.exec_transition = Transition::Tn;
-                self.execute_t8(iolink_device)?;
+                self.execute_t8(application_layer)?;
             }
             Transition::T9 => {
                 // Execute T9 transition logic
                 // Set device mode to OPERATE
                 self.exec_transition = Transition::Tn;
-                self.execute_t9(iolink_device)?;
+                self.execute_t9(application_layer)?;
             }
             Transition::T10 => {
                 // Execute T10 transition logic
                 // Set device mode to PREOPERATE
                 self.exec_transition = Transition::Tn;
-                self.execute_t10(iolink_device)?;
+                self.execute_t10(application_layer)?;
             }
             Transition::T11 => {
                 // Execute T11 transition logic
                 // Set device mode to OPERATE
                 self.exec_transition = Transition::Tn;
-                self.execute_t11(iolink_device)?;
+                self.execute_t11(application_layer)?;
             }
             Transition::T12 => {
                 // Execute T12 transition logic
                 // Set device mode to STARTUP
                 self.exec_transition = Transition::Tn;
-                self.execute_t12(iolink_device)?;
+                self.execute_t12(application_layer)?;
             }
             Transition::T13 => {
                 // Execute T13 transition logic
                 // Set device mode to STARTUP
                 self.exec_transition = Transition::Tn;
-                self.execute_t13(iolink_device)?;
+                self.execute_t13(application_layer)?;
             }
             Transition::T14 => {
                 // Execute T14 transition logic
                 // Change transmission rate and set device mode to ESTABCOM
                 self.exec_transition = Transition::Tn;
-                self.execute_t14(iolink_device, physical_layer)?;
+                self.execute_t14(application_layer, physical_layer)?;
             }
         }
         Ok(())
     }
 
-    fn poll_active_state(&mut self, iolink_device: &IoLinkDevice) -> IoLinkResult<()> {
+    fn poll_active_state(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         use SystemManagementState as State;
         match self.state {
             State::IdentCheck => {
@@ -650,9 +647,9 @@ impl SystemManagement {
                 let device_com = Ok(&device_com);
                 let device_ident = Ok(&device_ident);
                 // Invoke SM_GetDeviceCom(configured RID, parameter list)
-                let _ = iolink_device.sm_get_device_com_cnf(device_com);
+                let _ = application_layer.sm_get_device_com_cnf(device_com);
                 // Invoke SM_GetDeviceIdent(configured DID, parameter list)
-                let _ = iolink_device.sm_get_device_ident_cnf(device_ident);
+                let _ = application_layer.sm_get_device_ident_cnf(device_ident);
                 self.reconfig = ReConfig::default();
                 Ok(())
             }
@@ -665,7 +662,7 @@ impl SystemManagement {
     /// Execute T1 transition: Switch to SIO mode
     fn execute_t1(
         &mut self,
-        iolink_device: &mut IoLinkDevice,
+        application_layer: &mut al::ApplicationLayer,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
         // Invoke PL_SetMode(DI|DO|INACTIVE)
@@ -676,14 +673,14 @@ impl SystemManagement {
         };
         physical_layer.pl_set_mode(sio_mode)?;
         // Invoke SM_DeviceMode(SIO)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Sio);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Sio);
         Ok(())
     }
 
     /// Execute T2 transition: Switch to communication mode
     fn execute_t2(
         &mut self,
-        iolink_device: &mut IoLinkDevice,
+        application_layer: &mut al::ApplicationLayer,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
         let com_mode = match self.device_com.transmission_rate {
@@ -694,21 +691,21 @@ impl SystemManagement {
         // Invoke PL_SetMode(COMx)
         physical_layer.pl_set_mode(com_mode)?;
         // Invoke SM_DeviceMode(ESTABCOM)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Estabcom);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Estabcom);
         Ok(())
     }
 
     /// Execute T3 transition: Switch to SM_Idle mode
     fn execute_t3(
         &mut self,
-        iolink_device: &mut IoLinkDevice,
+        application_layer: &mut al::ApplicationLayer,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
         // TODO: Cleanup any active communication sessions and reset state
         // Invoke PL_SetMode(INACTIVE)
         physical_layer.pl_set_mode(IoLinkMode::Inactive)?;
         // Invoke SM_DeviceMode(IDLE)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Idle);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Idle);
         Ok(())
     }
 
@@ -716,27 +713,27 @@ impl SystemManagement {
     fn execute_t4(
         &mut self,
         mode: types::DeviceMode,
-        iolink_device: &mut IoLinkDevice,
+        application_layer: &mut al::ApplicationLayer,
     ) -> IoLinkResult<()> {
         // Invoke SM_DeviceMode(COMx)
         // TODO: Invoke SM_DeviceMode(COMx)
-        let _ = iolink_device.sm_device_mode_ind(mode);
+        let _ = application_layer.sm_device_mode_ind(mode);
         Ok(())
     }
 
     /// Execute T5 transition: Enter device identification phase
-    fn execute_t5(&mut self, iolink_device: &mut IoLinkDevice) -> IoLinkResult<()> {
+    fn execute_t5(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // TODO: Prepare device identification data for master verification
         // Invoke SM_DeviceMode(IDENTSTARTUP)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Identstartup);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Identstartup);
         Ok(())
     }
 
     /// Execute T6 transition: Enter device identity check phase
-    fn execute_t6(&mut self, iolink_device: &mut IoLinkDevice) -> IoLinkResult<()> {
+    fn execute_t6(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // TODO: Handle master-provided RID and DID parameters for compatibility check
         // Invoke SM_DeviceMode(IDENTCHANGE)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Identchange);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Identchange);
         Ok(())
     }
 
@@ -749,57 +746,57 @@ impl SystemManagement {
     }
 
     /// Execute T8 transition: Enter device preoperate phase
-    fn execute_t8(&mut self, iolink_device: &mut IoLinkDevice) -> IoLinkResult<()> {
+    fn execute_t8(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // TODO: Prepare device for parameterization and data storage operations
         // Invoke SM_DeviceMode(PREOPERATE)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Preoperate);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Preoperate);
         Ok(())
     }
 
     /// Execute T9 transition: Enter device operate phase
-    fn execute_t9(&mut self, iolink_device: &mut IoLinkDevice) -> IoLinkResult<()> {
+    fn execute_t9(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // TODO: Initialize cyclic process data exchange and acyclic data transfer
         // Invoke SM_DeviceMode(OPERATE)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Operate);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Operate);
         Ok(())
     }
 
     /// Execute T10 transition: Enter device preoperate phase from IdentStartup
-    fn execute_t10(&mut self, iolink_device: &mut IoLinkDevice) -> IoLinkResult<()> {
+    fn execute_t10(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // TODO: Handle direct transition from identification to preoperate
         // Invoke SM_DeviceMode(PREOPERATE)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Preoperate);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Preoperate);
         Ok(())
     }
 
     /// Execute T11 transition: Enter device operate phase from ComStartup
-    fn execute_t11(&mut self, iolink_device: &mut IoLinkDevice) -> IoLinkResult<()> {
+    fn execute_t11(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // TODO: Handle legacy master behavior (direct transition to operate)
         // Invoke SM_DeviceMode(OPERATE)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Operate);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Operate);
         Ok(())
     }
 
     /// Execute T12 transition: Enter communication startup phase from Preoperate
-    fn execute_t12(&mut self, iolink_device: &mut IoLinkDevice) -> IoLinkResult<()> {
+    fn execute_t12(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // TODO: Reset communication parameters and restart identification process
         // Invoke SM_DeviceMode(STARTUP)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Startup);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Startup);
         Ok(())
     }
 
     /// Execute T13 transition: Enter communication startup phase from Operate
-    fn execute_t13(&mut self, iolink_device: &mut IoLinkDevice) -> IoLinkResult<()> {
+    fn execute_t13(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // TODO: Handle communication restart from operate mode
         // Invoke SM_DeviceMode(STARTUP)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Startup);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Startup);
         Ok(())
     }
 
     /// Execute T14 transition: Change transmission rate and establish communication
     fn execute_t14(
         &mut self,
-        iolink_device: &mut IoLinkDevice,
+        application_layer: &mut al::ApplicationLayer,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
     ) -> IoLinkResult<()> {
         // TODO: Implement transmission rate change logic based on device identification requirements
@@ -807,7 +804,7 @@ impl SystemManagement {
         // TODO: Change the COM1 to actual communication mode from the application
         physical_layer.pl_set_mode(IoLinkMode::Com1)?;
         // Invoke SM_DeviceMode(ESTABCOM)
-        let _ = iolink_device.sm_device_mode_ind(types::DeviceMode::Estabcom);
+        let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Estabcom);
         Ok(())
     }
     /// See 9.3.2.7 SM_DeviceMode
@@ -896,12 +893,12 @@ impl SystemManagementReq for SystemManagement {
         Ok(())
     }
 
-    fn sm_get_device_com_req(&mut self, iolink_device: &IoLinkDevice) -> SmResult<()> {
+    fn sm_get_device_com_req(&mut self, application_layer: &al::ApplicationLayer) -> SmResult<()> {
         // Return the current device communication parameters
         // Typically, this would trigger a confirmation callback
         // Here, we just return Ok(())
         let device_com = Ok(&self.device_com);
-        iolink_device.sm_get_device_com_cnf(device_com)?;
+        application_layer.sm_get_device_com_cnf(device_com)?;
         Ok(())
     }
 
@@ -911,10 +908,10 @@ impl SystemManagementReq for SystemManagement {
         Ok(())
     }
 
-    fn sm_get_device_ident_req(&mut self, iolink_device: &IoLinkDevice) -> SmResult<()> {
+    fn sm_get_device_ident_req(&mut self, application_layer: &al::ApplicationLayer) -> SmResult<()> {
         // Return the current device identification parameters
         let device_ident = Ok(&self.device_ident);
-        iolink_device.sm_get_device_ident_cnf(device_ident)?;
+        application_layer.sm_get_device_ident_cnf(device_ident)?;
         Ok(())
     }
 

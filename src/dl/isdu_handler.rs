@@ -141,7 +141,7 @@ enum IsduHandlerEvent<'a> {
     IsduRespStart,
 }
 
-const MAX_ISDU_LENGTH: usize = 238;
+pub const MAX_ISDU_LENGTH: usize = 238;
 
 /// ISDU (Index Service Data Unit) structure
 /// See IO-Link v1.1.4 Section 8.4.3

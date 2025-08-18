@@ -33,21 +33,80 @@ struct StatusCodeType2 {
 /// See A.6.4 EventQualifier
 /// The structure of the EventQualifier is shown in Figure A.24.
 #[bitfield]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EventQualifier {
-    pub eq_mode: B2,
-    pub eq_type: B2,
-    pub eq_source: B1,
-    pub eq_instance: B3,
+    #[bits = 2]
+    pub eq_mode: EventMode,
+    #[bits = 2]
+    pub eq_type: EventType,
+    #[bits = 1]
+    pub eq_source: EventSource,
+    #[bits = 3]
+    pub eq_instance: EventInstance,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+
+/// EventQualifier INSTANCE field (Bits 0..=2)
+/// See Table A.17 – Values of INSTANCE
+#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
+#[bits = 3]
+pub enum EventInstance {
+    Unknown = 0,
+    // Reserved = 1..=3,
+    Application = 4,
+    System = 5,
+    // Reserved = 6..=7,
+}
+
+/// EventQualifier SOURCE field (Bits 3)
+/// See Table A.18 – Values of SOURCE
+#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
+#[bits = 1]
+pub enum EventSource {
+    /// Device (remote)
+    Device = 0,
+    /// Master/Port
+    Master = 1,
+}
+
+/// EventQualifier TYPE field (Bits 4..=5)
+/// See Table A.19 – Values of TYPE
+#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
+#[bits = 2]
+pub enum EventType {
+    // Reserved = 0
+    Notification = 1,
+    Warning = 2,
+    Error = 3,
+}
+
+/// EventQualifier MODE field (Bits 6..=7)
+/// See Table A.20 – Values of MODE
+#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
+#[bits = 2]
+pub enum EventMode {
+    // Reserved = 0,
+    SingleShot = 1,
+    Disappears = 2,
+    Appears = 3,
+}
+
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EventEntry {
     pub event_qualifier: EventQualifier,
     pub event_code: u16, // device_event_code macro to be used
 }
 
 impl EventEntry {
+    pub fn new(event_qualifier: EventQualifier, event_code: u16) -> Self {
+        Self {
+            event_qualifier,
+            event_code,
+        }
+    }
+
     /// Convert EventEntry to bytes representation
     pub fn to_bytes(&self) -> [u8; 3] {
         let mut bytes = [0u8; 3];
@@ -83,7 +142,7 @@ impl EventMemory {
     }
 
     /// Add an event entry to the memory
-    pub fn add_event_details(&mut self, entries: &[EventEntry; 6]) -> IoLinkResult<()> {
+    pub fn add_event_details(&mut self, entries: &[EventEntry]) -> IoLinkResult<()> {
         if self.read_only {
             return Err(IoLinkError::ReadOnlyError);
         }

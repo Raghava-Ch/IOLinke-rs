@@ -503,6 +503,14 @@ pub enum IoLinkError {
     ReadOnlyError,
     /// Invalid length, This is a custom error type for length handling
     InvalidLength,
+    /// Parameter storage not set, This is a custom error type for parameter manager
+    ParameterStorageNotSet,
+    /// Failed to get parameter, This is a custom error type for parameter manager
+    FailedToGetParameter,
+    /// Failed to set parameter, This is a custom error type for parameter manager
+    FailedToSetParameter,
+    /// Function not available, This is a custom error type for parameter manager
+    FuncNotAvailable,
 }
 
 /// Result type for IO-Link operations

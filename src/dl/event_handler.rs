@@ -17,7 +17,7 @@ pub trait DlEventReq {
     fn dl_event_req(
         &mut self,
         event_count: u8,
-        event_entries: &[storage::event_memory::EventEntry; 6],
+        event_entries: &[storage::event_memory::EventEntry],
     ) -> IoLinkResult<()>;
 
     fn dl_event_trigger_req(&mut self) -> IoLinkResult<()>;
@@ -282,7 +282,7 @@ impl<'a> EventHandler<'a> {
     pub fn dl_event_req(
         &mut self,
         event_count: u8, // TODO: Check what to do with this?
-        event_entries: &[storage::event_memory::EventEntry; 6],
+        event_entries: &[storage::event_memory::EventEntry],
     ) -> IoLinkResult<()> {
         // TODO: Implement the DL_Event request to event memory handling
         self.active_event_count = event_count;
