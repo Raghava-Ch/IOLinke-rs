@@ -100,9 +100,10 @@ const HEADER_SIZE: usize = 2; // Header size is 2 bytes (MC and length)
 const MAX_OD_SIZE: usize = 32;
 /// Maximum message buffer size for PD
 /// This is the maximum size of the message buffer used for PD messages.
-const MAX_PD_SIZE: usize = 32;
+const PD_IN_LENGTH: usize = pd_handler::PD_INPUT_LENGTH;
+const PD_OUT_LENGTH: usize = pd_handler::PD_OUTPUT_LENGTH;
 /// Maximum frame size for IO-Link messages
-const MAX_FRAME_SIZE: usize = MAX_OD_SIZE + MAX_PD_SIZE + HEADER_SIZE;
+const MAX_FRAME_SIZE: usize = MAX_OD_SIZE + PD_OUT_LENGTH + HEADER_SIZE;
 
 /// IO-Link message structure
 /// See IO-Link v1.1.4 Section 6.1
@@ -121,7 +122,7 @@ struct IoLinkMessage {
     /// On Request Data (OD) response data
     od: Option<Vec<u8, MAX_OD_SIZE>>,
     /// Process Data (PD) response data
-    pd: Option<Vec<u8, MAX_PD_SIZE>>,
+    pd: Option<Vec<u8, PD_OUT_LENGTH>>,
     /// Process Data input status
     pd_status: Option<types::PdStatus>,
 }
@@ -451,7 +452,7 @@ impl<'a> MessageHandler<'a> {
         od_handler: &mut dl::od_handler::OnRequestDataHandler<'a>,
         pd_handler: &mut pd_handler::ProcessDataHandler,
     ) -> IoLinkResult<()> {
-        if let (Some(rw), Some(channel), Some(addr_ctrl), Some(ref od_data), Some(ref pd_data)) = (
+        if let (Some(rw), Some(channel), Some(addr_ctrl), Some(ref od_data), Some(pd_data)) = (
             self.rx_message.read_write,
             self.rx_message.com_channel,
             self.rx_message.address_fctrl,
@@ -469,23 +470,14 @@ impl<'a> MessageHandler<'a> {
             };
             let _ = od_handler.od_ind(&self.od_ind_data);
             if self.device_operate_state == types::MasterCommand::DeviceOperate {
-                if INTERLEAVED_MODE {
-                    let pd_out_address = extract_address_fctrl!(addr_ctrl);
-                    let _ = pd_handler.pd_ind(
-                        pd_data,
-                        pd_out_address,
-                        2, /* Interleave mode supports only 2 bytes */
-                    );
-                } else {
-                    const PD_OUT_LEN: u8 =
-                        config::m_seq_capability::operate_m_sequence_pd_out_len_in_bytes();
-                    const PD_IN_LEN: u8 =
-                        config::m_seq_capability::operate_m_sequence_pd_in_len_in_bytes();
-                    // In OPERATE mode, invoke PD.ind service indication
-                    let pd_out_address = extract_address_fctrl!(addr_ctrl);
-                    let pd_out_len = pd_data.len() as u8;
-                    let _ = pd_handler.pd_ind(pd_data, pd_out_address, pd_out_len);
-                }
+                const PD_OUT_LEN: u8 =
+                    config::m_seq_capability::operate_m_sequence_pd_out_len_in_bytes();
+                const PD_IN_LEN: u8 =
+                    config::m_seq_capability::operate_m_sequence_pd_in_len_in_bytes();
+                // In OPERATE mode, invoke PD.ind service indication
+                let pd_out_address = extract_address_fctrl!(addr_ctrl);
+                let pd_out_len = pd_data.len() as u8;
+                let _ = pd_handler.pd_ind(0, 0, pd_data, pd_out_address, pd_out_len);
             }
         }
         todo!("Implement PD.ind service indication values");
@@ -636,7 +628,7 @@ impl<'a> MessageHandler<'a> {
     /// Parse IO-Link message from buffer
     /// See IO-Link v1.1.4 Section 6.1
     fn parse_message(&mut self) -> IoLinkResult<IoLinkMessage> {
-        let rx_buffer: &mut [u8; 66] = &mut self.buffers.rx_buffer;
+        let rx_buffer: &mut [u8; MAX_FRAME_SIZE] = &mut self.buffers.rx_buffer;
         if validate_checksum(rx_buffer.len() as u8, rx_buffer) == false {
             // If checksum is invalid, indicate error
             return Err(IoLinkError::ChecksumError);
@@ -973,7 +965,7 @@ fn parse_iolink_operate_frame(input: &[u8]) -> IoLinkResult<IoLinkMessage> {
 
 fn parse_iolink_native_operate_frame(
     input: &[u8],
-) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
+) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, PD_OUT_LENGTH>>)> {
     const OD_LENGTH_OCTETS: u8 = config::m_seq_capability::operate_m_sequence_od_len();
     const PD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_pd_out_len_in_bytes();
 
@@ -981,7 +973,7 @@ fn parse_iolink_native_operate_frame(
         return Err(IoLinkError::InvalidData);
     }
     let mut od: Vec<u8, MAX_OD_SIZE> = Vec::new();
-    let mut pd: Vec<u8, MAX_PD_SIZE> = Vec::new();
+    let mut pd: Vec<u8, PD_OUT_LENGTH> = Vec::new();
 
     for i in 2..(2 + OD_LENGTH_OCTETS as usize) {
         if i < input.len() {
@@ -1007,7 +999,7 @@ fn parse_iolink_native_operate_frame(
 }
 fn parse_iolink_interleaved_operate_frame_od(
     input: &[u8],
-) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
+) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, PD_OUT_LENGTH>>)> {
     const OD_LENGTH: u8 = config::m_seq_capability::operate_m_sequence_legacy_od_len();
     if input.len() != HEADER_SIZE + OD_LENGTH as usize {
         return Err(IoLinkError::InvalidData);
@@ -1029,7 +1021,7 @@ fn parse_iolink_interleaved_operate_frame_od(
 
 fn parse_iolink_interleaved_operate_frame_pd(
     input: &[u8],
-) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, MAX_PD_SIZE>>)> {
+) -> IoLinkResult<(Option<Vec<u8, MAX_OD_SIZE>>, Option<Vec<u8, PD_OUT_LENGTH>>)> {
     const PD_LENGTH_BITS: u8 =
         config::m_seq_capability::operate_m_sequence_legacy_pd_out_len_in_bits();
     const PD_LENGTH: u8 = if PD_LENGTH_BITS & 0x01 == 0 {
@@ -1044,7 +1036,7 @@ fn parse_iolink_interleaved_operate_frame_pd(
         return Err(IoLinkError::InvalidData);
     }
 
-    let mut pd: Vec<u8, MAX_PD_SIZE> = Vec::new();
+    let mut pd: Vec<u8, PD_OUT_LENGTH> = Vec::new();
     for i in 2..(2 + PD_LENGTH as usize) {
         if i < input.len() {
             if let Err(_) = pd.push(input[i]) {

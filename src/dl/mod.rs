@@ -14,7 +14,7 @@ pub use event_handler::{DlEventReq, DlEventTriggerConf};
 pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, DlIsduTransportRsp, Isdu, MAX_ISDU_LENGTH, IsduService};
 pub use mode_handler::DlInd;
 pub use od_handler::{DlParamRsp, DlReadParamInd, DlWriteParamInd};
-pub use pd_handler::{DlPDInputUpdate, DlPDOutputTransportInd};
+pub use pd_handler::{DlPDInputUpdate, DlPDOutputTransportInd, PD_OUTPUT_LENGTH};
 
 pub struct DataLinkLayer<'a> {
     command_handler: command_handler::CommandHandler,
@@ -60,7 +60,7 @@ impl<'b> DataLinkLayer<'b> {
         
         // PD handler poll
         {
-            let _ = self.pd_handler.poll(&mut self.message_handler);
+            let _ = self.pd_handler.poll(&mut self.message_handler, application_layer);
         }
         
         // ISDU handler poll - separate scope to avoid conflicts
