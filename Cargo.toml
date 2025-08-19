@@ -38,7 +38,7 @@ clang = []
 rustlang = []
 cortex-m = ["dep:cortex-m"]
 panic-halt = ["dep:panic-halt"]
-legacy_device = []
+block_parameterization = []
 
 [build-dependencies]
 # cbindgen = "0.27"

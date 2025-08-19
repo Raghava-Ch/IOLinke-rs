@@ -3,10 +3,10 @@
 /// # Examples
 ///
 /// ```rust
-/// use iolinke_device::utils::event::event_qualifier_macro;
-///
-/// let event_qualifier = event_qualifier_macro!(storage::event_memory::EventMode::SingleShot, storage::event_memory::EventType::Notification, storage::event_memory::EventSource::Device, storage::event_memory::EventInstance::System);
-/// assert_eq!(event_qualifier, 0b00000000000000000000000000000000);
+/// use iolinke_device::event_qualifier_macro;
+/// 
+/// let event_qualifier = event_qualifier_macro!(1, 0, 0, 1);
+/// assert_eq!(event_qualifier, 0b01000001);
 /// ```
 #[macro_export]
 macro_rules! event_qualifier_macro {

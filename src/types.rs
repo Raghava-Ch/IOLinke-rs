@@ -2,49 +2,85 @@
 //!
 //! This module defines all the data types, enums, and structures used throughout
 //! the IO-Link protocol implementation, based on IO-Link Specification v1.1.4.
+//!
+//! ## Key Types
+//!
+//! - **Communication Modes**: SIO, COM1-3, DI, DO modes as per Section 5.2.2
+//! - **Device States**: Idle, Startup, Preoperate, Operate states from Section 6.3
+//! - **Error Handling**: Standardized error codes and result types
+//! - **Timing**: Protocol timing constants and timer abstractions
+//! - **Data Structures**: Process data, parameters, and event structures
+//!
+//! ## Specification Compliance
+//!
+//! All types follow the IO-Link v1.1.4 specification:
+//! - Section 5.2: Physical Layer and Communication Modes
+//! - Section 6.3: State Machines and Device Modes
+//! - Section 7.3: Device Identification and Parameters
+//! - Section 8.1: ISDU Communication and Parameters
+//! - Annex A: Protocol Details and Timing
+//! - Annex B: Parameter Definitions
 
 use heapless::Vec;
 
-/// Maximum length of IO-Link message data
+/// Maximum length of IO-Link message data in bytes.
+///
+/// This constant defines the maximum size of any IO-Link message
+/// including headers, data, and checksums as per Section 5.4.
 pub const MAX_MESSAGE_LENGTH: usize = 32;
 
-/// Maximum number of process data bytes
+/// Maximum number of process data bytes supported by the device.
+///
+/// Process data is limited to 32 bytes per cycle as defined in
+/// Section 8.2 and Annex B.6 of the IO-Link specification.
 pub const MAX_PROCESS_DATA_LENGTH: usize = 32;
 
-/// Maximum number of events in event queue
+/// Maximum number of events that can be queued in the event memory.
+///
+/// Events are stored in a circular buffer with this maximum capacity
+/// to prevent memory overflow during high event rates.
 pub const MAX_EVENT_QUEUE_SIZE: usize = 16;
 
-/// IO-Link communication mode
-/// See IO-Link v1.1.4 Section 5.2.2
+/// IO-Link communication mode as defined in Section 5.2.2.
+///
+/// The communication mode determines the baud rate and protocol
+/// characteristics used for master-device communication.
+///
+/// # Specification Reference
+///
+/// - IO-Link v1.1.4 Section 5.2.2: Communication Modes
+/// - Table 5.1: Communication mode characteristics
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum IoLinkMode {
-    /// SIO mode (Standard I/O)
+    /// SIO mode (Standard I/O) - Digital input/output without communication
     Sio = 0,
-    /// COM1 mode (4.8 kbaud)
+    /// COM1 mode - 4.8 kbaud communication (1200 baud effective)
     Com1 = 1,
-    /// COM2 mode (38.4 kbaud)
+    /// COM2 mode - 38.4 kbaud communication (2400 baud effective)
     Com2 = 2,
-    /// COM3 mode (230.4 kbaud)
+    /// COM3 mode - 230.4 kbaud communication (4800 baud effective)
     Com3 = 3,
-    /// DI mode
+    /// DI mode - Digital input only
     Di = 4,
-    /// DO mode
+    /// DO mode - Digital output only
     Do = 5,
-    /// INACTIVE mode
+    /// INACTIVE mode - No communication, high impedance
     Inactive = 0xFF
 }
 
-/// See 7.2.2.2 OD Arguments
+/// Read/Write direction for parameter operations as per Section 7.2.2.2.
+///
+/// This enum specifies whether a parameter operation is a read or write
+/// request from the master to the device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RwDirection {
-    /// Read operation
+    /// Read operation - Master requests parameter value from device
     Read,
-    /// Write operation
+    /// Write operation - Master sends parameter value to device
     Write,
 }
-
 
 impl TryFrom<u8> for RwDirection {
     type Error = IoLinkError;
@@ -58,17 +94,24 @@ impl TryFrom<u8> for RwDirection {
     }
 }
 
-/// See A.1.2 M-sequence control (MC)
-/// Also see Table A.1 – Values of communication channel
+/// Communication channel identifier as per Annex A.1.2.
+///
+/// The communication channel determines the type of data being
+/// transmitted in an M-sequence frame.
+///
+/// # Specification Reference
+///
+/// - IO-Link v1.1.4 Annex A.1.2: M-sequence control (MC)
+/// - Table A.1: Values of communication channel
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComChannel {
-    /// {Process} = 0
+    /// Process data channel - Real-time process data exchange
     Process = 0,
-    /// {Page} = 1
+    /// Page channel - Parameter read/write operations
     Page = 1,
-    /// {Diagnosis} = 2
+    /// Diagnosis channel - Event and status information
     Diagnosis = 2,
-    /// {ISDU} = 3
+    /// ISDU channel - Index-based service data unit communication
     Isdu = 3,
 }
 
@@ -86,32 +129,44 @@ impl TryFrom<u8> for ComChannel {
     }
 }
 
-/// See A.1.3 Checksum / M-sequence type (CKT)
-/// Also see Bit 6 to 7: M-sequence type
+/// M-sequence base type as per Annex A.1.3.
+///
+/// The M-sequence type determines the timing and structure of
+/// communication sequences between master and device.
+///
+/// # Specification Reference
+///
+/// - IO-Link v1.1.4 Annex A.1.3: Checksum / M-sequence type (CKT)
+/// - Table A.2: M-sequence type definitions
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MsequenceBaseType {
-    /// {Type 0} = 0
+    /// Type 0 - Standard M-sequence with basic timing
     Type0 = 0,
-    /// {Type 1} = 1
+    /// Type 1 - Extended M-sequence with additional timing
     Type1 = 1,
-    /// {Type 2} = 2
+    /// Type 2 - Advanced M-sequence with optimized timing
     Type2 = 2,
-    /// {reserved} = 3
+    /// Reserved for future use
     Reserved = 3,
 }
 
-/// See A.6.4 EventQualifier
-/// Bits 0 to 2: INSTANCE
-/// These bits indicate the particular source (instance) of an Event thus refining its evaluation on
-/// the receiver side. Permissible values for INSTANCE are listed in Table A.17.
+/// Event instance identifier as per Annex A.6.4.
+///
+/// The event instance specifies the source of an event within
+/// the device system.
+///
+/// # Specification Reference
+///
+/// - IO-Link v1.1.4 Annex A.6.4: EventQualifier
+/// - Table A.17: Event instance values
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventInstance {
-    /// {Unknown} = 0
+    /// Unknown event source
     Unknown = 0,
     // 1 to 3 Reserved
-    /// {Application} = 4
+    /// Application layer event
     Application = 4,
-    /// {System} = 5
+    /// System layer event
     System = 5,
     // 6 to 7 Reserved
 }
@@ -122,17 +177,23 @@ impl Into<u8> for EventInstance {
     }
 }
 
-/// See A.6.4 EventQualifier
-/// Bits 4 to 5: TYPE
-/// These bits indicate the Event mode. Permissible values for MODE are listed in Table A.20.
+/// Event type classification as per Annex A.6.4.
+///
+/// The event type indicates the severity and nature of an event
+/// for proper handling by the master.
+///
+/// # Specification Reference
+///
+/// - IO-Link v1.1.4 Annex A.6.4: EventQualifier
+/// - Table A.20: Event type values
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventType {
-    /// 0 is Reserved
-    /// {Notification} = 1
+    /// Reserved value
+    /// Notification event - Informational message
     Notification = 1,
-    /// {Warning} = 2
+    /// Warning event - Requires attention but not critical
     Warning = 2,
-    /// {Error} = 3
+    /// Error event - Critical issue requiring immediate action
     Error = 3,
 }
 
@@ -142,17 +203,23 @@ impl Into<u8> for EventType {
     }
 }
 
-/// See A.6.4 EventQualifier
-/// Bits 6 to 7: MODE
-/// These bits indicate the Event mode. Permissible values for MODE are listed in Table A.20.
+/// Event mode specification as per Annex A.6.4.
+///
+/// The event mode determines how the event is reported and
+/// whether it persists or is transient.
+///
+/// # Specification Reference
+///
+/// - IO-Link v1.1.4 Annex A.6.4: EventQualifier
+/// - Table A.20: Event mode values
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventMode {
-    /// 0 is Reserved
-    /// {Event single shot} = 1
+    /// Reserved value
+    /// Single shot event - Reported once and cleared
     SingleShot = 1,
-    /// {Event disappears} = 2
+    /// Event disappears - Event condition no longer active
     Disappears = 2,
-    /// {Event appears} = 3
+    /// Event appears - New event condition detected
     Appears = 3,
 }
 
@@ -162,55 +229,70 @@ impl Into<u8> for EventMode {
     }
 }
 
-/// See Table 94 – SM_DeviceMode
+/// Device operating mode as per Section 6.3.
+///
+/// The device mode represents the current state of the IO-Link
+/// device state machine.
+///
+/// # Specification Reference
+///
+/// - IO-Link v1.1.4 Section 6.3: State Machines
+/// - Table 94: SM_DeviceMode state definitions
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DeviceMode {
-    /// (Device changed to waiting for configuration)
+    /// Device is idle and waiting for configuration
     Idle,
-    /// (Device changed to the mode defined in service "SM_SetDeviceCom")
+    /// Device is in SIO mode (Standard I/O)
     Sio,
-    /// (Device changed to the SM mode "SM_ComEstablish")
+    /// Device is establishing communication with master
     Estabcom,
-    /// (Device changed to the COM1 mode)
+    /// Device is in COM1 communication mode
     Com1,
-    /// (Device changed to the COM2 mode)
+    /// Device is in COM2 communication mode
     Com2,
-    /// (Device changed to the COM3 mode)
+    /// Device is in COM3 communication mode
     Com3,
-    /// (Device changed to the STARTUP mode)
+    /// Device is starting up and initializing
     Startup,
-    /// (Device changed to the SM mode "SM_IdentStartup")
+    /// Device is in identification startup phase
     Identstartup,
-    /// (Device changed to the SM mode "SM_IdentCheck")
+    /// Device is checking identification parameters
     Identchange,
-    /// (Device changed to the PREOPERATE mode)
+    /// Device is in preoperate mode (parameterized but not operational)
     Preoperate,
-    /// (Device changed to the OPERATE mode)
+    /// Device is in full operate mode (fully operational)
     Operate,
 }
 
-/// See 7.2.1.14 DL_Mode
+/// Data Link Layer mode as per Section 7.2.1.14.
+///
+/// The DL mode indicates the current state of the data link
+/// layer state machine.
+///
+/// # Specification Reference
+///
+/// - IO-Link v1.1.4 Section 7.2.1.14: DL_Mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DlMode {
-    /// (Handler changed to the INACTIVE state)
+    /// Data link layer is inactive
     Inactive,
-    /// (COM1 mode established)
+    /// COM1 mode is established
     Com1,
-    /// (COM2 mode established)
+    /// COM2 mode is established
     Com2,
-    /// (COM3 mode established)
+    /// COM3 mode is established
     Com3,
-    /// (Lost communication)
+    /// Communication lost
     Comlost,
-    /// (Handler changed to the EstablishCom state)
+    /// Handler changed to the EstablishCom state
     Estabcom,
-    /// (Handler changed to the STARTUP state)
+    /// Handler changed to the STARTUP state
     Startup,
-    /// (Handler changed to the PREOPERATE state)
+    /// Handler changed to the PREOPERATE state
     Preoperate,
-    /// (Handler changed to the OPERATE state)
+    /// Handler changed to the OPERATE state
     Operate,
 }
 
@@ -544,70 +626,70 @@ impl DeviceStatus {
 #[repr(u8)]
 pub enum MsequenceType {
     /// TYPE_0:
-    /// ```
+    /// ```ignore
     /// MC | CKT | --OD-- | CKS
     ///          | RD WR  |    
     /// ```
     Type0 = 0,
 
     /// TYPE_1_1:
-    /// ```
+    /// ```ignore
     /// MC | CKT | --PD₀ PD₁-- | CKS
     ///          |    RD WR    |    
     /// ```
     Type11,
 
     /// TYPE_1_2:
-    /// ```
+    /// ```ignore
     /// MC | CKT | --OD₀ OD₁-- | CKS
     ///          |    RD WR    |    
     /// ```
     Type12,
 
     /// TYPE_1_V:
-    /// ```
+    /// ```ignore
     /// MC | CKT | --OD₀ ... ODₙ-- | CKS
     ///          |      RD WR      |    
     /// ```
     Type1V,
 
     /// TYPE_2_1:
-    /// ```
+    /// ```ignore
     /// MC | CKT |  --OD-- | PD | CKS
     ///          |  RD WR  |    
     /// ```
     Type21,
 
     /// TYPE_2_2:
-    /// ```
+    /// ```ignore
     /// MC | CKT |  --OD-- | PD₀ PD₁ | CKS
     ///          |  RD WR  |    
     /// ```
     Type22,
 
     /// TYPE_2_3:
-    /// ```
+    /// ```ignore
     /// MC | CKT | PD |  --OD-- | CKS
     ///               |  RD WR  |    
     /// ```
     Type23,
 
     /// TYPE_2_4:
-    /// ```
+    /// ```ignore
     /// MC | CKT | PD₀ PD₁ |  --OD-- | CKS
     ///                    |  RD WR  |    
     /// ```
     Type24,
 
     /// TYPE_2_5:
-    /// ```
+    /// ```ignore
     /// MC | CKT | PD |  --OD-- | PD | CKS
     ///               |  RD WR  |    
     /// ```
     Type25,
 
     /// TYPE_2_V:
-    /// ```
+    /// ```ignore
     /// MC | CKT | PD₀ ... PDₙ₋₁ | --OD₀ ... ODₘ₋₁-- | PD₀ ... PDₖ₋₁ | CKS
     ///                          |       RD WR       |
     /// ```
