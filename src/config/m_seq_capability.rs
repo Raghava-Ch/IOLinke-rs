@@ -374,6 +374,13 @@ pub const fn operate_m_sequence() -> crate::types::MsequenceType {
     }
 }
 
+/// Returns the maximum on-request data length (in octets) for the OPERATE and PREOPERATE mode M-sequences.
+pub const fn max_od_length() -> u8 {
+    let op = operate_m_sequence_od_len();
+    let preop = preoperate_m_sequence_od_len();
+    if op > preop { op } else { preop }
+}
+
 /// Represents the M-sequence type used in IO-Link communication, based on bits 6 and 7 of the
 /// Checksum / M-sequence Type (CKT) field. These bits define how the Master structures messages
 /// within an M-sequence, as specified in Table A.3 of the IO-Link specification (see Section A.1.3).

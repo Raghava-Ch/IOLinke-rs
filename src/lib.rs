@@ -48,21 +48,21 @@ pub use test_utils::*;
 pub use types::*;
 
 /// Simple IO-Link device implementation
-pub struct IoLinkDevice<'a> {
+pub struct IoLinkDevice {
     physical_layer: pl::physical_layer::PhysicalLayer,
-    dl: dl::DataLinkLayer<'a>,
+    dl: dl::DataLinkLayer,
     system_management: system_management::SystemManagement,
-    application: al::ApplicationLayer<'a>,
+    application_layer: al::ApplicationLayer,
 }
 
-impl<'a> IoLinkDevice<'a> {
+impl IoLinkDevice {
     /// Create a new simple IO-Link device
     pub fn new() -> Self {
         Self {
             system_management: system_management::SystemManagement::default(),
             physical_layer: pl::physical_layer::PhysicalLayer::default(),
             dl: dl::DataLinkLayer::default(),
-            application: al::ApplicationLayer::default(),
+            application_layer: al::ApplicationLayer::default(),
         }
     }
 
@@ -77,25 +77,29 @@ impl<'a> IoLinkDevice<'a> {
     }
 
     /// Step 3: Basic polling function
-    pub fn poll(&'a mut self) -> IoLinkResult<()> {
+    pub fn poll(&mut self) -> IoLinkResult<()> {
         // Poll all state machines
-        self.application.poll(&mut self.dl)?;
+        self.application_layer.poll(&mut self.dl)?;
         self.dl.poll(
             &mut self.system_management,
             &mut self.physical_layer,
-            &mut self.application,
+            &mut self.application_layer,
+        )?;
+        self.system_management.poll(
+            &mut self.application_layer,
+            &mut self.physical_layer,
         )?;
         Ok(())
     }
 }
 
-impl<'a> al::ApplicationLayerReadWriteInd for IoLinkDevice<'a> {
+impl al::ApplicationLayerReadWriteInd for IoLinkDevice {
     fn al_read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<()> {
-        self.application.al_read_ind(index, sub_index)
+        self.application_layer.al_read_ind(index, sub_index)
     }
 
     fn al_write_ind(&mut self, index: u16, sub_index: u8, data: &[u8]) -> IoLinkResult<()> {
-        self.application.al_write_ind(index, sub_index, data)
+        self.application_layer.al_write_ind(index, sub_index, data)
     }
 
     fn al_abort_ind(&mut self) -> IoLinkResult<()> {
@@ -103,7 +107,7 @@ impl<'a> al::ApplicationLayerReadWriteInd for IoLinkDevice<'a> {
     }
 }
 
-impl<'a> al::ApplicationLayerProcessDataInd for IoLinkDevice<'a> {
+impl al::ApplicationLayerProcessDataInd for IoLinkDevice {
     fn al_set_input_ind(&mut self) -> IoLinkResult<()> {
         todo!();
     }

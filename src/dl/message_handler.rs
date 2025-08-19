@@ -97,7 +97,7 @@ macro_rules! compile_checksum_status {
 const HEADER_SIZE: usize = 2; // Header size is 2 bytes (MC and length)
 /// Maximum message buffer size for OD
 /// This is the maximum size of the message buffer used for OD messages.
-const MAX_OD_SIZE: usize = 32;
+const MAX_OD_SIZE: usize = dl::od_handler::OD_LENGTH;
 /// Maximum message buffer size for PD
 /// This is the maximum size of the message buffer used for PD messages.
 const PD_IN_LENGTH: usize = pd_handler::PD_INPUT_LENGTH;
@@ -235,7 +235,7 @@ struct Buffers {
 }
 
 /// Message Handler implementation
-pub struct MessageHandler<'a> {
+pub struct MessageHandler {
     state: MessageHandlerState,
     exec_transition: Transition,
     buffers: Buffers,
@@ -244,11 +244,9 @@ pub struct MessageHandler<'a> {
     device_operate_state: types::MasterCommand,
     od_transfer_pending: bool,
     pd_in_valid_status: types::PdStatus,
-
-    od_ind_data: dl::od_handler::OdIndData<'a>,
 }
 
-impl<'a> MessageHandler<'a> {
+impl MessageHandler {
     /// Create a new Message Handler
     pub fn new() -> Self {
         Self {
@@ -265,7 +263,6 @@ impl<'a> MessageHandler<'a> {
             device_operate_state: types::MasterCommand::Fallback,
             od_transfer_pending: false,
             pd_in_valid_status: types::PdStatus::INVALID,
-            od_ind_data: dl::od_handler::OdIndData::default(),
         }
     }
 
@@ -298,10 +295,10 @@ impl<'a> MessageHandler<'a> {
     /// Poll the message handler
     /// See IO-Link v1.1.4 Section 6.3
     pub fn poll(
-        &'a mut self,
+        &mut self,
         event_handler: &mut dl::event_handler::EventHandler,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
-        od_handler: &mut dl::od_handler::OnRequestDataHandler<'a>,
+        od_handler: &mut dl::od_handler::OnRequestDataHandler,
         pd_handler: &mut pd_handler::ProcessDataHandler,
         mode_handler: &mut dl::mode_handler::DlModeHandler,
         physical_layer: &mut pl::physical_layer::PhysicalLayer,
@@ -446,29 +443,27 @@ impl<'a> MessageHandler<'a> {
     /// Transition T5: CheckMessage -> CreateMessage
     /// Invoke OD.ind and PD.ind service indications
     fn execute_t5(
-        &'a mut self,
+        &mut self,
         event_handler: &mut dl::event_handler::EventHandler,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
-        od_handler: &mut dl::od_handler::OnRequestDataHandler<'a>,
+        od_handler: &mut dl::od_handler::OnRequestDataHandler,
         pd_handler: &mut pd_handler::ProcessDataHandler,
     ) -> IoLinkResult<()> {
-        if let (Some(rw), Some(channel), Some(addr_ctrl), Some(ref od_data), Some(pd_data)) = (
+        if let (Some(rw), Some(channel), Some(addr_ctrl), Some(od_data), Some(pd_data)) = (
             self.rx_message.read_write,
             self.rx_message.com_channel,
             self.rx_message.address_fctrl,
             self.rx_message.od.as_ref(),
             self.rx_message.pd.as_ref(),
         ) {
-            const INTERLEAVED_MODE: bool = config::m_seq_capability::interleaved_mode();
-            let copy_len = od_data.len().min(32);
-            self.od_ind_data = dl::od_handler::OdIndData {
+            let od_ind_data = dl::od_handler::OdIndData {
                 rw_direction: rw,
                 com_channel: channel,
                 address_ctrl: addr_ctrl,
                 length: od_data.len() as u8,
-                data: &od_data[..copy_len],
+                data: od_data.clone(),
             };
-            let _ = od_handler.od_ind(&self.od_ind_data);
+            let _ = od_handler.od_ind(&od_ind_data);
             if self.device_operate_state == types::MasterCommand::DeviceOperate {
                 const PD_OUT_LEN: u8 =
                     config::m_seq_capability::operate_m_sequence_pd_out_len_in_bytes();
@@ -680,7 +675,7 @@ impl<'a> MessageHandler<'a> {
 
 // Physical layer indication trait implementation would go here
 // when the physical layer module is properly defined
-impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler<'a> {
+impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler {
     fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<()> {
         self.buffers.rx_buffer = rx_buffer.try_into().map_err(|_| IoLinkError::InvalidData)?;
         let _ = self.process_event(MessageHandlerEvent::PlTransfer);
@@ -688,7 +683,7 @@ impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler<'a> {
     }
 }
 
-impl<'a> pl::physical_layer::IoLinkTimer for MessageHandler<'a> {
+impl pl::physical_layer::IoLinkTimer for MessageHandler {
     /// Any MasterCommand received by the Device command handler
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
     fn timer_elapsed(&mut self, timer: pl::physical_layer::Timer) -> bool {
@@ -1099,7 +1094,7 @@ fn calculate_checksum(length: u8, data: &[u8]) -> u8 {
     checksum
 }
 
-impl<'a> Default for MessageHandler<'a> {
+impl Default for MessageHandler {
     fn default() -> Self {
         Self::new()
     }

@@ -3,9 +3,16 @@
 //! This module implements the Event State Machine as defined in
 //! IO-Link Specification v1.1.4
 
+use heapless::Vec;
+
 use crate::{
     al::{self, services::AlEventCnf}, dl::{self, DlEventReq}, storage, types::{IoLinkError, IoLinkResult}
 };
+
+struct Events {
+    event_code: u8,
+    event_entries: heapless::Vec<storage::event_memory::EventEntry, 6>,
+}
 
 /// See 8.3.3.2 Event state machine of the Device AL
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,7 +27,7 @@ pub enum EventStateMachineState {
 
 // See Table 77 – State and transitions of the Event state machine of the Device AL
 #[derive(Debug, PartialEq, Eq)]
-enum Transition<'a> {
+enum Transition {
     /// Tn: No transition
     Tn,
     /// T1: State: EventInactive (0) -> EventIdle (1)
@@ -34,10 +41,7 @@ enum Transition<'a> {
     /// DL_EventTrigger service. The DL_Event carries the diagnosis information
     /// from AL to DL. The DL_EventTrigger sets the Event flag within the cyclic
     /// data exchange (see A.1.5).
-    T3(
-        u8, // event_count
-        &'a [storage::event_memory::EventEntry], // event_entries
-    ),
+    T3,
     /// T4: State: AwaitEventResponse (2) -> EventIdle (1)
     /// Action: A DL_EventTrigger confirmation triggers an AL_Event confirmation.
     T4,
@@ -45,37 +49,36 @@ enum Transition<'a> {
 
 /// See 8.3.3.2 Event state machine of the Device AL
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventStateMachineEvent<'a> {
+pub enum EventStateMachineEvent {
     /// {Activate} See 8.3.3.2 , Triggers T1
     Activate,
     /// {Deactivate} See 8.3.3.2, Triggers T2
     Deactivate,
     /// {AL_Event_request} See 8.3.3.2, Triggers T3
-    AlEventRequest(
-        u8, // event_count
-        &'a [storage::event_memory::EventEntry], // event_entries
-    ),
+    AlEventRequest,
     /// {DL_EventTrigger_conf} See 8.3.3.2, Triggers T4
     DlEventTriggerConf,
 }
 
 /// Event State Machine implementation
-pub struct EventHandler<'a> {
+pub struct EventHandler {
     state: EventStateMachineState,
-    exec_transition: Transition<'a>,
+    exec_transition: Transition,
+    events: Option<Events>,
 }
 
-impl<'a> EventHandler<'a> {
+impl EventHandler {
     /// Create a new Event State Machine
     pub fn new() -> Self {
         Self {
             state: EventStateMachineState::EventInactive,
             exec_transition: Transition::Tn,
+            events: None,
         }
     }
 
     /// Process an event
-    pub fn process_event(&mut self, event: EventStateMachineEvent<'a>) -> IoLinkResult<()> {
+    pub fn process_event(&mut self, event: EventStateMachineEvent) -> IoLinkResult<()> {
         use EventStateMachineEvent as Event;
         use EventStateMachineState as State;
 
@@ -85,15 +88,9 @@ impl<'a> EventHandler<'a> {
             (State::EventIdle, Event::Deactivate) => (Transition::T2, State::EventInactive),
             (
                 State::EventIdle,
-                Event::AlEventRequest(
-                    event_count,
-                    event_entries,
-                ),
+                Event::AlEventRequest,
             ) => (
-                Transition::T3(
-                    event_count,
-                    event_entries,
-                ),
+                Transition::T3,
                 State::AwaitEventResponse,
             ),
             (State::AwaitEventResponse, Event::DlEventTriggerConf) => {
@@ -128,13 +125,9 @@ impl<'a> EventHandler<'a> {
                 // Transition T2: Deactivate -> EventInactive
                 self.execute_t2()?;
             }
-            Transition::T3(event_count, event_entries) => {
+            Transition::T3 => {
                 // Transition T3: AlEventRequest -> AwaitEventResponse
-                self.execute_t3(
-                    event_count,
-                    event_entries,
-                    data_link_layer,
-                )?;
+                self.execute_t3(data_link_layer)?;
             }
             Transition::T4 => {
                 // Transition T4: DlEventTriggerConf -> EventIdle
@@ -161,8 +154,6 @@ impl<'a> EventHandler<'a> {
     /// Execute transition T3: EventIdle -> AwaitEventResponse
     fn execute_t3(
         &mut self,
-        event_count: u8,
-        event_entries: &[storage::event_memory::EventEntry],
         data_link_layer: &mut dl::DataLinkLayer,
     ) -> IoLinkResult<()> {
         // T3: AlEventRequest -> AwaitEventResponse
@@ -171,8 +162,11 @@ impl<'a> EventHandler<'a> {
         // from AL to DL. The DL_EventTrigger sets the Event flag within the cyclic
         // data exchange.
 
-        // TODO: Implement DL_Event and DL_EventTrigger service calls
-        data_link_layer.dl_event_req(event_count, event_entries)?;
+        // DL_Event and DL_EventTrigger service calls
+        if let Some(events) = &self.events {
+            let _ = data_link_layer.dl_event_req(events.event_code, &events.event_entries);
+            let _ = data_link_layer.dl_event_trigger_req();
+        }
 
         Ok(())
     }
@@ -191,26 +185,26 @@ impl<'a> EventHandler<'a> {
     }
 }
 
-impl<'a> al::services::AlEventReq<'a> for EventHandler<'a> {
+impl al::services::AlEventReq for EventHandler {
     fn al_event_req(
         &mut self,
         event_count: u8,
-        event_entries: &'a [storage::event_memory::EventEntry],
+        event_entries: &[storage::event_memory::EventEntry],
     ) -> IoLinkResult<()> {
-        self.process_event(EventStateMachineEvent::AlEventRequest(
-            event_count,
-            event_entries,
-        ))
+        let mut event_entries_vec: Vec<storage::event_memory::EventEntry, 6> = Vec::new();
+        let _ = event_entries_vec.extend_from_slice(event_entries);
+        self.events = Some(Events { event_code: event_count, event_entries: event_entries_vec });
+        self.process_event(EventStateMachineEvent::AlEventRequest)
     }
 }
 
-impl<'a> dl::DlEventTriggerConf for EventHandler<'a> {
+impl dl::DlEventTriggerConf for EventHandler {
     fn event_trigger_conf(&mut self) -> IoLinkResult<()> {
         self.process_event(EventStateMachineEvent::DlEventTriggerConf)
     }
 }
 
-impl<'a> Default for EventHandler<'a> {
+impl Default for EventHandler {
     fn default() -> Self {
         Self::new()
     }

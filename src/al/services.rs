@@ -28,18 +28,18 @@ pub enum AlRspError {
 }
 pub type AlResult<T> = Result<T, AlRspError>;
 
-pub trait AlReadRsp<'a> {
-    fn al_read_rsp(&mut self, result: AlResult<&'a [u8]>) -> IoLinkResult<()>;
+pub trait AlReadRsp {
+    fn al_read_rsp(&mut self, result: AlResult<&[u8]>) -> IoLinkResult<()>;
 }
 pub trait AlWriteRsp {
     fn al_write_rsp(&mut self, result: AlResult<()>) -> IoLinkResult<()>;
 }
 
-pub trait AlEventReq<'a> {
+pub trait AlEventReq {
     fn al_event_req(
         &mut self,
         event_count: u8,
-        event_entries: &'a [storage::event_memory::EventEntry],
+        event_entries: &[storage::event_memory::EventEntry],
     ) -> IoLinkResult<()>; 
 }
 pub trait AlControlReq {
@@ -74,26 +74,26 @@ pub trait AlEventCnf {
 pub struct ApplicationLayerServices {
 }
 
-impl<'a> ApplicationLayerServices {
+impl ApplicationLayerServices {
     pub fn new() -> Self {
         Self {
         }
     }
 }
 
-impl<'a> Default for ApplicationLayerServices {
+impl Default for ApplicationLayerServices {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a> dl::DlControlInd for ApplicationLayerServices {
+impl dl::DlControlInd for ApplicationLayerServices {
     fn dl_control_ind(&mut self, control_code: types::DlControlCode) -> IoLinkResult<()> {
         todo!()
     }
 }
 
-impl<'a> ApplicationLayerServicesInd for ApplicationLayerServices {
+impl ApplicationLayerServicesInd for ApplicationLayerServices {
     fn al_read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<()> {
         todo!()
     }
@@ -119,7 +119,7 @@ impl<'a> ApplicationLayerServicesInd for ApplicationLayerServices {
     }
 }
 
-impl<'a> AlEventCnf for ApplicationLayerServices {
+impl AlEventCnf for ApplicationLayerServices {
     fn al_event_cnf(&mut self) -> IoLinkResult<()> {
         todo!()
     }

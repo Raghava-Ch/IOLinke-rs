@@ -129,27 +129,27 @@ impl CommandHandler {
             Transition::Tn => {}
             Transition::T1 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t1();
+                let _ = self.execute_t1();
             }
             Transition::T2(master_command) => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t2(master_command, application_layer);
+                let _ = self.execute_t2(master_command, application_layer);
             }
             Transition::T3(code) => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t3(code, message_handler);
+                let _ = self.execute_t3(code, message_handler);
             }
             Transition::T4 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t4();
+                let _ = self.execute_t4();
             }
             Transition::T5 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t5();
+                let _ = self.execute_t5();
             }
             Transition::T6 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t6();
+                let _ = self.execute_t6();
             }
         }
         Ok(())
@@ -194,10 +194,10 @@ impl CommandHandler {
         // Message handler uses PDInStatus service to set/reset the PD status flag (see A.1.5)
         match code {
             types::DlControlCode::VALID => {
-                message_handler.pd_in_status_req(types::PdStatus::VALID);
+                let _ = message_handler.pd_in_status_req(types::PdStatus::VALID);
             }
             types::DlControlCode::INVALID => {
-                message_handler.pd_in_status_req(types::PdStatus::INVALID);
+                let _ = message_handler.pd_in_status_req(types::PdStatus::INVALID);
             }
             _ => {
                 return Err(IoLinkError::InvalidEvent);
@@ -242,24 +242,24 @@ impl CommandHandler {
 
     /// 7.2.1.18 DL_Control
     pub fn dl_control_req(&mut self, control_code: types::DlControlCode) -> IoLinkResult<()> {
-        self.process_event(CommandHandlerEvent::DlControlPdIn(control_code));
+        let _ = self.process_event(CommandHandlerEvent::DlControlPdIn(control_code));
         Ok(())
     }
 }
 
-impl<'a> dl::od_handler::OdInd<'a> for CommandHandler {
+impl dl::od_handler::OdInd for CommandHandler {
     /// Any MasterCommand received by the Device command handler
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
-    fn od_ind(&mut self, od_ind_data: &'a OdIndData<'a>) -> IoLinkResult<()> {
+    fn od_ind(&mut self, od_ind_data: &dl::od_handler::OdIndData) -> IoLinkResult<()> {
         let master_command: types::MasterCommand = od_ind_data.data[0].try_into()?;
         match master_command {
             MasterCommand::Fallback
             | MasterCommand::DeviceStartup
             | MasterCommand::DevicePreOperate => {
-                self.process_event(CommandHandlerEvent::ReceivedMasterCmdDevicemode);
+                let _ = self.process_event(CommandHandlerEvent::ReceivedMasterCmdDevicemode);
             }
             MasterCommand::DeviceOperate | MasterCommand::ProcessDataOutputOperate => {
-                self.process_event(CommandHandlerEvent::ReceivedMasterCmdPdout(master_command));
+                let _ = self.process_event(CommandHandlerEvent::ReceivedMasterCmdPdout(master_command));
             }
             _ => return Err(IoLinkError::InvalidEvent),
         }

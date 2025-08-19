@@ -358,8 +358,8 @@ impl dl::DlIsduTransportInd for OnRequestDataHandler {
     }
 }
 
-impl<'a> al::services::AlReadRsp<'a> for OnRequestDataHandler {
-    fn al_read_rsp(&mut self, result: al::services::AlResult<&'a [u8]>) -> IoLinkResult<()> {
+impl al::services::AlReadRsp for OnRequestDataHandler {
+    fn al_read_rsp(&mut self, result: al::services::AlResult<&[u8]>) -> IoLinkResult<()> {
         // Handle AL_Read response
         let data = result.map_err(|_| IoLinkError::InvalidData)?;
         let mut data_array = [0; dl::MAX_ISDU_LENGTH];
