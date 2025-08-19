@@ -2,7 +2,7 @@
 name = "iolinke-device"
 version = "0.1.0"
 edition = "2024"
-authors = ["IO-Link Device Stack Contributors"]
+authors = ["Raghava Ch"]
 description = "IO-Link Device stack implementation compliant with IO-Link Specification v1.1.4"
 license = "GPL-3"
 repository = "https://github.com/Raghava-Ch/IOLinke-Device"
@@ -12,9 +12,10 @@ categories = ["embedded", "no-std"]
 
 [dependencies]
 # Workspace dependencies
-heapless = { workspace = true }
-embedded-hal = { workspace = true }
-nb = { workspace = true }
+heapless = { version = "0.8", default-features = false }
+embedded-hal = "1.0"
+panic-halt = { version = "1.0" }
+cortex-m = { version = "0.7" }
 
 # Project-specific dependencies
 iolinke-macros = { path = "../IOLinke-macros" }
@@ -23,21 +24,13 @@ cstr_core = "0.2"
 log = "0.4"
 modular-bitfield = {version = "0.12.0", default-features = false}
 
-[dependencies.cortex-m]
-workspace = true
-optional = true
-
-[dependencies.panic-halt]
-workspace = true
-optional = true
-
 [features]
 default = []
 std = []
 clang = []
 rustlang = []
-cortex-m = ["dep:cortex-m"]
-panic-halt = ["dep:panic-halt"]
+cortex-m = []
+panic-halt = []
 block_parameterization = []
 
 [build-dependencies]
