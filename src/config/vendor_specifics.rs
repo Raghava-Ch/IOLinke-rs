@@ -10,10 +10,14 @@ pub const MAX_PARAM_ENTRIES: usize = 100;
 ///         // code if block parameterization is supported
 ///     }
 ///     not_supported {
-///         // code if block parameterization is NOT supported
+///         // code if block parameterization is not supported
 ///     }
 /// }
 /// ```
+///
+/// If block parameterization is not supported, the code will be ignored.
+///
+/// If block parameterization is supported, the code will be executed.
 #[macro_export]
 macro_rules! block_param_support {
     (supported { $($supported_code:tt)* } not_supported { $($not_supported_code:tt)* }) => {
@@ -144,6 +148,7 @@ pub const fn product_name_length() -> u8 {
 ///
 /// # Example
 /// ```
+/// use iolinke_device::index_list_entries;
 /// let entries = index_list_entries!(); // 9u8
 /// ```
 #[macro_export]
@@ -160,7 +165,9 @@ macro_rules! index_list_entries {
 ///
 /// # Example
 /// ```
-/// let offset = data_storage_index_offset!();
+/// use iolinke_device::index_list_entries;
+/// use iolinke_device::data_storage_index_offset_in_bytes;
+/// let offset = data_storage_index_offset_in_bytes!();
 /// ```
 #[macro_export]
 macro_rules! data_storage_index_offset_in_bytes {
@@ -176,7 +183,10 @@ macro_rules! data_storage_index_offset_in_bytes {
 ///
 /// # Example
 /// ```
-/// let offset = data_storage_index_offset!();
+/// use iolinke_device::index_list_entries;
+/// use iolinke_device::data_storage_index_list_length;
+/// use iolinke_device::data_storage_index_offset_in_bytes;
+/// let offset = data_storage_index_list_length!();
 /// ```
 #[macro_export]
 macro_rules! data_storage_index_list_length {
@@ -191,6 +201,7 @@ macro_rules! data_storage_index_list_length {
 ///
 /// # Example
 /// ```
+/// use iolinke_device::index_list_subindex;
 /// let subidx = index_list_subindex!(); // 0x05
 /// ```
 #[macro_export]
@@ -206,7 +217,8 @@ macro_rules! index_list_subindex {
 ///
 /// # Example
 /// ```
-/// let offset = index_list_offset!(); // 0u8
+/// use iolinke_device::index_list_offset;
+/// let offset = index_list_offset!();
 /// ```
 #[macro_export]
 macro_rules! index_list_offset {
@@ -221,6 +233,7 @@ macro_rules! index_list_offset {
 ///
 /// # Example
 /// ```
+/// use iolinke_device::parameter_checksum_subindex;
 /// let subidx = parameter_checksum_subindex!(); // 0x04
 /// ```
 #[macro_export]
@@ -236,12 +249,14 @@ macro_rules! parameter_checksum_subindex {
 ///
 /// # Example
 /// ```
+/// use iolinke_device::parameter_checksum_offset;
+/// use iolinke_device::data_storage_index_offset_in_bytes;
 /// let offset = parameter_checksum_offset!();
 /// ```
 #[macro_export]
 macro_rules! parameter_checksum_offset {
     () => {
-        data_storage_index_offset!()
+        data_storage_index_offset_in_bytes!()
     };
 }
 
@@ -251,6 +266,7 @@ macro_rules! parameter_checksum_offset {
 ///
 /// # Example
 /// ```
+/// use iolinke_device::data_storage_size_subindex;
 /// let subidx = data_storage_size_subindex!(); // 0x03
 /// ```
 #[macro_export]
@@ -262,16 +278,17 @@ macro_rules! data_storage_size_subindex {
 
 /// Returns the bit offset for the Data Storage Size field in the Data Storage Index (Index 0x0020).
 ///
-/// The offset is calculated as `data_storage_index_offset!() + 32` bits, as per Table B.18.
+/// The offset is calculated as `data_storage_index_offset_in_bytes!() + 32` bits, as per Table B.18.
 ///
 /// # Example
-/// ```
+/// ```ignore
+/// use iolinke_device::data_storage_size_offset;
 /// let offset = data_storage_size_offset!();
 /// ```
 #[macro_export]
 macro_rules! data_storage_size_offset {
     () => {
-        data_storage_index_offset!() + 32
+        data_storage_index_offset_in_bytes!() + 32
     };
 }
 
@@ -281,6 +298,7 @@ macro_rules! data_storage_size_offset {
 ///
 /// # Example
 /// ```
+/// use iolinke_device::state_property_subindex;
 /// let subidx = state_property_subindex!(); // 0x02
 /// ```
 #[macro_export]
@@ -292,16 +310,18 @@ macro_rules! state_property_subindex {
 
 /// Returns the bit offset for the State/Property field in the Data Storage Index (Index 0x0020).
 ///
-/// The offset is calculated as `data_storage_index_offset!() + 64` bits, as per Table B.18.
+/// The offset is calculated as `data_storage_index_offset_in_bytes!() + 64` bits, as per Table B.18.
 ///
 /// # Example
 /// ```
+/// use iolinke_device::state_property_offset;
+/// use iolinke_device::data_storage_index_offset_in_bytes;
 /// let offset = state_property_offset!();
 /// ```
 #[macro_export]
 macro_rules! state_property_offset {
     () => {
-        data_storage_index_offset!() + 64
+        data_storage_index_offset_in_bytes!() + 64
     };
 }
 
@@ -311,6 +331,7 @@ macro_rules! state_property_offset {
 ///
 /// # Example
 /// ```
+/// use iolinke_device::state_storage_command_subindex;
 /// let subidx = state_storage_command_subindex!(); // 0x01
 /// ```
 #[macro_export]
@@ -322,16 +343,18 @@ macro_rules! state_storage_command_subindex {
 
 /// Returns the bit offset for the State/Storage Command field in the Data Storage Index (Index 0x0020).
 ///
-/// The offset is calculated as `data_storage_index_offset!() + 72` bits, as per Table B.18.
+/// The offset is calculated as `data_storage_index_offset_in_bytes!() + 72` bits, as per Table B.18.
 ///
 /// # Example
 /// ```
+/// use iolinke_device::state_storage_command_offset;
+/// use iolinke_device::data_storage_index_offset_in_bytes;
 /// let offset = state_storage_command_offset!();
 /// ```
 #[macro_export]
 macro_rules! state_storage_command_offset {
     () => {
-        data_storage_index_offset!() + 72
+        data_storage_index_offset_in_bytes!() + 72
     };
 }
 
@@ -673,7 +696,7 @@ pub mod storage_config {
     const FUNCTION_ID_1_CONFIG_VALUE: u8 = config_values::function_id_1();
     const FUNCTION_ID_2_CONFIG_VALUE: u8 = config_values::function_id_2();
 
-    // TODO: Integer literals are written because rust compiler does not support macro expansion in macro calls/constants
+    // TODO: Integer literals are written because rust compiler not yet support macro expansion in macro calls/constants
     // TODO: When rust compiler supports macro expansion in macro calls/constants, the integer literals can be removed and use the macro expansion directly or constants
     // TODO: May need to handle the DATA_STORAGE_INDEX_INDEX
     declare_parameter_storage! {

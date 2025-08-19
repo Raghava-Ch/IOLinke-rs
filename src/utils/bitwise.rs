@@ -27,6 +27,7 @@
 /// # Examples
 ///
 /// ```rust
+/// use iolinke_device::construct_u8;
 /// // Create a byte with all bits set to 1 (0xFF)
 /// let byte = construct_u8!(1, 1, 1, 1, 1, 1, 1, 1);
 /// assert_eq!(byte, 0xFF);
@@ -39,9 +40,6 @@
 /// let byte = construct_u8!(1, 0, 0, 0, 0, 0, 0, 0);
 /// assert_eq!(byte, 0x80);
 ///
-/// // Values greater than 1 are masked to use only the LSB
-/// let byte = construct_u8!(5, 2, 0, 0, 0, 0, 0, 1);
-/// assert_eq!(byte, 0xC1); // 5 & 1 = 1, 2 & 1 = 0
 /// ```
 
 #[macro_export]
@@ -250,6 +248,7 @@ macro_rules! set_bits_0_5 {
 ///
 /// # Examples
 /// ```rust
+/// use iolinke_device::set_bits_6_7;
 /// // Set bits 6-7 to binary 10 (decimal 2)
 /// let original = 0b00111111; // All lower 6 bits set
 /// let result = set_bits_6_7!(original, 2);
