@@ -424,7 +424,7 @@ pub enum SystemManagementState {
 
 /// System Management events
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SystemManagementEvent {
+enum SystemManagementEvent {
     SmDeviceModeSio,
     DlModeEstabcom,
     DlModeComx(types::DeviceMode),
@@ -470,7 +470,7 @@ impl SystemManagement {
     }
 
     /// Process an event
-    pub fn process_event(&mut self, event: SystemManagementEvent) -> IoLinkResult<()> {
+    fn process_event(&mut self, event: SystemManagementEvent) -> IoLinkResult<()> {
         use SystemManagementEvent as Event;
         use SystemManagementState as State;
         let new_state = match (self.state, event) {
@@ -853,12 +853,12 @@ impl DlInd for SystemManagement {
             (direct_parameter_address!(MasterCommand), master_command!(MasterIdent)) => {
                 self.process_event(SystemManagementEvent::DlWriteMCmdMasterident(
                     address, value,
-                ));
+                ))?;
             }
             (direct_parameter_address!(MasterCommand), master_command!(DeviceIdent)) => {
                 self.process_event(SystemManagementEvent::DlWriteMCmdDeviceident(
                     address, value,
-                ));
+                ))?;
             }
             (direct_parameter_address!(RevisionID), value) => {
                 self.reconfig.revision_id = Some(RevisionId::from_bytes([value]));

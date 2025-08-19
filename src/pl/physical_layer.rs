@@ -120,7 +120,7 @@ impl PhysicalLayer {
     /// Wake up the physical layer
     /// See IO-Link v1.1.4 Section 5.2.2.3
     pub fn pl_wake_up(&mut self, dl_mode: &mut dl::DataLinkLayer) -> IoLinkResult<()> {
-        dl_mode.pl_wake_up_ind();
+        let _ = dl_mode.pl_wake_up_ind();
         Ok(())
     }
 

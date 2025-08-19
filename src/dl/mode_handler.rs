@@ -137,7 +137,6 @@ pub struct DlModeHandler {
     exec_transition: Transition,
     current_mode: IoLinkMode,
     target_mode: IoLinkMode,
-    error_count: u32,
 }
 
 impl DlModeHandler {
@@ -148,12 +147,11 @@ impl DlModeHandler {
             exec_transition: Transition::Tn,
             current_mode: IoLinkMode::Sio,
             target_mode: IoLinkMode::Sio,
-            error_count: 0,
         }
     }
 
     /// Process an event
-    pub fn process_event(&mut self, event: DlModeEvent) -> IoLinkResult<()> {
+    fn process_event(&mut self, event: DlModeEvent) -> IoLinkResult<()> {
         use DlModeEvent::*;
         use DlModeState::*;
 
@@ -199,23 +197,23 @@ impl DlModeHandler {
             }
             Transition::T1 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t1(message_handler, system_management);
+                let _ = self.execute_t1(message_handler, system_management);
             }
             Transition::T2 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t2(od_handler, command_handler, system_management);
+                let _ = self.execute_t2(od_handler, command_handler, system_management);
             }
             Transition::T3 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t3(isdu_handler, event_handler, system_management);
+                let _ = self.execute_t3(isdu_handler, event_handler, system_management);
             }
             Transition::T4 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t4(pd_handler, system_management);
+                let _ = self.execute_t4(pd_handler, system_management);
             }
             Transition::T5 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t5(
+                let _ = self.execute_t5(
                     isdu_handler,
                     event_handler,
                     pd_handler,
@@ -224,11 +222,11 @@ impl DlModeHandler {
             }
             Transition::T6 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t6(isdu_handler, event_handler, system_management);
+                let _ = self.execute_t6(isdu_handler, event_handler, system_management);
             }
             Transition::T7 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t7(
+                let _ = self.execute_t7(
                     isdu_handler,
                     event_handler,
                     pd_handler,
@@ -237,7 +235,7 @@ impl DlModeHandler {
             }
             Transition::T8 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t8(
+                let _ = self.execute_t8(
                     isdu_handler,
                     event_handler,
                     command_handler,
@@ -249,7 +247,7 @@ impl DlModeHandler {
             }
             Transition::T9 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t9(
+                let _ = self.execute_t9(
                     isdu_handler,
                     event_handler,
                     command_handler,
@@ -261,7 +259,7 @@ impl DlModeHandler {
             }
             Transition::T10 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t10(
+                let _ = self.execute_t10(
                     isdu_handler,
                     event_handler,
                     command_handler,
@@ -273,7 +271,7 @@ impl DlModeHandler {
             }
             Transition::T11 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t11(
+                let _ = self.execute_t11(
                     isdu_handler,
                     event_handler,
                     pd_handler,
@@ -282,7 +280,7 @@ impl DlModeHandler {
             }
             Transition::T12 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t12(isdu_handler, event_handler, system_management);
+                let _ = self.execute_t12(isdu_handler, event_handler, system_management);
             }
         }
         Ok(())
@@ -298,7 +296,7 @@ impl DlModeHandler {
         // Activate message handler (call MH_Conf_ACTIVE in Figure 44)
         message_handler.mh_conf_update(crate::MhConfState::Active);
         // Indicate state via service DL_Mode.ind(ESTABCOM) to SM
-        system_management.dl_mode_ind(DlMode::Estabcom);
+        let _ = system_management.dl_mode_ind(DlMode::Estabcom);
         log::debug!("DL-Mode: T1 - Wakeup detected, activating message handler");
 
         Ok(())
@@ -318,9 +316,9 @@ impl DlModeHandler {
         );
         self.current_mode = self.target_mode;
         // Activate On-request Data (call OH_Conf_ACTIVE in Figure 49)
-        od_handler.oh_conf(crate::ChConfState::Active);
+        let _ = od_handler.oh_conf(crate::ChConfState::Active);
         // Activate command handler (call CH_Conf_ACTIVE in Figure 54)
-        command_handler.ch_conf(crate::ChConfState::Active);
+        let _ = command_handler.ch_conf(crate::ChConfState::Active);
         // Indicate state via service DL_Mode.ind (COM1, COM2, or COM3) to SM
         // TODO: Implement the actual COMx mode handling
         let dl_mode = match self.current_mode {
@@ -329,7 +327,7 @@ impl DlModeHandler {
             IoLinkMode::Com3 => DlMode::Com3,
             _ => return Err(IoLinkError::InvalidEvent),
         };
-        system_management.dl_mode_ind(dl_mode);
+        let _ = system_management.dl_mode_ind(dl_mode);
 
         Ok(())
     }
@@ -344,11 +342,11 @@ impl DlModeHandler {
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T3 - PREOPERATE command received");
         // Activate ISDU (call IH_Conf_ACTIVE in Figure 52)
-        isdu_handler.ih_conf(types::IhConfState::Active);
+        let _ = isdu_handler.ih_conf(types::IhConfState::Active);
         // Activate Event handler (call EH_Conf_ACTIVE in Figure 56)
-        event_handler.eh_conf(types::EhConfState::Active);
+        let _ = event_handler.eh_conf(types::EhConfState::Active);
         // Indicate state via service DL_Mode.ind (PREOPERATE) to SM
-        system_management.dl_mode_ind(DlMode::Preoperate);
+        let _ = system_management.dl_mode_ind(DlMode::Preoperate);
 
         Ok(())
     }
@@ -362,9 +360,9 @@ impl DlModeHandler {
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T4 - OPERATE command received from PREOPERATE");
         // Activate Process Data handler (call PD_Conf_ACTIVE in Figure 47)
-        pd_handler.pd_conf(types::PdConfState::Active);
+        let _ = pd_handler.pd_conf(types::PdConfState::Active);
         // Indicate state via service DL_Mode.ind (OPERATE) to SM
-        system_management.dl_mode_ind(DlMode::Operate);
+        let _ = system_management.dl_mode_ind(DlMode::Operate);
 
         Ok(())
     }
@@ -380,13 +378,13 @@ impl DlModeHandler {
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T5 - OPERATE command received from STARTUP");
         // Activate Process Data handler (call PD_Conf_ACTIVE in Figure 47)
-        pd_handler.pd_conf(types::PdConfState::Active);
+        let _ = pd_handler.pd_conf(types::PdConfState::Active);
         // Activate ISDU (call IH_Conf_ACTIVE in Figure 52)
-        isdu_handler.ih_conf(types::IhConfState::Active);
+        let _ = isdu_handler.ih_conf(types::IhConfState::Active);
         // Activate Event handler (call EH_Conf_ACTIVE in Figure 56)
-        event_handler.eh_conf(types::EhConfState::Active);
+        let _ = event_handler.eh_conf(types::EhConfState::Active);
         // Indicate state via service DL_Mode.ind (OPERATE) to SM
-        system_management.dl_mode_ind(DlMode::Operate);
+        let _ = system_management.dl_mode_ind(DlMode::Operate);
 
         Ok(())
     }
@@ -401,11 +399,11 @@ impl DlModeHandler {
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T6 - STARTUP command received from PREOPERATE");
         // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
-        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        let _ = isdu_handler.ih_conf(types::IhConfState::Inactive);
         // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
-        event_handler.eh_conf(types::EhConfState::Inactive);
+        let _ = event_handler.eh_conf(types::EhConfState::Inactive);
         // Indicate state via service DL_Mode.ind (STARTUP) to SM
-        system_management.dl_mode_ind(DlMode::Startup);
+        let _ = system_management.dl_mode_ind(DlMode::Startup);
 
         Ok(())
     }
@@ -421,13 +419,13 @@ impl DlModeHandler {
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T7 - STARTUP command received from OPERATE");
         // Deactivate Process Data handler (call PD_Conf_INACTIVE in Figure 47)
-        pd_handler.pd_conf(types::PdConfState::Inactive);
+        let _ = pd_handler.pd_conf(types::PdConfState::Inactive);
         // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
-        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        let _ = isdu_handler.ih_conf(types::IhConfState::Inactive);
         // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
-        event_handler.eh_conf(types::EhConfState::Inactive);
+        let _ = event_handler.eh_conf(types::EhConfState::Inactive);
         // Indicate state via service DL_Mode.ind (STARTUP) to SM
-        system_management.dl_mode_ind(DlMode::Startup);
+        let _ = system_management.dl_mode_ind(DlMode::Startup);
 
         Ok(())
     }
@@ -448,14 +446,14 @@ impl DlModeHandler {
         // Wait until TFBD elapsed,
         // TODO: Implement TFBD timer wait
         //Then deactivate all handlers (call xx_Conf_INACTIVE)
-        isdu_handler.ih_conf(types::IhConfState::Inactive);
-        event_handler.eh_conf(types::EhConfState::Inactive);
-        command_handler.ch_conf(crate::ChConfState::Inactive);
-        od_handler.oh_conf(crate::ChConfState::Inactive);
-        pd_handler.pd_conf(types::PdConfState::Inactive);
-        message_handler.mh_conf_update(crate::MhConfState::Inactive);
+        let _ = isdu_handler.ih_conf(types::IhConfState::Inactive);
+        let _ = event_handler.eh_conf(types::EhConfState::Inactive);
+        let _ = command_handler.ch_conf(crate::ChConfState::Inactive);
+        let _ = od_handler.oh_conf(crate::ChConfState::Inactive);
+        let _ = pd_handler.pd_conf(types::PdConfState::Inactive);
+        let _ = message_handler.mh_conf_update(crate::MhConfState::Inactive);
         // Indicate state via service DL_Mode.ind (INACTIVE) to SM
-        system_management.dl_mode_ind(DlMode::Inactive);
+        let _ = system_management.dl_mode_ind(DlMode::Inactive);
 
         Ok(())
     }
@@ -476,14 +474,14 @@ impl DlModeHandler {
         // Wait until TFBD elapsed, 
         // TODO: Implement TFBD timer wait
         // Then deactivate all handlers (call xx_Conf_INACTIVE)
-        isdu_handler.ih_conf(types::IhConfState::Inactive);
-        event_handler.eh_conf(types::EhConfState::Inactive);
-        command_handler.ch_conf(crate::ChConfState::Inactive);
-        od_handler.oh_conf(crate::ChConfState::Inactive);
-        pd_handler.pd_conf(types::PdConfState::Inactive);
-        message_handler.mh_conf_update(crate::MhConfState::Inactive);
+        let _ = isdu_handler.ih_conf(types::IhConfState::Inactive);
+        let _ = event_handler.eh_conf(types::EhConfState::Inactive);
+        let _ = command_handler.ch_conf(crate::ChConfState::Inactive);
+        let _ = od_handler.oh_conf(crate::ChConfState::Inactive);
+        let _ = pd_handler.pd_conf(types::PdConfState::Inactive);
+        let _ = message_handler.mh_conf_update(crate::MhConfState::Inactive);
         // Indicate state via service DL_Mode.ind (INACTIVE) to SM
-        system_management.dl_mode_ind(DlMode::Inactive);
+        let _ = system_management.dl_mode_ind(DlMode::Inactive);
 
         Ok(())
     }
@@ -504,14 +502,14 @@ impl DlModeHandler {
         self.current_mode = IoLinkMode::Sio;
         // After unsuccessful wakeup procedures, establish configured SIO mode
         // Deactivate all handlers (call xx_Conf_INACTIVE)
-        isdu_handler.ih_conf(types::IhConfState::Inactive);
-        event_handler.eh_conf(types::EhConfState::Inactive);
-        command_handler.ch_conf(crate::ChConfState::Inactive);
-        od_handler.oh_conf(crate::ChConfState::Inactive);
-        pd_handler.pd_conf(types::PdConfState::Inactive);
-        message_handler.mh_conf_update(crate::MhConfState::Inactive);
+        let _ = isdu_handler.ih_conf(types::IhConfState::Inactive);
+        let _ = event_handler.eh_conf(types::EhConfState::Inactive);
+        let _ = command_handler.ch_conf(crate::ChConfState::Inactive);
+        let _ = od_handler.oh_conf(crate::ChConfState::Inactive);
+        let _ = pd_handler.pd_conf(types::PdConfState::Inactive);
+        let _ = message_handler.mh_conf_update(crate::MhConfState::Inactive);
         // Indicate state via service DL_Mode.ind (INACTIVE) to SM
-        system_management.dl_mode_ind(DlMode::Inactive);
+        let _ = system_management.dl_mode_ind(DlMode::Inactive);
 
         Ok(())
     }
@@ -527,13 +525,13 @@ impl DlModeHandler {
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T11 - Illegal M-sequence type from OPERATE");
         // Deactivate Process Data (call PD_Conf_INACTIVE in Figure 47)
-        pd_handler.pd_conf(types::PdConfState::Inactive);
+        let _ = pd_handler.pd_conf(types::PdConfState::Inactive);
         // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
-        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        let _ = isdu_handler.ih_conf(types::IhConfState::Inactive);
         // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
-        event_handler.eh_conf(types::EhConfState::Inactive);
+        let _ = event_handler.eh_conf(types::EhConfState::Inactive);
         // Indicate state via service DL_Mode.ind (STARTUP) to SM
-        system_management.dl_mode_ind(DlMode::Startup);
+        let _ = system_management.dl_mode_ind(DlMode::Startup);
 
         Ok(())
     }
@@ -548,11 +546,11 @@ impl DlModeHandler {
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T12 - Illegal M-sequence type from PREOPERATE");
         // Deactivate ISDU (call IH_Conf_INACTIVE in Figure 52)
-        isdu_handler.ih_conf(types::IhConfState::Inactive);
+        let _ = isdu_handler.ih_conf(types::IhConfState::Inactive);
         // Deactivate Event handler (call EH_Conf_INACTIVE in Figure 56)
-        event_handler.eh_conf(types::EhConfState::Inactive);
+        let _ = event_handler.eh_conf(types::EhConfState::Inactive);
         // Indicate state via service DL_Mode.ind (STARTUP) to SM
-        system_management.dl_mode_ind(DlMode::Startup);
+        let _ = system_management.dl_mode_ind(DlMode::Startup);
         Ok(())
     }
 

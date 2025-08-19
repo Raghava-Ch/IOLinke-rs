@@ -14,15 +14,17 @@ use iolinke_macros::device_event_code;
 /// See 8.3.3.2 Event state machine of the Device AL
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DtatStorageStateMachineState {
-    /// {DSStateCheck_0}
-    /// Check activation state after initialization.
-    DSStateCheck,
     /// {DSLocked_1}
     /// Waiting on Data Storage state machine to become unlocked.
     /// This state will become obsolete in future releases since Device access lock "Data Storage"
     /// shall not be used anymore (see Table B.12)
-    /// {Obsolete}
-    DSLocked,
+    /// ! {Obsolete} This state is not recommended to use in v1.1.4.
+    // DSLocked,
+
+
+    /// {DSStateCheck_0}
+    /// Check activation state after initialization.
+    DSStateCheck,
     /// {DSIdle_2}
     /// Waiting on Data Storage activities.
     /// Any unhandled DS-Command shall be rejected with the ErrorType "0x8036 Function temporarily not available"
@@ -39,27 +41,30 @@ pub enum DataStorageTransition {
     Tn,
     /// T1: DSStateCheck -> DSLocked
     /// Set State_Property = "Data Storage access locked"
-    /// {Obsolete}
-    T1,
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // T1,
     /// T2: DSLocked -> DSLocked
     /// Set DS_UPLOAD_FLAG = TRUE
-    /// {Obsolete}
-    T2,
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // T2,
     /// T3: DSLocked -> DSIdle
     /// Set State_Property = "Inactive"
-    /// {Obsolete}
-    T3,
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // T3,
     /// T4: DSLocked -> DSIdle
     /// Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ), Set State_Property = "Inactive"
-    /// {Obsolete}
-    T4,
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // T4,
     /// T5: DSIdle -> DSLocked
     /// Set State_Property = "Data Storage access locked"
-    /// {Obsolete}
-    T5,
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // T5,
     /// T6: DSStateCheck -> DSIdle
     /// Set State_Property = "Inactive"
-    T6,
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // T6,
+
+
     /// T7: DSIdle -> DSIdle
     /// Set DS_UPLOAD_FLAG = TRUE, invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
     T7,
@@ -115,22 +120,22 @@ impl TryFrom<u8> for DsCommand {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataStorageStateMachineEvent {
     /// [Unlocked] Event for DSStateCheck_0 (Triggers T1 or T6)
-    /// {Obsolete}
-    Unlocked,
+    /// ! {Obsolete} This event is not used in v1.1.4.
+    // Unlocked,
     /// [Locked] Event for DSStateCheck_0 (Triggers T1)
-    /// {Obsolete}
-    Locked,
+    /// ! {Obsolete} This event is not used in v1.1.4.
+    // Locked,
+    /// [Unlocked & not DS_UPLOAD_FLAG] (Triggers T3)
+    /// ! {Obsolete} This event is not used in v1.1.4.
+    // UnlockedAndNotDsUploadFlag,
+    /// [Unlocked & DS_UPLOAD_FLAG] (Triggers T4)
+    /// ! {Obsolete} This event is not used in v1.1.4.
+    // UnlockedAndDsUploadFlag,
+    /// [Locked] (Triggers T5)
+    /// ! {Obsolete} This event is not used in v1.1.4.
+    // LockedEvent,
     /// DS_ParUpload_ind event (Triggers T2, T4, or T7)
     DsParUploadInd,
-    /// [Unlocked & not DS_UPLOAD_FLAG] (Triggers T3)
-    /// {Obsolete}
-    UnlockedAndNotDsUploadFlag,
-    /// [Unlocked & DS_UPLOAD_FLAG] (Triggers T4)
-    /// {Obsolete}
-    UnlockedAndDsUploadFlag,
-    /// [Locked] (Triggers T5)
-    /// {Obsolete}
-    LockedEvent,
     /// [TransmissionStart] (Triggers T8)
     TransmissionStart(DsCommand),
     /// [TransmissionEnd] (Triggers T9 or T11)
@@ -158,19 +163,22 @@ impl DataStorage {
         use DtatStorageStateMachineState as State;
 
         let (new_transition, new_state) = match (self.state, event) {
+            // ! Obsolete transitions are all commented out
             // DSStateCheck_0
-            (State::DSStateCheck, Event::Locked) => (Transition::T1, State::DSLocked),
-            (State::DSStateCheck, Event::Unlocked) => (Transition::T6, State::DSIdle),
+            // (State::DSStateCheck, Event::Locked) => (Transition::T1, State::DSLocked),
+            // (State::DSStateCheck, Event::Unlocked) => (Transition::T6, State::DSIdle),
+            // (State::DSLocked, Event::UnlockedAndNotDsUploadFlag) => (Transition::T3, State::DSIdle),
+            // (State::DSLocked, Event::UnlockedAndDsUploadFlag) => (Transition::T4, State::DSIdle),
+            // (State::DSIdle, Event::LockedEvent) => (Transition::T5, State::DSLocked),
             // DSLocked_1
-            (State::DSLocked, Event::DsParUploadInd) => (Transition::T2, State::DSLocked),
-            (State::DSLocked, Event::UnlockedAndNotDsUploadFlag) => (Transition::T3, State::DSIdle),
-            (State::DSLocked, Event::UnlockedAndDsUploadFlag) => (Transition::T4, State::DSIdle),
+            // (State::DSLocked, Event::DsParUploadInd) => (Transition::T2, State::DSLocked),
+
+
             // DSIdle_2
             (State::DSIdle, Event::DsParUploadInd) => (Transition::T7, State::DSIdle),
             (State::DSIdle, Event::TransmissionStart(direction)) => {
                 (Transition::T8(direction), State::DSActivity)
             }
-            (State::DSIdle, Event::LockedEvent) => (Transition::T5, State::DSLocked),
             (State::DSIdle, Event::TransmissionEnd) => (Transition::T11, State::DSIdle),
             // DSActivity_3
             (State::DSActivity, Event::TransmissionEnd) => (Transition::T9, State::DSIdle),
@@ -192,38 +200,42 @@ impl DataStorage {
         use DataStorageTransition as Transition;
 
         match self.exec_transition {
+           
+            // ! Obsolete transitions are all commented out
+            // Transition::T1 => {
+            //     // Transition T1: DSStateCheck -> DSLocked
+            //     self.exec_transition = Transition::Tn;
+            //     self.execute_t1()?;
+            // }
+            // Transition::T2 => {
+            //     // Transition T2: DSLocked -> DSLocked
+            //     self.exec_transition = Transition::Tn;
+            //     self.execute_t2()?;
+            // }
+            // Transition::T3 => {
+            //     // Transition T3: DSLocked -> DSIdle
+            //     self.exec_transition = Transition::Tn;
+            //     self.execute_t3()?;
+            // }
+            // Transition::T4 => {
+            //     // Transition T4: DSLocked -> DSIdle
+            //     self.exec_transition = Transition::Tn;
+            //     self.execute_t4()?;
+            // }
+            // Transition::T5 => {
+            //     // Transition T5: DSIdle -> DSLocked
+            //     self.exec_transition = Transition::Tn;
+            //     self.execute_t5()?;
+            // }
+            // Transition::T6 => {
+            //     // Transition T6: DSStateCheck -> DSIdle
+            //     self.exec_transition = Transition::Tn;
+            //     self.execute_t6(parameter_manager)?;
+            // }
+
+
             Transition::Tn => {
                 // No transition to process
-            }
-            Transition::T1 => {
-                // Transition T1: DSStateCheck -> DSLocked
-                self.exec_transition = Transition::Tn;
-                self.execute_t1()?;
-            }
-            Transition::T2 => {
-                // Transition T2: DSLocked -> DSLocked
-                self.exec_transition = Transition::Tn;
-                self.execute_t2()?;
-            }
-            Transition::T3 => {
-                // Transition T3: DSLocked -> DSIdle
-                self.exec_transition = Transition::Tn;
-                self.execute_t3()?;
-            }
-            Transition::T4 => {
-                // Transition T4: DSLocked -> DSIdle
-                self.exec_transition = Transition::Tn;
-                self.execute_t4()?;
-            }
-            Transition::T5 => {
-                // Transition T5: DSIdle -> DSLocked
-                self.exec_transition = Transition::Tn;
-                self.execute_t5()?;
-            }
-            Transition::T6 => {
-                // Transition T6: DSStateCheck -> DSIdle
-                self.exec_transition = Transition::Tn;
-                self.execute_t6(parameter_manager)?;
             }
             Transition::T7 => {
                 // Transition T7: DSIdle -> DSIdle
@@ -258,54 +270,60 @@ impl DataStorage {
     /// Executes transition T1: DSStateCheck -> DSLocked
     ///
     /// Action: Set State_Property = "Data Storage access locked"
-    pub fn execute_t1(&mut self) -> IoLinkResult<()> {
-        // Obsolete transition
-        Ok(())
-    }
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // pub fn execute_t1(&mut self) -> IoLinkResult<()> {
+    //     // Obsolete transition
+    //     Ok(())
+    // }
 
     /// Executes transition T2: DSLocked -> DSLocked
     ///
     /// Action: Set DS_UPLOAD_FLAG = TRUE
-    pub fn execute_t2(&mut self) -> IoLinkResult<()> {
-        // Obsolete transition
-        Ok(())
-    }
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // pub fn execute_t2(&mut self) -> IoLinkResult<()> {
+    //     // Obsolete transition
+    //     Ok(())
+    // }
 
     /// Executes transition T3: DSLocked -> DSIdle
     ///
     /// Action: Set State_Property = "Inactive"
-    pub fn execute_t3(&mut self) -> IoLinkResult<()> {
-        // Obsolete transition
-        Ok(())
-    }
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // pub fn execute_t3(&mut self) -> IoLinkResult<()> {
+    //     // Obsolete transition
+    //     Ok(())
+    // }
 
     /// Executes transition T4: DSLocked -> DSIdle
     ///
     /// Action: Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ), Set State_Property = "Inactive"
-    pub fn execute_t4(&mut self) -> IoLinkResult<()> {
-        // Obsolete transition
-        Ok(())
-    }
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // pub fn execute_t4(&mut self) -> IoLinkResult<()> {
+    //     // Obsolete transition
+    //     Ok(())
+    // }
 
     /// Executes transition T5: DSIdle -> DSLocked
     ///
     /// Action: Set State_Property = "Data Storage access locked"
-    pub fn execute_t5(&mut self) -> IoLinkResult<()> {
-        // Obsolete transition
-        Ok(())
-    }
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // pub fn execute_t5(&mut self) -> IoLinkResult<()> {
+    //     // Obsolete transition
+    //     Ok(())
+    // }
 
     /// Executes transition T6: DSStateCheck -> DSIdle
     ///
     /// Action: Set State_Property = "Inactive"
-    pub fn execute_t6(
-        &mut self,
-        parameter_manager: &mut al::parameter_manager::ParameterManager,
-    ) -> IoLinkResult<()> {
-        // Set State_Property = "Inactive"
-        parameter_manager.set_state_property(al::parameter_manager::DsState::Inactive)?;
-        Ok(())
-    }
+    /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
+    // pub fn execute_t6(
+    //     &mut self,
+    //     parameter_manager: &mut al::parameter_manager::ParameterManager,
+    // ) -> IoLinkResult<()> {
+    //     // Set State_Property = "Inactive"
+    //     parameter_manager.set_state_property(al::parameter_manager::DsState::Inactive)?;
+    //     Ok(())
+    // }
 
     /// Executes transition T7: DSIdle -> DSIdle
     ///

@@ -63,7 +63,7 @@ use crate::pl;
 /// - ProcessDataOut: Output process data length
 /// - VendorID1/VendorID2: Device vendor identification
 /// - FunctionID1/FunctionID2: Device function identification
-const READ_ONLY: [u8; 8] = [
+const _READ_ONLY: [u8; 8] = [
     iolinke_macros::direct_parameter_address!(MinCycleTime),
     iolinke_macros::direct_parameter_address!(MSequenceCapability),
     iolinke_macros::direct_parameter_address!(ProcessDataIn),
@@ -76,13 +76,13 @@ const READ_ONLY: [u8; 8] = [
 /// ### Write-only Parameters address [0x00, 0x0F]
 /// - MasterCommand: Commands from master to device
 /// - SystemCommand: System-level commands
-const WRITE_ONLY: [u8; 2] = [
+const _WRITE_ONLY: [u8; 2] = [
     iolinke_macros::direct_parameter_address!(MasterCommand),
     iolinke_macros::direct_parameter_address!(SystemCommand),
 ];
 /// ### Reserved Parameters address [0x0E]
 /// - Reserved for future specification extensions
-const RESERVED: [u8; 1] = [iolinke_macros::direct_parameter_address!(Reserved0E)];
+const _RESERVED: [u8; 1] = [iolinke_macros::direct_parameter_address!(Reserved0E)];
 
 /// Reads data from the Direct Parameter page with access control validation.
 ///
@@ -116,10 +116,10 @@ pub fn read(
         return Err(pl::physical_layer::PageError::InvalidAddrOrLen);
     };
     for addr in address..(address + length) {
-        if WRITE_ONLY.contains(&addr) {
+        if _WRITE_ONLY.contains(&addr) {
             return Err(pl::physical_layer::PageError::WriteOnly(addr));
         }
-        if RESERVED.contains(&addr) {
+        if _RESERVED.contains(&addr) {
             return Err(pl::physical_layer::PageError::Reserved(addr));
         }
     }
@@ -160,10 +160,10 @@ pub fn write(
         return Err(pl::physical_layer::PageError::InvalidAddrOrLen);
     }
     for addr in address..(address + length) {
-        if READ_ONLY.contains(&addr) {
+        if _READ_ONLY.contains(&addr) {
             return Err(pl::physical_layer::PageError::ReadOnly(addr));
         }
-        if RESERVED.contains(&addr) {
+        if _RESERVED.contains(&addr) {
             return Err(pl::physical_layer::PageError::Reserved(addr));
         }
     }

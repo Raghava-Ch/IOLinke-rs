@@ -621,43 +621,43 @@ pub mod storage_config {
     // Grouped by index for clarity and maintainability.
 
     // --- Direct Parameter Page 1 (0x0000) ---
-    const PAGE_1_INDEX: u16 = param_indices::page_1();
-    const MASTER_COMMAND_SUBINDEX: u8 = page_1_subindices::master_command();
-    const MASTER_CYCLE_TIME_SUBINDEX: u8 = page_1_subindices::master_cycle_time();
-    const MIN_CYCLE_TIME_SUBINDEX: u8 = page_1_subindices::min_cycle_time();
-    const M_SEQUENCE_CAPABILITY_SUBINDEX: u8 = page_1_subindices::m_sequence_capability();
-    const REVISION_ID_SUBINDEX: u8 = page_1_subindices::revision_id();
-    const PROCESS_DATA_IN_SUBINDEX: u8 = page_1_subindices::process_data_in();
-    const PROCESS_DATA_OUT_SUBINDEX: u8 = page_1_subindices::process_data_out();
-    const VENDOR_ID_1_SUBINDEX: u8 = page_1_subindices::vendor_id_1();
-    const VENDOR_ID_2_SUBINDEX: u8 = page_1_subindices::vendor_id_2();
-    const DEVICE_ID_1_SUBINDEX: u8 = page_1_subindices::device_id_1();
-    const DEVICE_ID_2_SUBINDEX: u8 = page_1_subindices::device_id_2();
-    const DEVICE_ID_3_SUBINDEX: u8 = page_1_subindices::device_id_3();
-    const FUNCTION_ID_1_SUBINDEX: u8 = page_1_subindices::function_id_1();
-    const FUNCTION_ID_2_SUBINDEX: u8 = page_1_subindices::function_id_2();
-    const SYSTEM_COMMAND_SUBINDEX: u8 = page_1_subindices::system_command();
+    const _PAGE_1_INDEX: u16 = param_indices::page_1();
+    const _MASTER_COMMAND_SUBINDEX: u8 = page_1_subindices::master_command();
+    const _MASTER_CYCLE_TIME_SUBINDEX: u8 = page_1_subindices::master_cycle_time();
+    const _MIN_CYCLE_TIME_SUBINDEX: u8 = page_1_subindices::min_cycle_time();
+    const _M_SEQUENCE_CAPABILITY_SUBINDEX: u8 = page_1_subindices::m_sequence_capability();
+    const _REVISION_ID_SUBINDEX: u8 = page_1_subindices::revision_id();
+    const _PROCESS_DATA_IN_SUBINDEX: u8 = page_1_subindices::process_data_in();
+    const _PROCESS_DATA_OUT_SUBINDEX: u8 = page_1_subindices::process_data_out();
+    const _VENDOR_ID_1_SUBINDEX: u8 = page_1_subindices::vendor_id_1();
+    const _VENDOR_ID_2_SUBINDEX: u8 = page_1_subindices::vendor_id_2();
+    const _DEVICE_ID_1_SUBINDEX: u8 = page_1_subindices::device_id_1();
+    const _DEVICE_ID_2_SUBINDEX: u8 = page_1_subindices::device_id_2();
+    const _DEVICE_ID_3_SUBINDEX: u8 = page_1_subindices::device_id_3();
+    const _FUNCTION_ID_1_SUBINDEX: u8 = page_1_subindices::function_id_1();
+    const _FUNCTION_ID_2_SUBINDEX: u8 = page_1_subindices::function_id_2();
+    const _SYSTEM_COMMAND_SUBINDEX: u8 = page_1_subindices::system_command();
 
     // --- System Command (0x0002) ---
-    const SYSTEM_COMMAND_INDEX: u16 = param_indices::system_command();
+    const _SYSTEM_COMMAND_INDEX: u16 = param_indices::system_command();
 
     // --- Data Storage Index (0x0003) ---
-    const DATA_STORAGE_INDEX_INDEX: u16 = param_indices::data_storage();
-    const STATE_PROPERTY_SUBINDEX: u8 = data_storage_list::state_property();
-    const DATA_STORAGE_SIZE_SUBINDEX: u8 = data_storage_list::data_storage_size();
-    const PARAMETER_CHECKSUM_SUBINDEX: u8 = data_storage_list::parameter_checksum();
-    const INDEX_LIST_SUBINDEX: u8 = data_storage_list::subindex();
-    const DS_COMMAND_SUBINDEX: u8 = data_storage_list::ds_command();
-    const INDEX_LIST_LENGTH: u8 = data_storage_list::length();
-    const INDEX_LIST_OFFSET: u8 = data_storage_list::offset();
+    const _DATA_STORAGE_INDEX_INDEX: u16 = param_indices::data_storage();
+    const _STATE_PROPERTY_SUBINDEX: u8 = data_storage_list::state_property();
+    const _DATA_STORAGE_SIZE_SUBINDEX: u8 = data_storage_list::data_storage_size();
+    const _PARAMETER_CHECKSUM_SUBINDEX: u8 = data_storage_list::parameter_checksum();
+    const _INDEX_LIST_SUBINDEX: u8 = data_storage_list::subindex();
+    const _DS_COMMAND_SUBINDEX: u8 = data_storage_list::ds_command();
+    const _INDEX_LIST_LENGTH: u8 = data_storage_list::length();
+    const _INDEX_LIST_OFFSET: u8 = data_storage_list::offset();
 
     // --- Vendor/Product Name (0x0010, 0x0012) ---
-    const VENDOR_NAME_INDEX: u16 = param_indices::vendor_name();
+    const _VENDOR_NAME_INDEX: u16 = param_indices::vendor_name();
     const VENDOR_NAME: &[u8] = vendor_product_info::vendor_name();
-    const VENDOR_NAME_LENGTH: u8 = vendor_product_info::vendor_name_length();
-    const PRODUCT_NAME_INDEX: u16 = param_indices::product_name();
+    const _VENDOR_NAME_LENGTH: u8 = vendor_product_info::vendor_name_length();
+    const _PRODUCT_NAME_INDEX: u16 = param_indices::product_name();
     const PRODUCT_NAME: &[u8] = vendor_product_info::product_name();
-    const PRODUCT_NAME_LENGTH: u8 = vendor_product_info::product_name_length();
+    const _PRODUCT_NAME_LENGTH: u8 = vendor_product_info::product_name_length();
 
     // --- Configuration Values ---
     const MIN_CYCLE_TIME_CONFIG_VALUE: u8 = config_values::min_cycle_time();
