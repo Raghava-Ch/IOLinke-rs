@@ -1,3 +1,4 @@
+use crate::dl::DlPDOutputTransportInd;
 use crate::{dl, storage, system_management, types, IoLinkResult};
 
 mod event_handler;
@@ -7,6 +8,7 @@ mod pd_handler;
 pub mod services;
 mod data_storage;
 
+use heapless::Vec;
 pub use parameter_manager::DeviceParametersIndex;
 pub use parameter_manager::SubIndex;
 pub use parameter_manager::DirectParameterPage1SubIndex;
@@ -161,5 +163,15 @@ impl<'a> ApplicationLayerReadWriteInd for ApplicationLayer<'a> {
 
     fn al_abort_ind(&mut self) -> IoLinkResult<()> {
         self.parameter_manager.al_abort_ind()
+    }
+}
+
+impl<'a> dl::DlPDOutputTransportInd for ApplicationLayer<'a> {
+    fn dl_pd_output_transport_ind(&mut self, pd_out: &Vec<u8, {dl::PD_OUTPUT_LENGTH}>) -> IoLinkResult<()> {
+        todo!()
+    }
+
+    fn dl_pd_cycle_ind(&mut self) -> IoLinkResult<()> {
+        todo!()
     }
 }

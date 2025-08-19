@@ -6,8 +6,25 @@
 use heapless::Vec;
 
 use crate::{
-    config, dl, types::{self, IoLinkError, IoLinkResult, ProcessData}
+    al, config, dl, types::{self, IoLinkError, IoLinkResult}
 };
+
+pub const PD_INPUT_LENGTH: usize = config::process_data::pd_in::length() as usize;
+pub const PD_OUTPUT_LENGTH: usize = config::process_data::pd_out::length() as usize;
+
+/// Process data input/output structure
+/// See IO-Link v1.1.4 Section 8.4.2
+#[derive(Debug, Default, Clone)]
+pub struct ProcessData {
+    /// Input data from device
+    input: Vec<u8, PD_INPUT_LENGTH>,
+    input_length: u8,
+    /// Output data to device
+    output: Vec<u8, PD_OUTPUT_LENGTH>,
+    output_length: u8,
+    /// Data validity flag
+    valid: bool,
+}
 
 /// Process Data Handler states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,7 +92,7 @@ pub trait DlPDInputUpdate {
 pub trait DlPDOutputTransportInd {
     fn dl_pd_output_transport_ind(
         &mut self,
-        pd_out: &[u8; types::MAX_PROCESS_DATA_LENGTH],
+        pd_out: &Vec<u8, PD_OUTPUT_LENGTH>,
     ) -> IoLinkResult<()>;
     fn dl_pd_cycle_ind(&mut self) -> IoLinkResult<()>;
 }
@@ -100,7 +117,7 @@ impl ProcessDataHandler {
     }
 
     /// Process an event
-    pub fn process_event(&mut self, event: ProcessDataHandlerEvent) -> IoLinkResult<()> {
+    fn process_event(&mut self, event: ProcessDataHandlerEvent) -> IoLinkResult<()> {
         use ProcessDataHandlerEvent as Event;
         use ProcessDataHandlerState as State;
 
@@ -126,6 +143,7 @@ impl ProcessDataHandler {
     pub fn poll(
         &mut self,
         message_handler: &mut dl::message_handler::MessageHandler,
+        application_layer: &mut al::ApplicationLayer,
     ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
@@ -146,12 +164,12 @@ impl ProcessDataHandler {
                 // State: PDActive (1) -> PDActive (1)
                 self.exec_transition = Transition::Tn;
                 // Action: Prepare input Process Data for PD.rsp for next message handler demand
-                self.execute_t3(message_handler)?;
+                self.execute_t3()?;
             }
             Transition::T4 => {
                 // State: PDActive (1) -> HandlePD (2)
                 self.exec_transition = Transition::Tn;
-                self.execute_t4()?;
+                self.execute_t4(message_handler)?;
             }
             Transition::T5 => {
                 // State: HandlePD (2) -> PDActive (1)
@@ -162,7 +180,7 @@ impl ProcessDataHandler {
                 // State: HandlePD (2) -> PDActive (1)
                 self.exec_transition = Transition::Tn;
                 // Action: Invoke DL_PDOutputTransport.ind
-                self.execute_t6()?;
+                self.execute_t6(application_layer)?;
             }
             Transition::T7 => {
                 // State: HandlePD (2) -> PDActive (1)
@@ -179,11 +197,6 @@ impl ProcessDataHandler {
         Ok(())
     }
 
-    fn execute_tn(&mut self) -> IoLinkResult<()> {
-        // No transition to execute
-        Ok(())
-    }
-
     fn execute_t1(&mut self) -> IoLinkResult<()> {
         // State: Inactive (0) -> Inactive (0)
         // Action: Ignore Process Data
@@ -197,16 +210,18 @@ impl ProcessDataHandler {
 
     fn execute_t3(
         &mut self,
-        message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         // State: PDActive (1) -> PDActive (1)
         // Action: Prepare input Process Data for PD.rsp for next message handler demand
-        message_handler.pd_rsp(self.process_data.input_length, &self.process_data.input)?;
+        // PD is ready to be sent in "dl_pd_input_update_req"
         Ok(())
     }
 
-    fn execute_t4(&mut self) -> IoLinkResult<()> {
+    fn execute_t4(&mut self, message_handler: &mut dl::message_handler::MessageHandler) -> IoLinkResult<()> {
         // State: PDActive (1) -> HandlePD (2)
+        // Action: Message handler demands input PD via a PD.ind service and delivers output PD or segment of output PD. Invoke PD.rsp with input Process Data when in non-interleave mode (see 7.2.2.3).
+        let _ = message_handler.pd_rsp(self.process_data.input_length, &self.process_data.input);
+        let _ = self.process_event(ProcessDataHandlerEvent::PDComplete);
         Ok(())
     }
 
@@ -215,9 +230,10 @@ impl ProcessDataHandler {
         Ok(())
     }
 
-    fn execute_t6(&mut self) -> IoLinkResult<()> {
+    fn execute_t6(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // State: HandlePD (2) -> PDActive (1)
         // Action: Invoke DL_PDOutputTransport.ind
+        let _ = application_layer.dl_pd_output_transport_ind(&self.process_data.output);
         Ok(())
     }
 
@@ -253,15 +269,15 @@ impl ProcessDataHandler {
     /// The parameters of the service primitives are listed in Table 36.
     pub fn pd_ind(
         &mut self,
-        pd_out: &Vec<u8, { types::MAX_PROCESS_DATA_LENGTH }>,
-        pd_out_address: u8,
+        _pd_in_address: u8, // Not required, because of legacy specification
+        _pd_in_length: u8,  // Not required, because of legacy specification
+        pd_out: &Vec<u8, PD_OUTPUT_LENGTH>,
+        _pd_out_address: u8, // Not required, because of legacy specification
         pd_out_length: u8,
     ) -> IoLinkResult<()> {
-        const INTERLEAVED_MODE: bool = config::m_seq_capability::interleaved_mode();
-        // Push the output data to the `Application Layer`
-        if INTERLEAVED_MODE {
-        } else {
-        }
+        self.process_data.output = pd_out.clone();
+        self.process_data.output_length = pd_out_length;
+        self.process_event(ProcessDataHandlerEvent::PDInd)?;
 
         Ok(())
     }
@@ -282,28 +298,6 @@ impl ProcessDataHandler {
         }
         self.process_event(ProcessDataHandlerEvent::DlPDInputUpdate)?;
         Ok(())
-    }
-
-    /// Process cyclic data exchange
-    fn process_cyclic_data(&mut self) -> IoLinkResult<()> {
-        // Implementation would handle cyclic process data
-        Ok(())
-    }
-
-    /// Set input data
-    pub fn set_input_data(&mut self, data: ProcessData) {
-        // self.input_data = data;
-    }
-
-    /// Get output data
-    pub fn get_output_data(&self) -> &ProcessData {
-        // &self.output_data
-        todo!("Implement get_output_data")
-    }
-
-    /// Get current state
-    pub fn state(&self) -> ProcessDataHandlerState {
-        self.state
     }
 }
 

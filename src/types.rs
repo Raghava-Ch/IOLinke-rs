@@ -399,32 +399,6 @@ impl Into<u8> for MessageType {
     }
 }
 
-/// Process data input/output structure
-/// See IO-Link v1.1.4 Section 8.4.2
-#[derive(Debug, Clone)]
-pub struct ProcessData {
-    /// Input data from device
-    pub input: [u8; MAX_PROCESS_DATA_LENGTH],
-    pub input_length: u8,
-    /// Output data to device
-    pub output: [u8; MAX_PROCESS_DATA_LENGTH],
-    pub output_length: u8,
-    /// Data validity flag
-    pub valid: bool,
-}
-
-impl Default for ProcessData {
-    fn default() -> Self {
-        Self {
-            input: [0; MAX_PROCESS_DATA_LENGTH],
-            input_length: 0,
-            output: [0; MAX_PROCESS_DATA_LENGTH],
-            output_length: 0,
-            valid: false,
-        }
-    }
-}
-
 /// Event types for IO-Link devices
 /// See IO-Link v1.1.4 Section 8.4.4
 // #[derive(Debug, Clone, Copy, PartialEq, Eq)]
