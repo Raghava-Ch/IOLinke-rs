@@ -32,372 +32,212 @@
 //! - All configurations must comply with IO-Link Specification requirements
 //! Configuration macros for IO-Link device setup.
 
-/// M-sequence types for the PREOPERATE mode as per IO-Link Specification (v1.1.4, Table A.8).
-///
-/// The following table describes valid M-sequence types, expected on-request data length (in octets),
-/// and the required minimum recovery time (`T_initcyc`) the master must observe in PREOPERATE mode:
-///
-/// | PREOPERATE M-sequence code | On-request Data (Octets) | M-sequence Type | Minimum Recovery Time (`T_BIT`) |
-/// |----------------------------|---------------------------|------------------|----------------------------------|
-/// | 0                          | 1                         | TYPE_0           | 100                              |
-/// | 1                          | 2                         | TYPE_1_2         | 100                              |
-/// | 2                          | 8                         | TYPE_1_V         | 210                              |
-/// | 3                          | 32                        | TYPE_1_V         | 550                              |
-///
-/// ---
-///
-/// - ⚠️ **Note a**: The minimum recovery time in PREOPERATE mode is a requirement for the Master.
-/// - ⚠️ **Note b**: It is highly recommended for Devices **not to use TYPE_0**, as it improves error discovery
-///   when the Master restarts communication.
-pub const fn preoperate_m_sequence() -> u8 {
-    0u8 // Accepted values are 0, 1, 2, or 3
-}
+pub mod pre_operate_m_sequence {
+    use crate::config;
 
-/// Returns the on-request data length (in octets) for PREOPERATE mode M-sequences.
-///
-/// This function provides the expected on-request data length that corresponds to the
-/// M-sequence type configured in `preoperate_m_sequence()`. The mapping follows
-/// IO-Link Specification v1.1.4, Table A.8.
-///
-/// ## Dependency Mapping
-///
-/// | `preoperate_m_sequence()` | M-sequence Type | On-request Data Length | Return Value |
-/// |---------------------------|------------------|------------------------|--------------|
-/// | 0                         | TYPE_0           | 1 octet                | 1            |
-/// | 1                         | TYPE_1_2         | 2 octets               | 2            |
-/// | 2                         | TYPE_1_V         | 8 octets               | 8            |
-/// | 3                         | TYPE_1_V         | 32 octets              | 32           |
-///
-/// ## Returns
-///
-/// The on-request data length in octets (1, 2, 8, or 32) corresponding to the
-/// configured PREOPERATE M-sequence type.
-///
-/// ## Specification Reference
-///
-/// - IO-Link Specification v1.1.4, Table A.8: PREOPERATE mode M-sequence types
-/// - Section A.1.3: M-sequence definitions and data length requirements
-pub const fn preoperate_m_sequence_od_len() -> u8 {
-    match preoperate_m_sequence() {
-        0 => 1u8,                                                   // TYPE_0: 1 octet
-        1 => 2u8,                                                   // TYPE_1_2: 2 octets
-        2 => 8u8,                                                   // TYPE_1_V: 8 octets
-        3 => 32u8,                                                  // TYPE_1_V: 32 octets
-        _ => panic!("Invalid PREOPERATE M-sequence configuration"), // Default fallback (should not occur with valid config)
+
+    /// M-sequence types for the PREOPERATE mode as per IO-Link Specification (v1.1.4, Table A.8).
+    ///
+    /// The following table describes valid M-sequence types, expected on-request data length (in octets),
+    /// and the required minimum recovery time (`T_initcyc`) the master must observe in PREOPERATE mode:
+    ///
+    /// | PREOPERATE M-sequence code | On-request Data (Octets) | M-sequence Type | Minimum Recovery Time (`T_BIT`) |
+    /// |----------------------------|---------------------------|------------------|----------------------------------|
+    /// | 0                          | 1                         | TYPE_0           | 100                              |
+    /// | 1                          | 2                         | TYPE_1_2         | 100                              |
+    /// | 2                          | 8                         | TYPE_1_V         | 210                              |
+    /// | 3                          | 32                        | TYPE_1_V         | 550                              |
+    ///
+    /// ---
+    ///
+    /// - ⚠️ **Note a**: The minimum recovery time in PREOPERATE mode is a requirement for the Master.
+    /// - ⚠️ **Note b**: It is highly recommended for Devices **not to use TYPE_0**, as it improves error discovery
+    ///   when the Master restarts communication.
+    pub const fn m_sequence_code() -> u8 {
+        match config::on_req_data::pre_operate::od_length() {
+            1 => 0u8,
+            2 => 1u8,
+            8 => 2u8,
+            32 => 3u8,
+            _ => panic!("Invalid PREOPERATE M-sequence configuration"),
+        }
+    }
+
+    pub const fn m_sequence_type() -> crate::types::MsequenceType {
+        match m_sequence_code() {
+            0 => crate::types::MsequenceType::Type0,
+            1 => crate::types::MsequenceType::Type12,
+            2 => crate::types::MsequenceType::Type1V,
+            3 => crate::types::MsequenceType::Type1V,
+            _ => panic!("Invalid PREOPERATE M-sequence configuration"),
+        }
+    }
+
+    /// Represents the M-sequence type used in IO-Link communication, based on bits 6 and 7 of the
+    /// Checksum / M-sequence Type (CKT) field. These bits define how the Master structures messages
+    /// within an M-sequence, as specified in Table A.3 of the IO-Link specification (see Section A.1.3).
+    ///
+    /// This macro depends on the `operate_m_sequence` or `operate_m_sequence_legacy` macros. The selected
+    /// M-sequence type in `operate_m_sequence` or `operate_m_sequence_legacy` determines the value of the
+    /// `operate_m_sequence_base_type` macro.
+    ///
+    /// The mapping is as follows:
+    /// - `TYPE_0`   → `0`
+    /// - `TYPE_1_x` → `1`
+    /// - `TYPE_2_x` → `2`
+    /// - `3` is reserved and should not be used
+    ///
+    /// Ensure consistency with the selected M-sequence type when defining dependent macros.
+    pub const fn m_sequence_base_type() -> crate::types::MsequenceBaseType {
+        match m_sequence_type() {
+            crate::types::MsequenceType::Type0 => crate::types::MsequenceBaseType::Type0,
+            crate::types::MsequenceType::Type12 => crate::types::MsequenceBaseType::Type1,
+            crate::types::MsequenceType::Type1V => crate::types::MsequenceBaseType::Type2,
+            _ => panic!("Invalid M-sequence type"),
+        }
     }
 }
 
-/// **This is a prerequisite for the `operate_m_sequence_legacy` config parameter check its documentation**.
-/// Returns the on-request data length (in octets) for legacy OPERATE mode M-sequences.
-/// ## Returns
-/// The on-request data length in octets for all possible M-sequences.
-pub const fn operate_m_sequence_legacy_od_len() -> u8 {
-    2u8
-}
+pub mod operate_m_sequence {
+    /// Returns whether the device is configured to use interleaved mode for M-sequences, when device is in legacy mode.
+    // #[cfg(feature = "legacy_device")]
+    // pub const fn interleaved_mode() -> bool {
+    //     const OPERATE_M_SEQUENCE_LEGACY: crate::types::MsequenceType = operate_m_sequence_legacy();
+    //     (OPERATE_M_SEQUENCE_LEGACY as u8) == (crate::types::MsequenceType::Type11 as u8)
+    // }
 
-/// **This is a prerequisite for the `operate_m_sequence_legacy` config parameter check its documentation**.
-/// Returns the process data length (PDin) for legacy OPERATE mode M-sequences.
-/// ## Returns
-/// The process data length (PDin) for all possible M-sequences.
-/// This is `must be configured as bits`, not octets, so the return value is in bits.
-pub const fn operate_m_sequence_legacy_pd_in_len_in_bits() -> u8 {
-    0u8
-}
+    /// Returns whether the device is configured to use interleaved mode for M-sequences.
+    // #[cfg(not(feature = "legacy_device"))]
+    // pub const fn interleaved_mode() -> bool {
+    //     const OPERATE_M_SEQUENCE: crate::types::MsequenceType = operate_m_sequence();
+    //     (OPERATE_M_SEQUENCE as u8) == (crate::types::MsequenceType::Type11 as u8)
+    // }
+    use crate::{config};
 
-/// This function literally converts the `operate_m_sequence_legacy_pd_in_len_in_bits` bit length to bytes
-pub const fn operate_m_sequence_legacy_pd_in_len_in_bytes() -> u8 {
-    const PD_IN_LENGTH: u8 = operate_m_sequence_legacy_pd_in_len_in_bits();
-    // The ceiling division technique:
-    // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
-    // Formula is ceil(a/b) = (a + b - 1) / b
-    const PD_LENGTH_BYTES: u8 = (PD_IN_LENGTH + 7) / 8; // Integer ceiling division
-
-    PD_LENGTH_BYTES
-}
-
-/// **This is a prerequisite for the `operate_m_sequence_legacy` config parameter check its documentation**.
-/// Returns the process data length (PDout) for legacy OPERATE mode  M-sequences.
-/// ## Returns
-/// The process data length (PDout) for all possible M-sequences.
-/// This is `must be configured as bits`, not octets, so the return value is in bits.
-pub const fn operate_m_sequence_legacy_pd_out_len_in_bits() -> u8 {
-    0u8
-}
-
-/// This function literally converts the `operate_m_sequence_legacy_pd_out_len_in_bits` bit length to bytes
-pub const fn operate_m_sequence_legacy_pd_out_len_in_bytes() -> u8 {
-    const PD_OUT_LENGTH: u8 = operate_m_sequence_legacy_pd_out_len_in_bits();
-    // The ceiling division technique:
-    // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
-    // Formula is ceil(a/b) = (a + b - 1) / b
-    const PD_LENGTH_BYTES: u8 = (PD_OUT_LENGTH + 7) / 8; // Integer ceiling division
-
-    PD_LENGTH_BYTES
-}
-
-/// M-sequence types for the OPERATE mode (standard protocol) as per IO-Link Specification (Table A.9).
-pub const fn operate_m_sequence_code_legacy() -> u8 {
-    1u8 // Accepted values are 0, 1,
-}
-
-/// M-sequence types for the OPERATE mode (legacy protocol) as per IO-Link Specification (Table A.9).
-///
-/// This table describes valid M-sequence types in legacy devices for the OPERATE mode, depending on the
-/// on-request data size and process data direction (PDin, PDout):
-///
-/// | OPERATE M-sequence code | On-request Data (Octets) | PDin (Process Data In)  | PDout (Process Data Out) | M-sequence Type        |
-/// |-------------------------|--------------------------|-------------------------|--------------------------|-------------------------|
-/// | 0                       | 1                         | 0                      | 0                        | TYPE_0 (⚠️ see NOTE)    |
-/// | 1                       | 2                         | 0                      | 0                        | TYPE_1_2                |
-/// | don't care              | 2                         | PDin + PDout > 2 octets|                          | TYPE_1_1/1_2 (interleaved) |
-/// | don't care              | 1                         | 1…8 bit                | 0                        | TYPE_2_1                |
-/// | don't care              | 1                         | 9…16 bit               | 0                        | TYPE_2_2                |
-/// | don't care              | 1                         | 0                      | 1…8 bit                  | TYPE_2_3                |
-/// | don't care              | 1                         | 0                      | 9…16 bit                 | TYPE_2_4                |
-/// | don't care              | 1                         | 1…8 bit                | 1…8 bit                  | TYPE_2_5                |
-///
-/// ---
-///
-/// ⚠️ **NOTE**: It is highly recommended for Devices **not to use TYPE_0**, as this improves error discovery
-/// when the Master restarts communication.
-///
-/// The minimum cycle time for Master in OPERATE mode is defined by the device's `MinCycleTime` parameter.
-// #[cfg(feature = "legacy_device")]
-pub const fn operate_m_sequence_legacy() -> crate::types::MsequenceType {
-    match (
-        operate_m_sequence_code_legacy(),
-        operate_m_sequence_legacy_od_len(),
-        operate_m_sequence_legacy_pd_in_len_in_bits(),
-        operate_m_sequence_legacy_pd_out_len_in_bits(),
-    ) {
-        (0, 1, 0, 0) => crate::types::MsequenceType::Type0, // TYPE_0
-        (1, 2, 0, 0) => crate::types::MsequenceType::Type12, // TYPE_1_2
-        (_, 2, pd_in, pdout) if (pd_in + pdout) > 16 /* 2 Octects in bits */ => crate::types::MsequenceType::Type11, // TYPE_1_1/1_2 interleaved
-        (_, 1, 1..=8, 0) => crate::types::MsequenceType::Type21, // TYPE_2_1
-        (_, 1, 9..=16, 0) => crate::types::MsequenceType::Type22, // TYPE_2_2
-        (_, 1, 0, 1..=8) => crate::types::MsequenceType::Type23, // TYPE_2_3
-        (_, 1, 0, 9..=16) => crate::types::MsequenceType::Type24, // TYPE_2_4
-        (_, 1, 1..=8, 1..=8) => crate::types::MsequenceType::Type25, // TYPE_2_5
-        _ => panic!("Invalid OPERATE legacy M-sequence configuration"), // Default fallback (should not occur with valid config)
+    /// M-sequence types for the OPERATE mode (standard protocol) as per IO-Link Specification (Table A.10).
+    pub const fn operate_m_sequence_code() -> u8 {
+        use crate::config::process_data::ProcessDataLength::{self, *};
+        const PD_IN_LEN: ProcessDataLength = config::process_data::pd_in::config_length();
+        const PD_OUT_LEN: ProcessDataLength = config::process_data::pd_out::config_length();
+        const OD_LEN: u8 = config::on_req_data::operate::od_length();
+        match (OD_LEN, PD_IN_LEN, PD_OUT_LEN) {
+            (1, Bit(0), Bit(0)) | (1, Octet(0), Octet(0)) => 00u8,
+            (2, Bit(0), Bit(0)) | (2, Octet(0), Octet(0)) => 01u8,
+            (8, Bit(0), Bit(0)) | (8, Octet(0), Octet(0)) => 06u8,
+            (32, Bit(0), Bit(0)) | (32, Octet(0), Octet(0)) => 07u8,
+            (2, Octet(3..=32), Octet(0..=32)) => 00u8,
+            (2, Octet(0..=32), Octet(3..=32)) => 00u8,
+            (1, Bit(1..8), Bit(0)) => 00u8,
+            (1, Bit(9..16), Bit(0)) => 00u8,
+            (1, Bit(0), Bit(1..=8)) => 00u8,
+            (1, Bit(0), Bit(9..=16)) => 00u8,
+            (1, Bit(1..=8), Bit(1..=8)) => 00u8,
+            (1, Bit(9..=16), Bit(1..=16)) => 00u8,
+            (1, Bit(1..=16), Bit(9..=16)) => 00u8,
+            (1, Octet(0..=32), Octet(3..=32)) => 04u8,
+            (1, Octet(3..=32), Octet(0..=32)) => 04u8,
+            (2, Bit(1..=16), Bit(0..=16)) => 05u8,
+            (2, Bit(0..=16), Bit(1..=16)) => 05u8,
+            (8, Bit(1..=16), Bit(0..=16)) => 06u8,
+            (8, Bit(0..=16), Bit(1..=16)) => 06u8,
+            (32, Bit(1..=16), Bit(0..=16)) => 07u8,
+            (32, Bit(0..=16), Bit(1..=16)) => 07u8,
+            _ => panic!("Invalid OPERATE M-sequence configuration"),
+        }
     }
-}
 
-/// Returns whether the device is configured to use interleaved mode for M-sequences, when device is in legacy mode.
-#[cfg(feature = "legacy_device")]
-pub const fn interleaved_mode() -> bool {
-    const OPERATE_M_SEQUENCE_LEGACY: crate::types::MsequenceType = operate_m_sequence_legacy();
-    (OPERATE_M_SEQUENCE_LEGACY as u8) == (crate::types::MsequenceType::Type11 as u8)
-}
-
-/// Returns whether the device is configured to use interleaved mode for M-sequences.
-#[cfg(not(feature = "legacy_device"))]
-pub const fn interleaved_mode() -> bool {
-    const OPERATE_M_SEQUENCE: crate::types::MsequenceType = operate_m_sequence();
-    (OPERATE_M_SEQUENCE as u8) == (crate::types::MsequenceType::Type11 as u8)
-}
-
-/// **This is a prerequisite for the `operate_m_sequence` config parameter check its documentation**.
-/// Returns the on-request data length (in octets) for legacy OPERATE mode M-sequences.
-/// ## Returns
-/// The on-request data length in octets for all possible M-sequences.
-pub const fn operate_m_sequence_od_len() -> u8 {
-    2u8
-}
-
-/// Returns the process data input length (PDin) for standard OPERATE mode M-sequences.
-///
-/// This function provides the PDin configuration that corresponds to the M-sequence type
-/// configured in `operate_m_sequence()`. The return value is a tuple containing:
-/// - The data length value
-/// - A boolean indicating if the length is specified `in octets (true) or bits (false`
-/// ## Returns
-///
-/// A tuple `(length, is_octets)` where:
-/// - `length`: The process data input length (0-32 for octets, 0-255 for bits)
-/// - `is_octets`: `true` if length is in octets, `false` if in bits
-///
-/// ## Configuration Note
-///
-/// This function must be configured according to your device's specific PDin requirements.
-/// The default implementation returns `(0, false` indicating no process data input.
-/// Modify the return value based on your device's actual PDin specification.
-///
-/// ## Specification Reference
-///
-/// - IO-Link Specification v1.1.4, Table A.10: OPERATE mode M-sequence types
-/// - Section 7.3.4: Process data definitions and bit/octet specifications
-pub const fn operate_m_sequence_pd_in_len_in_bits() -> (u8, bool) {
-    (3u8, true) // Default: No process data input
-
-    // Example configurations:
-    // (8, false   // 8 bits of process data input
-    // (16, false  // 16 bits of process data input
-    // (2, true)    // 2 octets of process data input
-    // (32, true)   // 32 octets of process data input
-}
-
-/// Returns the process data output length (PDin) in bytes for standard OPERATE mode M-sequences.
-/// This function literally returns the length in bytes, not bits. Calculated from `operate_m_sequence_pd_in_len_in_bits`.
-pub const fn operate_m_sequence_pd_in_len_in_bytes() -> u8 {
-    const PD_IN_LENGTH: (u8, bool) = operate_m_sequence_pd_in_len_in_bits();
-    const PD_IN_LENGTH_BITS: bool = PD_IN_LENGTH.1;
-    const PD_LENGTH_BYTES: u8 = if PD_IN_LENGTH_BITS {
-        PD_IN_LENGTH.0 / 8
-    } else {
-        // The ceiling division technique:
-        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
-        // Formula is ceil(a/b) = (a + b - 1) / b
-        (PD_IN_LENGTH.0 + 7) / 8 // Integer ceiling division
-    };
-
-    PD_LENGTH_BYTES
-}
-
-/// Returns the process data input length (PDin) for standard OPERATE mode M-sequences.
-///
-/// This function provides the PDin configuration that corresponds to the M-sequence type
-/// configured in `operate_m_sequence()`. The return value is a tuple containing:
-/// - The data length value
-/// - A boolean indicating if the length is specified `in octets (true) or bits (false`
-/// ## Returns
-///
-/// A tuple `(length, is_octets)` where:
-/// - `length`: The process data input length (0-32 for octets, 0-255 for bits)
-/// - `is_octets`: `true` if length is in octets, `false` if in bits
-///
-/// ## Configuration Note
-///
-/// This function must be configured according to your device's specific PDin requirements.
-/// The default implementation returns `(0, false` indicating no process data input.
-/// Modify the return value based on your device's actual PDin specification.
-///
-/// ## Specification Reference
-/// - IO-Link Specification v1.1.4, Table A.10: OPERATE mode M-sequence types
-/// - Section 7.3.4: Process data definitions and bit/octet specifications
-pub const fn operate_m_sequence_pd_out_len_in_bits() -> (u8, bool) {
-    (3u8, true)
-
-    // Example configurations:
-    // (8, false   // 8 bits of process data input
-    // (16, false  // 16 bits of process data input
-    // (2, true)    // 2 octets of process data input
-    // (32, true)   // 32 octets of process data input
-}
-
-/// Returns the process data output length (PDout) in bytes for standard OPERATE mode M-sequences.
-/// This function literally returns the length in bytes, not bits. Calculated from `operate_m_sequence_pd_out_len_in_bits`.
-pub const fn operate_m_sequence_pd_out_len_in_bytes() -> u8 {
-    const PD_OUT_LENGTH: (u8, bool) = operate_m_sequence_pd_out_len_in_bits();
-    const PD_OUT_LENGTH_BITS: bool = PD_OUT_LENGTH.1;
-    const PD_LENGTH_BYTES: u8 = if PD_OUT_LENGTH_BITS {
-        PD_OUT_LENGTH.0 / 8
-    } else {
-        // The ceiling division technique:
-        // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
-        // Formula is ceil(a/b) = (a + b - 1) / b
-        (PD_OUT_LENGTH.0 + 7) / 8 // Integer ceiling division
-    };
-
-    PD_LENGTH_BYTES
-}
-
-/// M-sequence types for the OPERATE mode (standard protocol) as per IO-Link Specification (Table A.10).
-pub const fn operate_m_sequence_code() -> u8 {
-    0u8 // Accepted values are 0, 1, 4, 5, 6, or 7
-}
-
-/// M-sequence types for the OPERATE mode (per IO-Link Specification, Table A.10).
-///
-/// This table outlines valid M-sequence types in the OPERATE mode for **Devices**, depending on the
-/// on-request data and process data (PDin and PDout). These combinations determine the M-sequence
-/// type that the Master and Device must use.
-///
-/// | OPERATE M-sequence code | On-request Data (Octets)   | PDin                     | PDout                    | M-sequence Type          |
-/// |--------------------------|---------------------------|--------------------------|--------------------------|--------------------------|
-/// | 0                        | 1                         | 0                        | 0                        | TYPE_0 (⚠️ see NOTE 1)   |
-/// | 1                        | 2                         | 0                        | 0                        | TYPE_1_2                 |
-/// | 6                        | 8                         | 0                        | 0                        | TYPE_1_V                 |
-/// | 7                        | 32                        | 0                        | 0                        | TYPE_1_V                 |
-/// | 0                        | 2                         | 3…32 octets              | 0…32 octets              | TYPE_1_1 / 1_2 interleaved (⚠️ see NOTE 3) |
-/// | 0                        | 2                         | 0…32 octets              | 3…32 octets              | TYPE_1_1 / 1_2 interleaved (⚠️ see NOTE 3) |
-/// | 0                        | 1                         | 1…8 bit                  | 0                        | TYPE_2_1                 |
-/// | 0                        | 1                         | 9…16 bit                 | 0                        | TYPE_2_2                 |
-/// | 0                        | 1                         | 0                        | 1…8 bit                  | TYPE_2_3                 |
-/// | 0                        | 1                         | 0                        | 9…16 bit                 | TYPE_2_4                 |
-/// | 0                        | 1                         | 1…8 bit                  | 1…8 bit                  | TYPE_2_5                 |
-/// | 0                        | 1                         | 9…16 bit                 | 1…16 bit                 | TYPE_2_V (⚠️ see NOTE 2) |
-/// | 0                        | 1                         | 1…16 bit                 | 9…16 bit                 | TYPE_2_V (⚠️ see NOTE 2) |
-/// | 4                        | 1                         | 0…32 octets              | 3…32 octets              | TYPE_2_V                 |
-/// | 4                        | 1                         | 3…32 octets              | 0…32 octets              | TYPE_2_V                 |
-/// | 5                        | 2                         | >0 bit, octets           | ≥0 bit, octets           | TYPE_2_V                 |
-/// | 5                        | 2                         | ≥0 bit, octets           | >0 bit, octets           | TYPE_2_V                 |
-/// | 6                        | 8                         | >0 bit, octets           | ≥0 bit, octets           | TYPE_2_V                 |
-/// | 6                        | 8                         | ≥0 bit, octets           | >0 bit, octets           | TYPE_2_V                 |
-/// | 7                        | 32                        | >0 bit, octets           | ≥0 bit, octets           | TYPE_2_V                 |
-/// | 7                        | 32                        | ≥0 bit, octets           | >0 bit, octets           | TYPE_2_V                 |
-///
-/// ---
-///
-/// ⚠️ **NOTE 1**: It is highly recommended for Devices **not to use TYPE_0**, to improve error detection when the Master restarts communication.
-///
-/// ⚠️ **NOTE 2**: Former `TYPE_2_6` has been deprecated in favor of `TYPE_2_V` due to inefficiency.
-///
-/// ⚠️ **NOTE 3**: Interleaved mode (`TYPE_1_1/1_2`) **must not** be implemented in Devices, but should be supported by Masters.
-pub const fn operate_m_sequence() -> crate::types::MsequenceType {
-    const PD_IN_LEN: (u8, bool) = operate_m_sequence_pd_in_len_in_bits();
-    const PD_OUT_LEN: (u8, bool) = operate_m_sequence_pd_out_len_in_bits();
-    match (
-        operate_m_sequence_code(),
-        operate_m_sequence_od_len(),
-        PD_IN_LEN.0,
-        PD_IN_LEN.1,
-        PD_OUT_LEN.0,
-        PD_OUT_LEN.1,
-    ) {
-        (0, 1, 0, false, 0, false) => crate::types::MsequenceType::Type0, // TYPE_0
-        (1, 2, 0, false, 0, false) => crate::types::MsequenceType::Type12, // TYPE_1_2
-        (6, 8, 0, false, 0, false) => crate::types::MsequenceType::Type1V, // TYPE_1_V
-        (7, 32,0, false, 0, false) => crate::types::MsequenceType::Type1V, // TYPE_1_V
-        (0, 2, 3..=32, true, 0..=32, true) => crate::types::MsequenceType::Type11, // TYPE_1_1/1_2 interleaved
-        (0, 2, 0..=32, true, 3..=32, true) => crate::types::MsequenceType::Type11, // TYPE_1_1/1_2 interleaved
-        (0, 1, 1..=8, false, 0, false) => crate::types::MsequenceType::Type21,     // TYPE_2_1
-        (0, 1, 9..=16, false, 0, false) => crate::types::MsequenceType::Type22,    // TYPE_2_2
-        (0, 1, 0, false, 1..=8, false) => crate::types::MsequenceType::Type23,     // TYPE_2_3
-        (0, 1, 0, false, 9..=16, false) => crate::types::MsequenceType::Type24,    // TYPE_2_4
-        (0, 1, 1..=8, false, 1..=8, false) => crate::types::MsequenceType::Type25, // TYPE_2_5
-        (0, 1, 9..=16, false, 1..=16, false) => crate::types::MsequenceType::Type2V, // TYPE_2_V
-        (0, 1, 1..=16, false, 9..=16, false) => crate::types::MsequenceType::Type2V, // TYPE_2_V
-        (4, 1, 0..=32, true, 3..=32, true) => crate::types::MsequenceType::Type2V, // TYPE_2_V
-        (4, 1, 3..=32, true, 0..=32, true) => crate::types::MsequenceType::Type2V, // TYPE_2_V
-        (5 | 6 | 7, 2 | 8 | 32, _, _, _, _) => crate::types::MsequenceType::Type2V,          // TYPE_2_V
-        _ => panic!("Invalid OPERATE M-sequence configuration"), // Default fallback (should not occur with valid config)
+    /// M-sequence types for the OPERATE mode (per IO-Link Specification, Table A.10).
+    ///
+    /// This table outlines valid M-sequence types in the OPERATE mode for **Devices**, depending on the
+    /// on-request data and process data (PDin and PDout). These combinations determine the M-sequence
+    /// type that the Master and Device must use.
+    ///
+    /// | OPERATE M-sequence code | On-request Data (Octets)   | PDin                     | PDout                    | M-sequence Type          |
+    /// |--------------------------|---------------------------|--------------------------|--------------------------|--------------------------|
+    /// | 0                        | 1                         | 0                        | 0                        | TYPE_0 (⚠️ see NOTE 1)   |
+    /// | 1                        | 2                         | 0                        | 0                        | TYPE_1_2                 |
+    /// | 6                        | 8                         | 0                        | 0                        | TYPE_1_V                 |
+    /// | 7                        | 32                        | 0                        | 0                        | TYPE_1_V                 |
+    /// | 0                        | 2                         | 3…32 octets              | 0…32 octets              | TYPE_1_1 / 1_2 interleaved (⚠️ see NOTE 3) |
+    /// | 0                        | 2                         | 0…32 octets              | 3…32 octets              | TYPE_1_1 / 1_2 interleaved (⚠️ see NOTE 3) |
+    /// | 0                        | 1                         | 1…8 bit                  | 0                        | TYPE_2_1                 |
+    /// | 0                        | 1                         | 9…16 bit                 | 0                        | TYPE_2_2                 |
+    /// | 0                        | 1                         | 0                        | 1…8 bit                  | TYPE_2_3                 |
+    /// | 0                        | 1                         | 0                        | 9…16 bit                 | TYPE_2_4                 |
+    /// | 0                        | 1                         | 1…8 bit                  | 1…8 bit                  | TYPE_2_5                 |
+    /// | 0                        | 1                         | 9…16 bit                 | 1…16 bit                 | TYPE_2_V (⚠️ see NOTE 2) |
+    /// | 0                        | 1                         | 1…16 bit                 | 9…16 bit                 | TYPE_2_V (⚠️ see NOTE 2) |
+    /// | 4                        | 1                         | 0…32 octets              | 3…32 octets              | TYPE_2_V                 |
+    /// | 4                        | 1                         | 3…32 octets              | 0…32 octets              | TYPE_2_V                 |
+    /// | 5                        | 2                         | >0 bit, octets           | ≥0 bit, octets           | TYPE_2_V                 |
+    /// | 5                        | 2                         | ≥0 bit, octets           | >0 bit, octets           | TYPE_2_V                 |
+    /// | 6                        | 8                         | >0 bit, octets           | ≥0 bit, octets           | TYPE_2_V                 |
+    /// | 6                        | 8                         | ≥0 bit, octets           | >0 bit, octets           | TYPE_2_V                 |
+    /// | 7                        | 32                        | >0 bit, octets           | ≥0 bit, octets           | TYPE_2_V                 |
+    /// | 7                        | 32                        | ≥0 bit, octets           | >0 bit, octets           | TYPE_2_V                 |
+    ///
+    /// ---
+    ///
+    /// ⚠️ **NOTE 1**: It is highly recommended for Devices **not to use TYPE_0**, to improve error detection when the Master restarts communication.
+    ///
+    /// ⚠️ **NOTE 2**: Former `TYPE_2_6` has been deprecated in favor of `TYPE_2_V` due to inefficiency.
+    ///
+    /// ⚠️ **NOTE 3**: Interleaved mode (`TYPE_1_1/1_2`) **must not** be implemented in Devices, but should be supported by Masters.
+    pub const fn m_sequence_type() -> crate::types::MsequenceType {
+        use crate::config::process_data::ProcessDataLength::{self, *};
+        use crate::types::MsequenceType;
+        const PD_IN_LEN: ProcessDataLength = config::process_data::pd_in::config_length();
+        const PD_OUT_LEN: ProcessDataLength = config::process_data::pd_out::config_length();
+        const OD_LEN: u8 = config::on_req_data::operate::od_length();
+        match (OD_LEN, PD_IN_LEN, PD_OUT_LEN) {
+            (1, Bit(0), Bit(0)) | (1, Octet(0), Octet(0)) => MsequenceType::Type0, // TYPE_0
+            (2, Bit(0), Bit(0)) | (2, Octet(0), Octet(0)) => MsequenceType::Type12, // TYPE_1_2
+            (8, Bit(0), Bit(0)) | (8, Octet(0), Octet(0)) => MsequenceType::Type1V, // TYPE_1_V
+            (32, Bit(0), Bit(0)) | (32, Octet(0), Octet(0)) => MsequenceType::Type1V, // TYPE_1_V
+            (2, Octet(3..=32), Octet(0..=32)) => MsequenceType::Type11, // TYPE_1_1/1_2 interleaved
+            (2, Octet(0..=32), Octet(3..=32)) => MsequenceType::Type11, // TYPE_1_1/1_2 interleaved
+            (1, Bit(1..8), Bit(0)) => MsequenceType::Type21,            // TYPE_2_1
+            (1, Bit(9..16), Bit(0)) => MsequenceType::Type22,           // TYPE_2_2
+            (1, Bit(0), Bit(1..=8)) => MsequenceType::Type23,           // TYPE_2_3
+            (1, Bit(0), Bit(9..=16)) => MsequenceType::Type24,          // TYPE_2_4
+            (1, Bit(1..=8), Bit(1..=8)) => MsequenceType::Type25,       // TYPE_2_5
+            (1, Bit(9..=16), Bit(1..=16)) => MsequenceType::Type2V,     // TYPE_2_V
+            (1, Bit(1..=16), Bit(9..=16)) => MsequenceType::Type2V,     // TYPE_2_V
+            (1, Octet(0..=32), Octet(3..=32)) => MsequenceType::Type2V, // TYPE_2_V
+            (1, Octet(3..=32), Octet(0..=32)) => MsequenceType::Type2V, // TYPE_2_V
+            (2, Bit(1..=16), Bit(0..=16)) => MsequenceType::Type2V,     // TYPE_2_V
+            (2, Bit(0..=16), Bit(1..=16)) => MsequenceType::Type2V,     // TYPE_2_V
+            (8, Bit(1..=16), Bit(0..=16)) => MsequenceType::Type2V,     // TYPE_2_V
+            (8, Bit(0..=16), Bit(1..=16)) => MsequenceType::Type2V,     // TYPE_2_V
+            (32, Bit(1..=16), Bit(0..=16)) => MsequenceType::Type2V,    // TYPE_2_V
+            (32, Bit(0..=16), Bit(1..=16)) => MsequenceType::Type2V,    // TYPE_2_V
+            _ => panic!("Invalid OPERATE M-sequence configuration"),
+        }
     }
-}
 
-/// Returns the maximum on-request data length (in octets) for the OPERATE and PREOPERATE mode M-sequences.
-pub const fn max_od_length() -> u8 {
-    let op = operate_m_sequence_od_len();
-    let preop = preoperate_m_sequence_od_len();
-    if op > preop { op } else { preop }
-}
-
-/// Represents the M-sequence type used in IO-Link communication, based on bits 6 and 7 of the
-/// Checksum / M-sequence Type (CKT) field. These bits define how the Master structures messages
-/// within an M-sequence, as specified in Table A.3 of the IO-Link specification (see Section A.1.3).
-///
-/// This macro depends on the `operate_m_sequence` or `operate_m_sequence_legacy` macros. The selected
-/// M-sequence type in `operate_m_sequence` or `operate_m_sequence_legacy` determines the value of the
-/// `operate_m_sequence_base_type` macro.
-///
-/// The mapping is as follows:
-/// - `TYPE_0`   → `0`
-/// - `TYPE_1_x` → `1`
-/// - `TYPE_2_x` → `2`
-/// - `3` is reserved and should not be used
-///
-/// Ensure consistency with the selected M-sequence type when defining dependent macros.
-pub const fn operate_m_sequence_base_type() -> u8 {
-    1u8 // Accepted values are 0, 1, 2 and 3 but reserved.
+    /// Represents the M-sequence type used in IO-Link communication, based on bits 6 and 7 of the
+    /// Checksum / M-sequence Type (CKT) field. These bits define how the Master structures messages
+    /// within an M-sequence, as specified in Table A.3 of the IO-Link specification (see Section A.1.3).
+    ///
+    /// This macro depends on the `operate_m_sequence` or `operate_m_sequence_legacy` macros. The selected
+    /// M-sequence type in `operate_m_sequence` or `operate_m_sequence_legacy` determines the value of the
+    /// `operate_m_sequence_base_type` macro.
+    ///
+    /// The mapping is as follows:
+    /// - `TYPE_0`   → `0`
+    /// - `TYPE_1_x` → `1`
+    /// - `TYPE_2_x` → `2`
+    /// - `3` is reserved and should not be used
+    ///
+    /// Ensure consistency with the selected M-sequence type when defining dependent macros.
+    pub const fn m_sequence_base_type() -> crate::types::MsequenceBaseType {
+        match m_sequence_type() {
+            crate::types::MsequenceType::Type0 => crate::types::MsequenceBaseType::Type0,
+            crate::types::MsequenceType::Type12 => crate::types::MsequenceBaseType::Type1,
+            crate::types::MsequenceType::Type1V => crate::types::MsequenceBaseType::Type2,
+            _ => panic!("Invalid M-sequence type"),
+        }
+    }
 }
 
 /// ## B.1.4 M-sequenceCapability
@@ -406,8 +246,8 @@ pub const fn operate_m_sequence_base_type() -> u8 {
 // values for ISDU are listed in Table B.4.
 /// - `0` = ISDU not supported
 /// - `1` = ISDU supported
-pub const fn isdu_supported() -> u8 {
-    1u8 // Accepted values 1 for ISDU support, 0 for no support
+pub const fn isdu_supported() -> bool {
+    true // Accepted values true for ISDU support, false for no support
 }
 
 /// ## M-sequenceCapability (B.1.4)
@@ -437,5 +277,11 @@ pub const fn isdu_supported() -> u8 {
 /// ### Bits 6 to 7: Reserved
 /// - These bits are reserved and shall be set to `0`
 pub const fn config_m_sequence_capability() -> u8 {
-    (preoperate_m_sequence() << 4) | ((operate_m_sequence() as u8) << 1) | isdu_supported()
+    use crate::utils::page_params::page1;
+    use operate_m_sequence::{m_sequence_type, operate_m_sequence_code};
+    let mut m_sequence_cap: page1::MsequenceCapability = page1::MsequenceCapability::new();
+    m_sequence_cap.set_isdu(isdu_supported());
+    m_sequence_cap.set_preoperate_m_sequence(operate_m_sequence_code() as u8);
+    m_sequence_cap.set_operate_m_sequence(m_sequence_type() as u8);
+    m_sequence_cap.into_bits()
 }

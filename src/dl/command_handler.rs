@@ -4,7 +4,7 @@
 //! IO-Link Specification v1.1.4
 
 use crate::{
-    al, dl::{self, od_handler::OdIndData}, types::{self, IoLinkError, IoLinkResult}, ChConfState, MasterCommand
+    al, dl::{self, od_handler::OdIndData}, log_state_transition, log_state_transition_error, types::{self, IoLinkError, IoLinkResult}, ChConfState, MasterCommand
 };
 
 pub trait MasterCommandInd {
@@ -110,9 +110,24 @@ impl CommandHandler {
             (State::CommandHandler, Event::Accomplished) => (Transition::T5, State::Idle),
             (State::CommandHandler, Event::ChConfInactive) => (Transition::T6, State::Inactive),
             // Invalid transitions - no state change
-            _ => (Transition::Tn, self.state),
+            _ => {
+                log_state_transition_error!(
+                    module_path!(),
+                    "process_event",
+                    self.state,
+                    event
+                );
+                (Transition::Tn, self.state)
+            }
         };
 
+        log_state_transition!(
+            module_path!(),
+            "process_event",
+            self.state,
+            new_state,
+            event
+        );
         self.exec_transition = new_transition;
         self.state = new_state;
         Ok(())

@@ -13,35 +13,36 @@ categories = ["embedded", "no-std"]
 [dependencies]
 # Workspace dependencies
 heapless = { version = "0.8", default-features = false }
-embedded-hal = "1.0"
-panic-halt = { version = "1.0" }
-cortex-m = { version = "0.7" }
+# embedded-hal = "1.0"
+# panic-halt = { version = "1.0.0" }
+# cortex-m = { version = "0.7" }
 
 # Project-specific dependencies
 iolinke-macros = { path = "../IOLinke-macros" }
-smlang = "0.8"
 cstr_core = "0.2"
 log = "0.4"
-modular-bitfield = {version = "0.12.0", default-features = false}
+bitfields = "1.0.0"
 
 [features]
-default = []
+default = ["std", "log"]
 std = []
-clang = []
-rustlang = []
-cortex-m = []
-panic-halt = []
-block_parameterization = []
+log = []
+# clang = []
+# rustlang = []
+# cortex-m = []
+# panic-halt = []
+# block_parameterization = []
 
 [build-dependencies]
 # cbindgen = "0.27"
 
 [[example]]
-name = "basic_device"
-required-features = ["panic-halt"]
+name = "basic"
+# required-features = ["default", "std"]
 
 [profile.release]
 opt-level = "s"
 lto = true
 codegen-units = 1
 panic = "abort"
+

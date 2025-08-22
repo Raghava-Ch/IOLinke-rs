@@ -12,8 +12,9 @@ use crate::{
     system_management::{self, SystemManagementInd},
     types::{self, IoLinkError, IoLinkResult},
 };
-use iolinke_macros::{device_parameter_index, system_commands};
-use modular_bitfield::prelude::*;
+use crate::{log_state_transition, log_state_transition_error};
+use bitfields::bitfield;
+use iolinke_macros::{bitfield_support, device_parameter_index, system_commands};
 
 device_parameter_index!(DeviceParametersIndex);
 system_commands!(SystemCommand);
@@ -27,8 +28,9 @@ pub enum LockState {
 }
 
 /// State of Data Storage (for bits 1-2 of StateProperty)
-#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
-#[bits = 2]
+#[bitfield_support]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DsState {
     Inactive = 0b00,
     Upload = 0b01,
@@ -36,24 +38,33 @@ pub enum DsState {
     Locked = 0b11,
 }
 
+impl DsState {
+    pub const fn new() -> Self {
+        Self::Inactive
+    }
+}
+
 /// Data Storage State Property (8 bits)
 /// Bit 0: Reserved
 /// Bit 1-2: State of Data Storage (see `DsState`)
 /// Bit 3-6: Reserved
 /// Bit 7: DS_UPLOAD_FLAG ("1": DS_UPLOAD_REQ pending)
-#[bitfield(bits = 8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[bitfield(u8)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct StateProperty {
     /// Bit 0: Reserved
     #[skip]
-    __: B1,
+    #[bits(1)]
+    __: u8,
     /// Bits 1-2: State of Data Storage
-    #[bits = 2]
+    #[bits(2)]
     pub ds_state: DsState,
     /// Bits 3-6: Reserved
     #[skip]
-    __: B4,
+    #[bits(4)]
+    __: u8,
     /// Bit 7: DS_UPLOAD_FLAG
+    #[bits(1)]
     pub ds_upload_flag: bool,
 }
 
@@ -317,8 +328,18 @@ impl ParameterManager {
 
             // T22: Upload -> Idle on [SysCmdReset]
             (State::Upload, Event::SysCmdReset) => (Transition::T22, State::Idle),
-            _ => return Err(IoLinkError::InvalidEvent),
+            _ => {
+                log_state_transition_error!(module_path!(), "process_event", self.state, event);
+                return Err(IoLinkError::InvalidEvent);
+            }
         };
+        log_state_transition!(
+            module_path!(),
+            "process_event",
+            self.state,
+            new_state,
+            event
+        );
         self.exec_transition = new_transition;
         self.state = new_state;
 
@@ -840,14 +861,14 @@ impl ParameterManager {
             .get_parameter(STATE_PROPERTY_INDEX, STATE_PROPERTY_SUBINDEX)
             .map_err(|_| IoLinkError::FailedToGetParameter)?;
 
-        let mut state_property = StateProperty::from_bytes([state_property[0]]);
+        let mut state_property = StateProperty::from_bits(state_property[0]);
         state_property.set_ds_upload_flag(upload_flag);
 
         self.param_storage
             .set_parameter(
                 STATE_PROPERTY_INDEX,
                 STATE_PROPERTY_SUBINDEX,
-                &state_property.into_bytes(),
+                &[state_property.into_bits()],
             )
             .map_err(|_| IoLinkError::FailedToSetParameter)?;
         Ok(())
@@ -865,17 +886,21 @@ impl ParameterManager {
         const STATE_PROPERTY_SUBINDEX: u8 = al::DeviceParametersIndex::DataStorageIndex.subindex(
             al::SubIndex::DataStorageIndex(al::DataStorageIndexSubIndex::StateProperty),
         );
-        
+
         let state_property = self
             .param_storage
             .get_parameter(STATE_PROPERTY_INDEX, STATE_PROPERTY_SUBINDEX)
             .map_err(|_| IoLinkError::FailedToGetParameter)?;
 
-        let mut state_property = StateProperty::from_bytes([state_property[0]]);
+        let mut state_property = StateProperty::from_bits(state_property[0]);
         state_property.set_ds_state(state_of_ds);
 
         self.param_storage
-            .set_parameter(STATE_PROPERTY_INDEX, STATE_PROPERTY_SUBINDEX, &state_property.into_bytes())
+            .set_parameter(
+                STATE_PROPERTY_INDEX,
+                STATE_PROPERTY_SUBINDEX,
+                &[state_property.into_bits()],
+            )
             .map_err(|_| IoLinkError::FailedToSetParameter)?;
         Ok(())
     }
@@ -925,9 +950,10 @@ impl al::ApplicationLayerReadWriteInd for ParameterManager {
                 return Ok(());
             }
             Some(DeviceParametersIndex::DataStorageIndex) => {
-                const DS_COMMAND_SUBINDEX: u8 = al::DeviceParametersIndex::DataStorageIndex.subindex(
-                    al::SubIndex::DataStorageIndex(al::DataStorageIndexSubIndex::DsCommand),
-                );
+                const DS_COMMAND_SUBINDEX: u8 = al::DeviceParametersIndex::DataStorageIndex
+                    .subindex(al::SubIndex::DataStorageIndex(
+                        al::DataStorageIndexSubIndex::DsCommand,
+                    ));
                 if sub_index == DS_COMMAND_SUBINDEX {
                     self.ds_command = Some(data_storage::DsCommand::try_from(data[0])?);
                 }

@@ -596,12 +596,21 @@ pub mod storage_config {
         /// Returns the process data in configuration value.
         #[inline(always)]
         pub const fn process_data_in() -> u8 {
-            config::process_data::pd_in::pd_in()
+            config::process_data::pd_in::config_length_in_bytes()
         }
         /// Returns the process data out configuration value.
         #[inline(always)]
         pub const fn process_data_out() -> u8 {
-            config::process_data::pd_out::pd_out()
+            use config::process_data::ProcessDataLength::*;
+            match config::process_data::pd_out::config_length() {
+                Bit(bit_length) => {
+                    // The ceiling division technique:
+                    // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+                    // Formula is ceil(a/b) = (a + b - 1) / b
+                    (bit_length + 7) / 8
+                },
+                Octet(octet_length) => octet_length,
+            }
         }
         /// Returns the vendor ID 1 configuration value.
         #[inline(always)]

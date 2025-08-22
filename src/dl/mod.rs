@@ -32,9 +32,10 @@ mod mode_handler;
 mod od_handler;
 mod pd_handler;
 
+pub use crate::utils::frame_fromat::isdu::{MAX_ISDU_LENGTH, Isdu};
 pub use command_handler::DlControlInd;
 pub use event_handler::{DlEventReq, DlEventTriggerConf};
-pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, DlIsduTransportRsp, Isdu, MAX_ISDU_LENGTH, IsduService};
+pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, DlIsduTransportRsp};
 pub use mode_handler::DlInd;
 pub use od_handler::{DlParamRsp, DlReadParamInd, DlWriteParamInd};
 pub use pd_handler::{DlPDInputUpdate, DlPDOutputTransportInd, PD_OUTPUT_LENGTH};
@@ -138,10 +139,10 @@ impl DataLinkLayer {
     ///     }
     /// }
     /// ```
-    pub fn poll(
+    pub fn poll<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
         system_management: &mut system_management::SystemManagement,
-        physical_layer: &mut pl::physical_layer::PhysicalLayer,
+        physical_layer: &mut T,
         application_layer: &mut al::ApplicationLayer,
     ) -> IoLinkResult<()> {
         // Command handler poll - handles master commands
@@ -150,7 +151,7 @@ impl DataLinkLayer {
                 .command_handler
                 .poll(&mut self.message_handler, application_layer);
         }
-        
+
         // Mode handler poll - manages protocol state machines
         {
             let _ = self.mode_handler.poll(
@@ -163,23 +164,25 @@ impl DataLinkLayer {
                 system_management,
             );
         }
-        
+
         // Event handler poll - processes device events
         {
             let _ = self.event_handler.poll(&mut self.message_handler);
         }
-        
+
         // Process data handler poll - handles real-time data exchange
         {
-            let _ = self.pd_handler.poll(&mut self.message_handler, application_layer);
+            let _ = self
+                .pd_handler
+                .poll(&mut self.message_handler, application_layer);
         }
-        
+
         // ISDU handler poll - manages service data unit communication
         {
             let isdu_handler = &mut self.isdu_handler;
             let _ = isdu_handler.poll(&mut self.message_handler, application_layer);
         }
-        
+
         // Message handler poll - coordinates all message operations
         {
             let _ = self.message_handler.poll(
@@ -191,7 +194,7 @@ impl DataLinkLayer {
                 physical_layer,
             );
         }
-        
+
         // On-request data handler poll - manages parameter operations
         {
             let _ = self.od_handler.poll(
@@ -202,7 +205,7 @@ impl DataLinkLayer {
                 system_management,
             );
         }
-        
+
         Ok(())
     }
 }
@@ -437,7 +440,7 @@ impl pl::physical_layer::PhysicalLayerInd for DataLinkLayer {
     ///
     /// - `Ok(())` if data transfer was processed successfully
     /// - `Err(IoLinkError)` if an error occurred
-    fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<()> {
-        self.message_handler.pl_transfer_ind(rx_buffer)
+    fn pl_transfer_ind(&mut self, rx_byte: u8) -> IoLinkResult<()> {
+        self.message_handler.pl_transfer_ind(rx_byte)
     }
 }

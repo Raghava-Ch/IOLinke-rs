@@ -8,12 +8,13 @@ use crate::{
     isdu_read_request_index_code, isdu_read_request_index_index_subindex_code,
     isdu_read_request_index_subindex_code, isdu_write_request_index_code,
     isdu_write_request_index_index_subindex_code, isdu_write_request_index_subindex_code,
+    log_state_transition, log_state_transition_error,
     types::{self, IoLinkError, IoLinkResult},
-    utils,
+    utils::{self, frame_fromat::isdu::Isdu},
 };
 use heapless::Vec;
 use iolinke_macros::flow_ctrl;
-use modular_bitfield::prelude::*;
+use crate::utils::frame_fromat::isdu::MAX_ISDU_LENGTH;
 
 pub trait DlIsduAbort {
     /// See 7.3.6.5 DL_ISDUAbort
@@ -141,32 +142,6 @@ enum IsduHandlerEvent {
     IsduRespStart,
 }
 
-pub const MAX_ISDU_LENGTH: usize = 238;
-
-/// ISDU (Index Service Data Unit) structure
-/// See IO-Link v1.1.4 Section 8.4.3
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Isdu {
-    /// Parameter index
-    pub index: u16,
-    /// Sub-index
-    pub sub_index: u8,
-    /// Data payload
-    pub data: Vec<u8, MAX_ISDU_LENGTH>,
-    /// Read/Write operation flag
-    pub direction: bool,
-}
-
-/// See A.5.2 I-Service
-/// Figure A.16 shows the structure of the I-Service octet.
-#[bitfield]
-pub struct IsduService {
-    /// I-Service octet
-    pub i_service: B4,
-    /// Transfer length
-    pub length: B4,
-}
-
 /// ISDU Handler implementation
 pub struct IsduHandler {
     state: IsduHandlerState,
@@ -190,19 +165,12 @@ impl IsduHandler {
     fn process_event(&mut self, event: IsduHandlerEvent) -> IoLinkResult<()> {
         use IsduHandlerEvent as Event;
         use IsduHandlerState as State;
-
         let (new_transition, new_state) = match (self.state, event) {
             (State::Inactive, Event::IhConfActive) => (Transition::T1, State::Idle),
-            (State::Idle, Event::IsduStart) => {
-                (Transition::T2, State::ISDURequest)
-            }
+            (State::Idle, Event::IsduStart) => (Transition::T2, State::ISDURequest),
             (State::Idle, Event::IhConfInactive) => (Transition::T12, State::Inactive),
-            (State::Idle, Event::IsduRead) => {
-                (Transition::T14, State::Idle)
-            }
-            (State::ISDURequest, Event::IsduWrite) => {
-                (Transition::T3, State::ISDURequest)
-            }
+            (State::Idle, Event::IsduRead) => (Transition::T14, State::Idle),
+            (State::ISDURequest, Event::IsduWrite) => (Transition::T3, State::ISDURequest),
             (State::ISDURequest, Event::IsduRecComplete) => (Transition::T4, State::ISDUWait),
             (State::ISDURequest, Event::IsduError) => (Transition::T13, State::Idle),
             (State::ISDURequest, Event::IsduAbort) => (Transition::T9, State::Idle),
@@ -210,14 +178,22 @@ impl IsduHandler {
             (State::ISDUWait, Event::IsduRespStart) => (Transition::T6, State::ISDUResponse),
             (State::ISDUWait, Event::IsduAbort) => (Transition::T10, State::Idle),
             (State::ISDUWait, Event::IsduError) => (Transition::T15, State::Idle),
-            (State::ISDUResponse, Event::IsduRead) => {
-                (Transition::T7, State::ISDUResponse)
-            }
+            (State::ISDUResponse, Event::IsduRead) => (Transition::T7, State::ISDUResponse),
             (State::ISDUResponse, Event::IsduSendComplete) => (Transition::T8, State::Idle),
             (State::ISDUResponse, Event::IsduAbort) => (Transition::T11, State::Idle),
             (State::ISDUResponse, Event::IsduError) => (Transition::T16, State::Idle),
-            _ => return Err(IoLinkError::InvalidEvent),
+            _ => {
+                log_state_transition_error!(module_path!(), "process_event", self.state, event);
+                return Err(IoLinkError::InvalidEvent);
+            }
         };
+        log_state_transition!(
+            module_path!(),
+            "process_event",
+            self.state,
+            new_state,
+            event
+        );
         self.exec_transition = new_transition;
         self.state = new_state;
 
@@ -490,7 +466,9 @@ impl IsduHandler {
         &mut self,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
-        let _ = utils::frame_fromat::isdu::compile_isdu_write_success_response(&mut self.message_buffer);
+        let _ = utils::frame_fromat::isdu::compile_isdu_write_success_response(
+            &mut self.message_buffer,
+        );
         message_handler.od_rsp(self.message_buffer.len() as u8, &self.message_buffer)
     }
 
@@ -546,7 +524,9 @@ impl dl::od_handler::OdInd for IsduHandler {
                 // ISDUStart: OD.ind(W, ISDU, Start, Data)
                 (Write, flow_ctrl!(START)) => {
                     self.message_buffer.clear();
-                    self.message_buffer.extend_from_slice(&od_ind_data.data).map_err(|_| IoLinkError::IsduVolatileMemoryFull)?;
+                    self.message_buffer
+                        .extend_from_slice(&od_ind_data.data)
+                        .map_err(|_| IoLinkError::IsduVolatileMemoryFull)?;
                     IsduHandlerEvent::IsduStart
                 }
 
@@ -556,8 +536,7 @@ impl dl::od_handler::OdInd for IsduHandler {
                     if isdu_data.len() + self.message_buffer.len() > 238 {
                         return Err(IoLinkError::InvalidLength);
                     }
-                    self.message_buffer
-                        .extend(isdu_data);
+                    self.message_buffer.extend(isdu_data);
                     IsduHandlerEvent::IsduWrite
                 }
 

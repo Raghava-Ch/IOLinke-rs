@@ -22,7 +22,7 @@ use crate::{
     dl,
     types::{IoLinkError, IoLinkMode, IoLinkResult, PhysicalLayerStatus},
 };
-use embedded_hal::digital::{InputPin, OutputPin};
+// use embedded_hal::digital::{InputPin, OutputPin};
 
 /// Physical Layer Interface for low-level UART/PHY access.
 ///
@@ -53,8 +53,8 @@ pub trait PhysicalLayerInd {
     ///
     /// This is a placeholder implementation that should be replaced
     /// with actual hardware-specific code.
-    fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<()> {
-        let _ = rx_buffer; // Placeholder for actual implementation
+    fn pl_transfer_ind(&mut self, rx_byte: u8) -> IoLinkResult<()> {
+        let _ = rx_byte; // Placeholder for actual implementation
         Err(IoLinkError::NoImplFound)
     }
 
@@ -87,60 +87,60 @@ pub trait PhysicalLayerInd {
 ///
 /// - IO-Link v1.1.4 Section 5.3: C/Q Line Control
 /// - Table 5.2: C/Q line voltage levels and timing
-pub trait IoLinkGpio {
-    /// C/Q line input pin type
-    type CqInput: InputPin;
-    /// C/Q line output pin type
-    type CqOutput: OutputPin;
+// pub trait IoLinkGpio {
+//     /// C/Q line input pin type
+//     type CqInput: InputPin;
+//     /// C/Q line output pin type
+//     type CqOutput: OutputPin;
 
-    /// Gets a mutable reference to the C/Q input pin.
-    ///
-    /// # Returns
-    ///
-    /// Mutable reference to the C/Q input pin for reading line state.
-    fn cq_input(&mut self) -> &mut Self::CqInput;
+//     /// Gets a mutable reference to the C/Q input pin.
+//     ///
+//     /// # Returns
+//     ///
+//     /// Mutable reference to the C/Q input pin for reading line state.
+//     fn cq_input(&mut self) -> &mut Self::CqInput;
 
-    /// Gets a mutable reference to the C/Q output pin.
-    ///
-    /// # Returns
-    ///
-    /// Mutable reference to the C/Q output pin for controlling line state.
-    fn cq_output(&mut self) -> &mut Self::CqOutput;
+//     /// Gets a mutable reference to the C/Q output pin.
+//     ///
+//     /// # Returns
+//     ///
+//     /// Mutable reference to the C/Q output pin for controlling line state.
+//     fn cq_output(&mut self) -> &mut Self::CqOutput;
 
-    /// Sets the C/Q line to high state (typically 24V).
-    ///
-    /// This method sets the C/Q line to the high voltage level
-    /// required for IO-Link communication.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if line was set high successfully
-    /// - `Err(IoLinkError)` if an error occurred
-    fn set_cq_high(&mut self) -> IoLinkResult<()>;
+//     /// Sets the C/Q line to high state (typically 24V).
+//     ///
+//     /// This method sets the C/Q line to the high voltage level
+//     /// required for IO-Link communication.
+//     ///
+//     /// # Returns
+//     ///
+//     /// - `Ok(())` if line was set high successfully
+//     /// - `Err(IoLinkError)` if an error occurred
+//     fn set_cq_high(&mut self) -> IoLinkResult<()>;
 
-    /// Sets the C/Q line to low state (typically 0V).
-    ///
-    /// This method sets the C/Q line to the low voltage level
-    /// required for IO-Link communication.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if line was set low successfully
-    /// - `Err(IoLinkError)` if an error occurred
-    fn set_cq_low(&mut self) -> IoLinkResult<()>;
+//     /// Sets the C/Q line to low state (typically 0V).
+//     ///
+//     /// This method sets the C/Q line to the low voltage level
+//     /// required for IO-Link communication.
+//     ///
+//     /// # Returns
+//     ///
+//     /// - `Ok(())` if line was set low successfully
+//     /// - `Err(IoLinkError)` if an error occurred
+//     fn set_cq_low(&mut self) -> IoLinkResult<()>;
 
-    /// Reads the current state of the C/Q line.
-    ///
-    /// This method reads the current voltage level on the C/Q line
-    /// to determine the communication state.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(true)` if line is high (24V)
-    /// - `Ok(false)` if line is low (0V)
-    /// - `Err(IoLinkError)` if an error occurred
-    fn read_cq(&self) -> IoLinkResult<bool>;
-}
+//     /// Reads the current state of the C/Q line.
+//     ///
+//     /// This method reads the current voltage level on the C/Q line
+//     /// to determine the communication state.
+//     ///
+//     /// # Returns
+//     ///
+//     /// - `Ok(true)` if line is high (24V)
+//     /// - `Ok(false)` if line is low (0V)
+//     /// - `Err(IoLinkError)` if an error occurred
+//     fn read_cq(&self) -> IoLinkResult<bool>;
+// }
 
 /// Protocol timer identifiers as defined in the IO-Link specification.
 ///
@@ -352,21 +352,11 @@ pub trait IoLinkUart {
 /// This implementation uses embedded-hal traits to provide hardware
 /// independence, allowing the same code to work with different
 /// microcontroller platforms.
-pub struct PhysicalLayer {}
 
-impl PhysicalLayer {
-    /// Creates a new Physical Layer with default configuration.
-    ///
-    /// The physical layer starts in an uninitialized state and must
-    /// be configured for the specific communication mode before use.
-    ///
-    /// # Returns
-    ///
-    /// A new `PhysicalLayer` instance ready for configuration.
-    pub fn new() -> Self {
-        PhysicalLayer {}
-    }
+pub struct PhysicalLayer {
+}
 
+pub trait PhysicalLayerReq {
     /// Sets the communication mode for the physical layer.
     ///
     /// This method configures the physical layer hardware for the
@@ -389,31 +379,9 @@ impl PhysicalLayer {
     ///
     /// This is a placeholder implementation that should be replaced
     /// with actual hardware-specific code.
-    pub fn pl_set_mode(&mut self, mode: IoLinkMode) -> IoLinkResult<()> {
+    fn pl_set_mode_req(&mut self, mode: IoLinkMode) -> IoLinkResult<()> {
         let _ = mode; // Placeholder for actual implementation
         Err(IoLinkError::NoImplFound)
-    }
-
-    /// Wakes up the physical layer for communication.
-    ///
-    /// This method initiates the wake-up procedure on the C/Q line
-    /// to establish communication with the master.
-    ///
-    /// # Parameters
-    ///
-    /// * `dl_mode` - Reference to the data link layer for coordination
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if wake-up was initiated successfully
-    /// - `Err(IoLinkError)` if an error occurred
-    ///
-    /// # Specification Reference
-    ///
-    /// - IO-Link v1.1.4 Section 5.2.2.3: Wake-up Procedure
-    pub fn pl_wake_up(&mut self, dl_mode: &mut dl::DataLinkLayer) -> IoLinkResult<()> {
-        let _ = dl_mode.pl_wake_up_ind();
-        Ok(())
     }
 
     /// Initiates a data transfer over the physical layer.
@@ -438,34 +406,8 @@ impl PhysicalLayer {
     ///
     /// This is a placeholder implementation that should be replaced
     /// with actual hardware-specific code.
-    pub fn pl_transfer_req(&mut self, tx_data: &[u8]) -> IoLinkResult<usize> {
+    fn pl_transfer_req(&mut self, tx_data: &[u8]) -> IoLinkResult<usize> {
         let _ = tx_data; // Placeholder for actual implementation
-        Err(IoLinkError::NoImplFound)
-    }
-
-    /// Handles data reception from the physical layer.
-    ///
-    /// This method receives data from the master device over the
-    /// physical layer.
-    ///
-    /// # Parameters
-    ///
-    /// * `rx_buffer` - Buffer to store received data
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(usize)` with the number of bytes received
-    /// - `Err(IoLinkError::NoImplFound)` if not yet implemented
-    ///
-    /// # Specification Reference
-    ///
-    /// - IO-Link v1.1.4 Section 5.2.2.2: Data Transfer
-    ///
-    /// # Note
-    ///
-    /// This is a placeholder implementation that should be replaced
-    /// with actual hardware-specific code.
-    pub fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<usize> {
         Err(IoLinkError::NoImplFound)
     }
 
@@ -485,7 +427,7 @@ impl PhysicalLayer {
     /// # Note
     ///
     /// This method needs to be implemented with actual timer hardware.
-    pub fn stop_timer(&mut self, timer: Timer) -> IoLinkResult<()> {
+    fn stop_timer(&mut self, timer: Timer) -> IoLinkResult<()> {
         todo!("Implement timer stop logic");
     }
 
@@ -507,7 +449,7 @@ impl PhysicalLayer {
     /// # Note
     ///
     /// This method needs to be implemented with actual timer hardware.
-    pub fn start_timer(&mut self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+    fn start_timer(&mut self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
         todo!("Implement timer start logic");
     }
 
@@ -529,7 +471,7 @@ impl PhysicalLayer {
     /// # Note
     ///
     /// This method needs to be implemented with actual timer hardware.
-    pub fn restart_timer(&mut self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+    fn restart_timer(&mut self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
         todo!("Implement timer restart logic");
     }
 
@@ -557,7 +499,7 @@ impl PhysicalLayer {
     /// # Note
     ///
     /// This method needs to be implemented with actual storage hardware.
-    pub fn read_direct_param_page(&mut self, address: u8, length: u8, buffer: &mut [u8]) -> PageResult<usize> {
+    fn read_direct_param_page(&mut self, address: u8, length: u8, buffer: &mut [u8]) -> PageResult<usize> {
         let _ = address;
         let _ = length;
         let _ = buffer;
@@ -589,7 +531,7 @@ impl PhysicalLayer {
     /// # Note
     ///
     /// This method needs to be implemented with actual storage hardware.
-    pub fn write_direct_param_page(
+    fn write_direct_param_page(
         &mut self,
         address: u8,
         length: u8,
@@ -599,14 +541,5 @@ impl PhysicalLayer {
         let _ = length;
 
         todo!("Implement write page logic");
-    }
-}
-
-impl Default for PhysicalLayer {
-    /// Creates a new Physical Layer with default configuration.
-    ///
-    /// This implementation provides the same functionality as `new()`.
-    fn default() -> Self {
-        Self::new()
     }
 }

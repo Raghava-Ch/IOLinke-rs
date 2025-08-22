@@ -21,7 +21,7 @@
 //! - Annex B: Parameter Definitions and Access
 
 use crate::dl::DlPDOutputTransportInd;
-use crate::{dl, storage, system_management, types, IoLinkResult};
+use crate::{dl, storage, system_management, types, utils, IoLinkResult};
 
 mod event_handler;
 pub mod od_handler;
@@ -366,7 +366,7 @@ impl system_management::SystemManagementCnf for ApplicationLayer {
     /// - `Err(SmError)` if an error occurred
     fn sm_get_device_ident_cnf(
         &self,
-        result: system_management::SmResult<&system_management::DeviceIdent>,
+        result: system_management::SmResult<&utils::page_params::page1::DeviceIdent>,
     ) -> system_management::SmResult<()> {
         todo!("Implement device identification get confirmation");
     }

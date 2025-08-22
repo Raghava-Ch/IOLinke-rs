@@ -5,9 +5,10 @@
 
 use crate::{
     al::{self, services::AlEventReq},
-    event_qualifier_macro, storage,
+    event_qualifier_macro, log_state_transition, log_state_transition_error, storage,
     system_management::{self, SystemManagementInd},
     types::{self, IoLinkError, IoLinkResult},
+    utils,
 };
 use iolinke_macros::device_event_code;
 
@@ -20,7 +21,6 @@ pub enum DtatStorageStateMachineState {
     /// shall not be used anymore (see Table B.12)
     /// ! {Obsolete} This state is not recommended to use in v1.1.4.
     // DSLocked,
-
 
     /// {DSStateCheck_0}
     /// Check activation state after initialization.
@@ -63,7 +63,6 @@ pub enum DataStorageTransition {
     /// Set State_Property = "Inactive"
     /// ! {Obsolete} This transition is not recommended to use in v1.1.4.
     // T6,
-
 
     /// T7: DSIdle -> DSIdle
     /// Set DS_UPLOAD_FLAG = TRUE, invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
@@ -173,7 +172,6 @@ impl DataStorage {
             // DSLocked_1
             // (State::DSLocked, Event::DsParUploadInd) => (Transition::T2, State::DSLocked),
 
-
             // DSIdle_2
             (State::DSIdle, Event::DsParUploadInd) => (Transition::T7, State::DSIdle),
             (State::DSIdle, Event::TransmissionStart(direction)) => {
@@ -184,9 +182,19 @@ impl DataStorage {
             (State::DSActivity, Event::TransmissionEnd) => (Transition::T9, State::DSIdle),
             (State::DSActivity, Event::TransmissionBreak) => (Transition::T10, State::DSIdle),
             // Default: No transition
-            _ => (Transition::Tn, self.state),
+            _ => {
+                log_state_transition_error!(module_path!(), "process_event", self.state, event);
+                return Err(IoLinkError::InvalidEvent);
+            }
         };
 
+        log_state_transition!(
+            module_path!(),
+            "process_event",
+            self.state,
+            new_state,
+            event
+        );
         self.exec_transition = new_transition;
         self.state = new_state;
         Ok(())
@@ -200,7 +208,6 @@ impl DataStorage {
         use DataStorageTransition as Transition;
 
         match self.exec_transition {
-           
             // ! Obsolete transitions are all commented out
             // Transition::T1 => {
             //     // Transition T1: DSStateCheck -> DSLocked
@@ -232,8 +239,6 @@ impl DataStorage {
             //     self.exec_transition = Transition::Tn;
             //     self.execute_t6(parameter_manager)?;
             // }
-
-
             Transition::Tn => {
                 // No transition to process
             }
@@ -338,17 +343,15 @@ impl DataStorage {
         parameter_manager.set_upload_flag(true)?;
         // Invoke AL_EVENT.req (EventCode: DS_UPLOAD_REQ)
         const EVENT_QUALIFIER: u8 = event_qualifier_macro!(
-            storage::event_memory::EventMode::SingleShot,
-            storage::event_memory::EventType::Notification,
-            storage::event_memory::EventSource::Device,
-            storage::event_memory::EventInstance::System
+            utils::event_type::EventMode::SingleShot,
+            utils::event_type::EventType::Notification,
+            utils::event_type::EventSource::Device,
+            utils::event_type::EventInstance::System
         );
 
         const ENTRY: &'static [storage::event_memory::EventEntry] =
             &[storage::event_memory::EventEntry {
-                event_qualifier: storage::event_memory::EventQualifier::from_bytes([
-                    EVENT_QUALIFIER,
-                ]),
+                event_qualifier: utils::event_type::EventQualifier::from_bits(EVENT_QUALIFIER),
                 event_code: device_event_code!(DS_UPLOAD_REQ),
             }];
         event_handler.al_event_req(1, ENTRY)?;

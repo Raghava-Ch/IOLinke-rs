@@ -6,10 +6,10 @@
 use heapless::Vec;
 
 use crate::{
-    al, config, dl::{self, DlInd}, system_management, types::{self, IoLinkError, IoLinkResult}
+    al, config, dl::{self, DlInd}, log_state_transition, log_state_transition_error, system_management, types::{self, IoLinkError, IoLinkResult}
 };
 
-pub const OD_LENGTH: usize = config::m_seq_capability::max_od_length() as usize;
+pub const OD_LENGTH: usize = config::on_req_data::max_possible_od_length() as usize;
 
 pub trait OdInd {
     /// Invoke OD.ind service with the provided data
@@ -154,8 +154,23 @@ impl OnRequestDataHandler {
                 (Transition::T5, State::Idle)
             }
             (State::Idle, Event::OhConfInactive) => (Transition::T6, State::Inactive),
-            _ => return Err(IoLinkError::InvalidEvent),
+            _ => {
+                log_state_transition_error!(
+                    module_path!(),
+                    "process_event",
+                    self.state,
+                    event
+                );
+                (Transition::Tn, self.state)
+            }
         };
+        log_state_transition!(
+            module_path!(),
+            "process_event",
+            self.state,
+            new_state,
+            event
+        );
         self.exec_transition = new_transition;
         self.state = new_state;
 
