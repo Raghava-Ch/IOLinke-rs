@@ -1,38 +1,51 @@
 use bitfields::bitfield;
 
-/// Minimum cycle time configuration as per Annex B.1.
+/// # CycleTime
 ///
-/// This bitfield configures the minimum cycle time that the device
-/// supports, which is used by the master for timing coordination.
+/// This struct represents the Cycle Time parameter as defined by the IO-Link specification (v1.1.4, Section B.1.3, Table B.3 and Figure B.2).
 ///
-/// # Specification Reference
+/// The Cycle Time parameter is encoded as a single byte, which informs the IO-Link Master about the minimum supported cycle time of the device.
 ///
-/// - IO-Link v1.1.4 Annex B.1: Direct Parameter Page 1
-/// - Table B.3: MinCycleTime parameter restrictions
+/// ## Bit Layout
+///
+/// | Bits 7-6   | Bits 5-0         |
+/// |------------|------------------|
+/// | Time Base  | Multiplier (M)   |
+///
+/// - **Bits 7-6 (`time_base`)**: Encodes the time base unit for the cycle time.
+///     - `0b00` = 0.1 ms
+///     - `0b01` = 0.4 ms
+///     - `0b10` = 1.6 ms
+///     - `0b11` = Reserved
+/// - **Bits 5-0 (`multiplier`)**: Multiplier value (0..=63) to be used with the time base.
+///
+/// ## Cycle Time Calculation
+///
+/// The minimum cycle time in milliseconds is calculated as:
+///
+/// ```text
+/// CycleTime = (multiplier * time_base_unit)
+/// ```
+///
+/// Where `time_base_unit` is determined by the value of `time_base`.
+///
+/// ## Specification Reference
+/// - IO-Link Specification v1.1.4, Section B.1.3, Table B.3, Figure B.2
+///
+/// ## Usage
+///
+/// Use this struct to encode or decode the Cycle Time parameter for the device's parameter page 1.
+/// The fields can be accessed or set using the generated getter/setter methods from the `bitfield` macro.
+
+
 #[bitfield(u8)]
-#[derive(Clone)]
-pub struct MinCycleTime {
-    /// Bits 6 to 7: Time Base
-    /// 
-    /// These bits specify the time base for the calculation of MasterCycleTime
-    /// and MinCycleTime. In the following cases, when:
-    /// * the Device provides no MinCycleTime, which is indicated by a MinCycleTime
-    ///   equal zero (binary code 0x00),
-    /// * or the MinCycleTime is shorter than the calculated M-sequence time with
-    ///   the M-sequence type used by the Device, with (t1, t2, tidle) equal zero
-    ///   and tA equal one bit time (see A.3.4 to A.3.6)
-    #[bits(2)]
-    pub time_base: u8,
-    
-    /// Bits 0 to 5: Multiplier
-    /// 
-    /// These bits contain a 6-bit multiplier for the calculation of
-    /// MasterCycleTime and MinCycleTime. Permissible values for the multiplier
-    /// are 0 to 63, further restrictions see Table B.3.
+#[derive(Clone, Copy)]
+pub struct CycleTime {
     #[bits(6)]
     pub multiplier: u8,
+    #[bits(2)]
+    pub time_base: u8,
 }
-
 
 ///
 /// Represents the M-sequenceCapability parameter as defined in IO-Link Specification v1.1.4, Section B.1.4 (see Figure B.3).

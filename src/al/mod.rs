@@ -240,7 +240,7 @@ impl ApplicationLayer {
         // Poll all components in dependency order
         self.event_handler
             .poll(&mut self.services, data_link_layer)?;
-        self.od_handler.poll(&mut self.services, data_link_layer)?;
+        self.od_handler.poll(&mut self.parameter_manager, data_link_layer)?;
         self.parameter_manager
             .poll(&mut self.od_handler, &mut self.data_storage)?;
         self.data_storage.poll(&mut self.event_handler, &mut self.parameter_manager)?;

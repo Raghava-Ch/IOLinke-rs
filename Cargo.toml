@@ -36,6 +36,9 @@ log = []
 [build-dependencies]
 # cbindgen = "0.27"
 
+[dev-dependencies]
+lazy_static = "1.4"
+
 [[example]]
 name = "basic"
 # required-features = ["default", "std"]

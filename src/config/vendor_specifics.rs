@@ -581,12 +581,12 @@ pub mod storage_config {
         /// Returns the minimum cycle time configuration value.
         #[inline(always)]
         pub const fn min_cycle_time() -> u8 {
-            config::timings::min_cycle_time()
+            config::timings::min_cycle_time::min_cycle_time_parameter().into_bits()
         }
         /// Returns the M-Sequence capability configuration value.
         #[inline(always)]
         pub const fn m_sequence_capability() -> u8 {
-            config::m_seq_capability::config_m_sequence_capability()
+            config::m_seq_capability::m_sequence_capability_parameter().into_bits()
         }
         /// Returns the revision ID configuration value.
         #[inline(always)]

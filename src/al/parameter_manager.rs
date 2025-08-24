@@ -3,7 +3,7 @@
 //! This module implements the Parameter Manager as defined in
 //! IO-Link Specification v1.1.4
 
-use crate::al::data_storage;
+use crate::al::{data_storage, services};
 use crate::al::services::AlReadRsp;
 use crate::storage::parameters_memory::ParameterStorage;
 use crate::{
@@ -531,6 +531,7 @@ impl ParameterManager {
                         od_handler.al_read_rsp(result)?;
                     }
                 }
+                self.read_cycle = None;
             }
             None => {}
         }

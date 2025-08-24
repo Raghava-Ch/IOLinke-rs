@@ -136,7 +136,7 @@ pub mod pd_in {
 
     /// See B.1.6 ProcessDataIn
     /// Construct the Process Data Input configuration byte
-    pub const fn page1_pd_in_parameter() -> u8 {
+    pub const fn pd_in_parameter() -> page1::ProcessDataIn {
         const BYTE: bool = byte();
         const SIO: bool = sio();
         const LENGTH: u8 = param_length();
@@ -144,7 +144,7 @@ pub mod pd_in {
         pd_in_page_param.set_byte(BYTE);
         pd_in_page_param.set_sio(SIO);
         pd_in_page_param.set_length(LENGTH);
-        pd_in_page_param.into_bits()
+        pd_in_page_param
     }
 }
 
@@ -210,7 +210,7 @@ pub mod pd_out {
     pub const fn config_length() -> super::ProcessDataLength {
         use super::ProcessDataLength::*;
         // Acceptable values are 0-32 for octets, 0-16 for bits
-        match /*CONFIG:OP_PD_OUT_LEN*/ Octet(3) /*ENDCONFIG*/ {
+        match /*CONFIG:OP_PD_OUT_LEN*/ Octet(4) /*ENDCONFIG*/ {
             Bit(bit_length) => {
                 if bit_length > 16 {
                     panic!("Invalid PD length for OPERATE M-sequence configuration");
@@ -276,10 +276,10 @@ pub mod pd_out {
 
     /// See B.1.7 ProcessDataOut
     /// Construct the Process Data Output configuration byte
-    pub const fn pd_out_parameter() -> u8 {
+    pub const fn pd_out_parameter() -> page1::ProcessDataOut {
         let mut pd_out_page_param: page1::ProcessDataOut = page1::ProcessDataOut::new();
         pd_out_page_param.set_byte(byte());
         pd_out_page_param.set_length(length());
-        pd_out_page_param.into_bits()
+        pd_out_page_param
     }
 }

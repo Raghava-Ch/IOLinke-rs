@@ -6,7 +6,8 @@
 use crate::DlMode;
 use crate::config;
 use crate::dl;
-use crate::dl::DlInd;
+use crate::dl::DlModeInd;
+use crate::dl::DlReadWriteInd;
 use crate::dl::{od_handler::OdInd, pd_handler};
 use crate::extract_address_fctrl;
 use crate::extract_com_channel;
@@ -16,6 +17,7 @@ use crate::log_state_transition_error;
 use crate::pl;
 use crate::types::{self, IoLinkError, IoLinkResult};
 use crate::utils;
+use crate::utils::frame_fromat::com_timing;
 use crate::utils::frame_fromat::message;
 use crate::{get_bits_0_4, get_bits_5_6, get_bits_6_7};
 use heapless::Vec;
@@ -48,16 +50,16 @@ enum MessageHandlerState {
 }
 
 /// See Table 47 – State transition tables of the Device message handler
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Transition {
     /// Nothing to transit.
     Tn,
     /// 0 1 –
     T1,
     /// 1 2 Start "MaxUARTframeTime" and "MaxCycleTime" when in OPERATE.
-    T2(u8),
+    T2,
     /// 2 2 Restart timer "MaxUARTframeTime".
-    T3(u8),
+    T3,
     /// 2 3 Reset timer "MaxUARTframeTime".
     T4,
     /// 3 4 Invoke OD.ind and PD.ind service indications
@@ -87,7 +89,7 @@ enum MessageHandlerEvent {
     MhConfInactive,
     /// See 5.2.2.3 PL_Transfer
     /// Table 47 – T2, T3
-    PlTransfer(u8),
+    PlTransfer,
     /// Table 47 – T4
     Completed,
     /// Table 47 – T5
@@ -112,25 +114,26 @@ pub trait MsgHandlerInfo {
     fn mh_info(&mut self, mh_info: types::MHInfo);
 }
 
+#[derive(Debug, Clone)]
 struct Buffers {
-    rx_buffer: Vec<u8, { message::MAX_FRAME_SIZE }>,
+    rx_buffer: Vec<u8, { message::MAX_RX_FRAME_SIZE }>,
     rx_buffer_len: u8,
-    tx_buffer: Vec<u8, { message::MAX_FRAME_SIZE }>,
+    tx_buffer: Vec<u8, { message::MAX_TX_FRAME_SIZE }>,
     tx_buffer_len: u8,
 }
 
 /// Message Handler implementation
+#[derive(Debug, Clone)]
 pub struct MessageHandler {
     state: MessageHandlerState,
     exec_transition: Transition,
     buffers: Buffers,
     tx_message: message::IoLinkMessage,
     rx_message: message::IoLinkMessage,
-    device_operate_state: types::MasterCommand,
-    od_transfer_pending: bool,
+    device_operate_state: DeviceMode,
     pd_in_valid_status: types::PdStatus,
 
-    device_mode: DeviceMode,
+    transmission_rate: com_timing::TransmissionRate,
     expected_rx_bytes: u8,
 }
 
@@ -148,10 +151,9 @@ impl MessageHandler {
             },
             tx_message: message::IoLinkMessage::default(),
             rx_message: message::IoLinkMessage::default(),
-            device_operate_state: types::MasterCommand::Fallback,
-            od_transfer_pending: false,
+            device_operate_state: DeviceMode::Startup,
             pd_in_valid_status: types::PdStatus::INVALID,
-            device_mode: DeviceMode::Startup,
+            transmission_rate: com_timing::TransmissionRate::default(),
             expected_rx_bytes: 0, // 0 means not set
         }
     }
@@ -164,12 +166,18 @@ impl MessageHandler {
         let (new_transition, new_state) = match (self.state, event) {
             (State::Inactive, Event::MhConfActive) => (Transition::T1, State::Idle),
             (State::Inactive, Event::MhConfInactive) => (Transition::T11, State::Inactive),
-            (State::Idle, Event::PlTransfer(rx_byte)) => {
-                (Transition::T2(rx_byte), State::GetMessage)
+            (State::Idle, Event::PlTransfer) => {
+                // This transition is intentionally handled within
+                // 'pl_transfer_ind' to meet strict performance and timing requirements.
+                // Change the State.
+                (Transition::Tn, State::GetMessage)
             }
             (State::Idle, Event::TimerMaxCycle) => (Transition::T10, State::Idle),
-            (State::GetMessage, Event::PlTransfer(rx_byte)) => {
-                (Transition::T3(rx_byte), State::GetMessage)
+            (State::GetMessage, Event::PlTransfer) => {
+                // This transition is intentionally handled within
+                // 'pl_transfer_ind' to meet strict performance and timing requirements.
+                // Change the State.
+                (Transition::Tn, State::GetMessage)
             }
             (State::GetMessage, Event::Completed) => (Transition::T4, State::CheckMessage),
             (State::GetMessage, Event::TimerMaxUARTFrame) => (Transition::T9, State::Idle),
@@ -207,7 +215,7 @@ impl MessageHandler {
         mode_handler: &mut dl::mode_handler::DlModeHandler,
         physical_layer: &mut T,
     ) -> IoLinkResult<()> {
-        let _ = self.poll_active_states();
+        let _ = self.poll_active_states::<T>();
         match self.exec_transition {
             Transition::Tn => {
                 // No transition, remain in current state
@@ -216,13 +224,15 @@ impl MessageHandler {
                 self.exec_transition = Transition::Tn;
                 self.execute_t1()?;
             }
-            Transition::T2(rx_byte) => {
+            Transition::T2 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t2(physical_layer, rx_byte)?;
+                // This transition is intentionally handled within
+                // 'pl_transfer_ind' to meet strict performance and timing requirements.
             }
-            Transition::T3(rx_byte) => {
+            Transition::T3 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t3(physical_layer, rx_byte)?;
+                // This transition is intentionally handled within
+                // 'pl_transfer_ind' to meet strict performance and timing requirements.
             }
             Transition::T4 => {
                 self.exec_transition = Transition::Tn;
@@ -260,7 +270,7 @@ impl MessageHandler {
         Ok(())
     }
 
-    fn poll_active_states(&mut self) -> IoLinkResult<()> {
+    fn poll_active_states<T: pl::physical_layer::PhysicalLayerReq>(&mut self) -> IoLinkResult<()> {
         match self.state {
             MessageHandlerState::CheckMessage => {
                 let io_link_message = match self.parse_message() {
@@ -269,11 +279,11 @@ impl MessageHandler {
                         // Handle parsing error
                         match e {
                             IoLinkError::ChecksumError => {
-                                self.process_event(MessageHandlerEvent::ChecksumError)?;
+                                let _ = self.process_event(MessageHandlerEvent::ChecksumError);
                                 return Err(e);
                             }
                             IoLinkError::InvalidMseqType => {
-                                self.process_event(MessageHandlerEvent::TypeError)?;
+                                let _ = self.process_event(MessageHandlerEvent::TypeError);
                                 return Err(e);
                             }
                             _ => return Err(e),
@@ -285,19 +295,13 @@ impl MessageHandler {
             }
             MessageHandlerState::CreateMessage => {
                 // Check the response is ready to be sent
-                if self.tx_message.od.is_none()
-                    && self.tx_message.pd.is_none()
-                    && self.tx_message.address_fctrl.is_none()
-                    && self.tx_message.com_channel.is_none()
-                    && self.tx_message.read_write.is_none()
-                    && self.tx_message.message_type.is_none()
-                    && self.tx_message.pd_status.is_none()
-                {
-                    // No data to send, transition to Idle
-                } else {
-                    // Data is ready, proceed to send
-                    self.compile_message()?;
-                    self.process_event(MessageHandlerEvent::Ready)?;
+                match self.device_operate_state {
+                    DeviceMode::Startup | DeviceMode::PreOperate => {
+                        self.execute_create_message_startup_preoperate()?;
+                    }
+                    DeviceMode::Operate => {
+                        self.execute_create_message_operate()?;
+                    }
                 }
             }
             _ => {
@@ -317,12 +321,15 @@ impl MessageHandler {
     /// Start "MaxUARTframeTime" and "MaxCycleTime" when in OPERATE
     fn execute_t2<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
-        physical_layer: &mut T,
+        physical_layer: &T,
         rx_byte: u8,
     ) -> IoLinkResult<()> {
-        self.buffers.rx_buffer.push(rx_byte);
-        // Start MaxUARTframeTime and MaxCycleTime timers (handled externally)
-        let _ = physical_layer.start_timer(pl::physical_layer::Timer::MaxCycleTime, 0);
+        self.buffers.rx_buffer.clear();
+        let _ = self.buffers.rx_buffer.push(rx_byte);
+        // Start MaxUARTframeTime and MaxCycleTime timers according to the transmission rate
+        let max_uart_frame_time = self.calculate_max_uart_frame_time();
+        let _ = physical_layer
+            .start_timer(pl::physical_layer::Timer::MaxCycleTime, max_uart_frame_time);
         self.expected_rx_bytes = 0;
         Ok(())
     }
@@ -331,16 +338,21 @@ impl MessageHandler {
     /// Restart timer "MaxUARTframeTime"
     fn execute_t3<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
-        physical_layer: &mut T,
+        physical_layer: &T,
         rx_byte: u8,
     ) -> IoLinkResult<()> {
         let _ = self.buffers.rx_buffer.push(rx_byte);
-        let _ = physical_layer.restart_timer(pl::physical_layer::Timer::MaxUARTframeTime, 0);
-        // TODO: Find the number of UART frames to be received using first two bytes of the message
+        let max_uart_frame_time = self.calculate_max_uart_frame_time();
+        let _ = physical_layer.restart_timer(
+            pl::physical_layer::Timer::MaxUARTframeTime,
+            max_uart_frame_time,
+        );
+        // Find the number of UART frames to be received using first two bytes of the message
         if self.buffers.rx_buffer.len() == 2 {
             let (mc, ckt) =
-                utils::frame_fromat::message::compile_mc_ckt_bytes(&mut self.buffers.rx_buffer)?;
-            self.expected_rx_bytes = Self::calculate_expected_rx_bytes(self.device_mode, mc, ckt);
+                utils::frame_fromat::message::extract_mc_ckt_bytes(&mut self.buffers.rx_buffer)?;
+            self.expected_rx_bytes =
+                Self::calculate_expected_rx_bytes(self.device_operate_state, mc, ckt);
         }
         if self.expected_rx_bytes == self.buffers.rx_buffer.len() as u8 {
             let _ = self.process_event(MessageHandlerEvent::Completed);
@@ -367,31 +379,42 @@ impl MessageHandler {
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
         pd_handler: &mut pd_handler::ProcessDataHandler,
     ) -> IoLinkResult<()> {
-        if let (Some(rw), Some(channel), Some(addr_ctrl), Some(od_data), Some(pd_data)) = (
-            self.rx_message.read_write,
-            self.rx_message.com_channel,
-            self.rx_message.address_fctrl,
-            self.rx_message.od.as_ref(),
-            self.rx_message.pd.as_ref(),
-        ) {
-            let od_ind_data = dl::od_handler::OdIndData {
-                rw_direction: rw,
-                com_channel: channel,
-                address_ctrl: addr_ctrl,
-                length: od_data.len() as u8,
-                data: od_data.clone(),
+        let rw = match self.rx_message.read_write {
+            Some(rw) => rw,
+            None => return Err(IoLinkError::InvalidParameter),
+        };
+        let channel = match self.rx_message.com_channel {
+            Some(channel) => channel,
+            None => return Err(IoLinkError::InvalidParameter),
+        };
+        let addr_ctrl = match self.rx_message.address_fctrl {
+            Some(addr_ctrl) => addr_ctrl,
+            None => return Err(IoLinkError::InvalidParameter),
+        };
+        let od_data: Vec<u8, { message::MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }> =
+            self.rx_message.od.clone().unwrap_or_default();
+
+        let od_ind_data = dl::od_handler::OdIndData {
+            rw_direction: rw,
+            com_channel: channel,
+            address_ctrl: addr_ctrl,
+            length: od_data.len() as u8,
+            data: od_data.clone(),
+        };
+        let _ = od_handler.od_ind(&od_ind_data);
+        if self.device_operate_state == DeviceMode::Operate {
+            let pd_data = match self.rx_message.pd.as_ref() {
+                Some(pd_data) => pd_data,
+                None => return Err(IoLinkError::InvalidParameter),
             };
-            let _ = od_handler.od_ind(&od_ind_data);
-            if self.device_operate_state == types::MasterCommand::DeviceOperate {
-                const PD_OUT_LEN: u8 = config::process_data::pd_out::config_length_in_bytes();
-                const PD_IN_LEN: u8 = config::process_data::pd_in::config_length_in_bytes();
-                // In OPERATE mode, invoke PD.ind service indication
-                let pd_out_address = extract_address_fctrl!(addr_ctrl);
-                let pd_out_len = pd_data.len() as u8;
-                let _ = pd_handler.pd_ind(0, 0, pd_data, pd_out_address, pd_out_len);
-            }
+            let pd_status = match self.rx_message.pd_status {
+                Some(pd_status) => pd_status,
+                None => return Err(IoLinkError::InvalidParameter),
+            };
+            // In OPERATE mode, invoke PD.ind service indication
+            let pd_out_len = pd_data.len() as u8;
+            let _ = pd_handler.pd_ind(0, 0, 0, pd_out_len, pd_data);
         }
-        todo!("Implement PD.ind service indication values");
         Ok(())
     }
 
@@ -436,6 +459,13 @@ impl MessageHandler {
         Ok(())
     }
 
+    fn calculate_max_uart_frame_time(&self) -> u32 {
+        // MaxUARTFrameTime Time for the transmission of a UART frame (11 TBIT) plus maximum of t1 (1 TBIT) = 12 TBIT.
+        let max_uart_frame_time =
+            com_timing::TransmissionRate::get_t_bit_in_us(self.transmission_rate) * 12;
+        max_uart_frame_time
+    }
+
     fn calculate_expected_rx_bytes(
         device_mode: DeviceMode,
         mc: utils::frame_fromat::message::MsequenceControl,
@@ -461,9 +491,9 @@ impl MessageHandler {
                 use utils::frame_fromat::message;
                 if ckt.m_seq_type() == pre_operate_m_sequence::m_sequence_base_type() {
                     if mc.read_write() == types::RwDirection::Read {
-                        message::HEADER_SIZE as u8
+                        message::HEADER_SIZE_IN_FRAME as u8
                     } else {
-                        message::HEADER_SIZE as u8 + pre_operate::od_length() as u8
+                        message::HEADER_SIZE_IN_FRAME as u8 + pre_operate::od_length() as u8
                     }
                 } else {
                     0 // Invalid M-sequence type
@@ -475,9 +505,9 @@ impl MessageHandler {
                 use utils::frame_fromat::message;
                 if ckt.m_seq_type() == operate_m_sequence::m_sequence_base_type() {
                     if mc.read_write() == types::RwDirection::Read {
-                        message::HEADER_SIZE as u8
+                        message::HEADER_SIZE_IN_FRAME as u8
                     } else {
-                        message::HEADER_SIZE as u8 + operate::od_length() as u8
+                        message::HEADER_SIZE_IN_FRAME as u8 + operate::od_length() as u8
                     }
                 } else {
                     0 // Invalid M-sequence type
@@ -499,6 +529,33 @@ impl MessageHandler {
     /// Transition T11: Idle -> Inactive
     /// Device message handler changes state to Inactive_0
     fn execute_t11(&mut self) -> IoLinkResult<()> {
+        Ok(())
+    }
+
+    /// State {CreateMessage}
+    fn execute_create_message_startup_preoperate(&mut self) -> IoLinkResult<()> {
+        if let (Some(_),) = (self.tx_message.od.as_ref(),) {
+            self.compile_message()?;
+            self.process_event(MessageHandlerEvent::Ready)?;
+        }
+        Ok(())
+    }
+
+    /// State {CreateMessage}
+    fn execute_create_message_operate(&mut self) -> IoLinkResult<()> {
+        if let (Some(_), Some(_), Some(_), Some(_), Some(_), Some(_), Some(_)) = (
+            self.tx_message.od.as_ref(),
+            self.tx_message.address_fctrl,
+            self.tx_message.com_channel,
+            self.tx_message.read_write,
+            self.tx_message.message_type,
+            self.tx_message.pd_status,
+            // self.tx_message.event_flag,
+            self.tx_message.pd.as_ref(),
+        ) {
+            self.compile_message()?;
+            self.process_event(MessageHandlerEvent::Ready)?;
+        }
         Ok(())
     }
 
@@ -525,15 +582,18 @@ impl MessageHandler {
     /// The OD service is used to set up the On-request Data for the next message to be sent. In
     /// turn, the confirmation of the service contains the data from the receiver. The parameters of
     /// the service primitives are listed in Table 35.
-    pub fn od_rsp(&mut self, _length: u8, data: &[u8]) -> IoLinkResult<()> {
+    pub fn od_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
         let od = if let Some(od) = &mut self.tx_message.od {
+            od.clear();
             od
         } else {
             self.tx_message.od = Some(Vec::new());
             self.tx_message.od.as_mut().unwrap()
         };
-        od.extend_from_slice(data)
-            .map_err(|_| IoLinkError::InvalidParameter)?;
+        if length > od.capacity() as u8 {
+            return Err(IoLinkError::InvalidLength);
+        }
+        od.extend_from_slice(&data[..length as usize]).map_err(|_| IoLinkError::InvalidParameter)?;
         Ok(())
     }
 
@@ -568,54 +628,56 @@ impl MessageHandler {
     /// A.1 General structure and encoding of M-sequences
     fn compile_message(&mut self) -> IoLinkResult<()> {
         let io_link_message = &self.tx_message;
-        let tx_buffer = &mut self.buffers.tx_buffer;
-        tx_buffer.clear();
+        // let tx_buffer = &mut self.buffers.tx_buffer;
+        self.buffers.tx_buffer.clear();
         let length = match self.device_operate_state {
-            types::MasterCommand::DeviceStartup => {
-                message::compile_iolink_startup_frame(tx_buffer, io_link_message)?
+            DeviceMode::Startup => {
+                message::compile_iolink_startup_frame(&mut self.buffers.tx_buffer, io_link_message)?
             }
-            types::MasterCommand::DevicePreOperate => {
-                message::compile_iolink_preoperate_frame(tx_buffer, io_link_message)?
+            DeviceMode::PreOperate => {
+                message::compile_iolink_preoperate_frame(&mut self.buffers.tx_buffer, io_link_message)?
             }
-            types::MasterCommand::DeviceOperate => {
-                message::compile_iolink_operate_frame(tx_buffer, io_link_message)?
+            DeviceMode::Operate => {
+                message::compile_iolink_operate_frame(&mut self.buffers.tx_buffer, io_link_message)?
             }
-            _ => return Err(IoLinkError::InvalidMseqType),
         };
         self.buffers.tx_buffer_len = length as u8;
-        todo!("Implement IO-Link message compilation logic");
+        Ok(())
     }
 
     /// Parse IO-Link message from buffer
     /// See IO-Link v1.1.4 Section 6.1
     fn parse_message(&mut self) -> IoLinkResult<message::IoLinkMessage> {
         use config::m_seq_capability::{operate_m_sequence, pre_operate_m_sequence};
+        use types::{MsequenceBaseType, MsequenceType};
         use utils::frame_fromat::message;
-        use types::{MsequenceType, MsequenceBaseType};
-        
-        let rx_buffer: &mut Vec<u8, { message::MAX_FRAME_SIZE }> = &mut self.buffers.rx_buffer;
+
+        let rx_buffer: &mut Vec<u8, { message::MAX_RX_FRAME_SIZE }> = &mut self.buffers.rx_buffer;
         if message::validate_checksum(rx_buffer.len() as u8, rx_buffer) == false {
             // If checksum is invalid, indicate error
             return Err(IoLinkError::ChecksumError);
         }
         let ckt = message::ChecksumMsequenceType::from_bits(rx_buffer[1]);
         let io_link_message = match self.device_operate_state {
-            types::MasterCommand::DeviceStartup => {
-                const M_SEQ_BASE_TYPE: MsequenceBaseType = message::get_m_sequence_base_type(MsequenceType::Type0);
+            DeviceMode::Startup => {
+                const M_SEQ_BASE_TYPE: MsequenceBaseType =
+                    message::get_m_sequence_base_type(MsequenceType::Type0);
                 if M_SEQ_BASE_TYPE != ckt.m_seq_type() {
                     return Err(IoLinkError::InvalidMseqType);
                 }
                 message::parse_iolink_startup_frame(rx_buffer)
             }
-            types::MasterCommand::DevicePreOperate => {
-                let m_seq_base_type: MsequenceBaseType = message::get_m_sequence_base_type(pre_operate_m_sequence::m_sequence_type());
+            DeviceMode::PreOperate => {
+                let m_seq_base_type: MsequenceBaseType =
+                    message::get_m_sequence_base_type(pre_operate_m_sequence::m_sequence_type());
                 if m_seq_base_type != ckt.m_seq_type() {
                     return Err(IoLinkError::InvalidMseqType);
                 }
                 message::parse_iolink_pre_operate_frame(rx_buffer)
             }
-            types::MasterCommand::DeviceOperate => {
-                let m_seq_base_type: MsequenceBaseType = message::get_m_sequence_base_type(operate_m_sequence::m_sequence_type());
+            DeviceMode::Operate => {
+                let m_seq_base_type: MsequenceBaseType =
+                    message::get_m_sequence_base_type(operate_m_sequence::m_sequence_type());
                 if m_seq_base_type != ckt.m_seq_type() {
                     return Err(IoLinkError::InvalidMseqType);
                 }
@@ -640,8 +702,26 @@ impl MessageHandler {
 // Physical layer indication trait implementation would go here
 // when the physical layer module is properly defined
 impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler {
-    fn pl_transfer_ind(&mut self, rx_byte: u8) -> IoLinkResult<()> {
-        let _ = self.process_event(MessageHandlerEvent::PlTransfer(rx_byte));
+    fn pl_transfer_ind<T: pl::physical_layer::PhysicalLayerReq>(
+        &mut self,
+        physical_layer: &mut T,
+        rx_byte: u8,
+    ) -> IoLinkResult<()> {
+        use MessageHandlerState as State;
+        let event = MessageHandlerEvent::PlTransfer;
+        match self.state {
+            State::Idle => {
+                self.execute_t2(physical_layer, rx_byte)?;
+            }
+            State::GetMessage => {
+                self.execute_t3(physical_layer, rx_byte)?;
+            }
+            _ => {
+                // Do nothing
+                // Other state actvities are handled in 'process_event'.
+            }
+        }
+        let _ = self.process_event(event);
         Ok(())
     }
 }
@@ -649,7 +729,10 @@ impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler {
 impl pl::physical_layer::IoLinkTimer for MessageHandler {
     /// Any MasterCommand received by the Device command handler
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
-    fn timer_elapsed(&mut self, timer: pl::physical_layer::Timer) -> bool {
+    fn timer_elapsed<T: pl::physical_layer::PhysicalLayerReq>(
+        &mut self,
+        timer: pl::physical_layer::Timer,
+    ) -> bool {
         let event = match timer {
             pl::physical_layer::Timer::MaxCycleTime => MessageHandlerEvent::TimerMaxCycle,
             pl::physical_layer::Timer::MaxUARTframeTime => MessageHandlerEvent::TimerMaxUARTFrame,
@@ -661,30 +744,44 @@ impl pl::physical_layer::IoLinkTimer for MessageHandler {
 }
 
 /// DL indications to other modules
-impl DlInd for MessageHandler {
+impl DlModeInd for MessageHandler {
     /// See 7.2.1.14 DL_Mode
     /// The DL uses the DL_Mode service to report to System Management that a certain operating
     /// status has been reached. The parameters of the service primitives are listed in Table 29.
     fn dl_mode_ind(&mut self, mode: DlMode) -> IoLinkResult<()> {
         match mode {
             DlMode::Startup => {
-                self.device_mode = DeviceMode::Startup;
+                self.device_operate_state = DeviceMode::Startup;
             }
             DlMode::PreOperate => {
-                self.device_mode = DeviceMode::PreOperate;
+                self.device_operate_state = DeviceMode::PreOperate;
             }
             DlMode::Operate => {
-                self.device_mode = DeviceMode::Operate;
+                self.device_operate_state = DeviceMode::Operate;
             }
             DlMode::Inactive => {
-                self.device_mode = DeviceMode::Startup;
+                self.device_operate_state = DeviceMode::Startup;
+            }
+            DlMode::Com1 => {
+                self.transmission_rate = com_timing::TransmissionRate::Com1;
+            }
+            DlMode::Com2 => {
+                self.transmission_rate = com_timing::TransmissionRate::Com2;
+            }
+            DlMode::Com3 => {
+                self.transmission_rate = com_timing::TransmissionRate::Com3;
+            }
+            DlMode::Comlost => {
+                self.transmission_rate = com_timing::TransmissionRate::Com1;
             }
             _ => {}
         }
 
         Ok(())
     }
+}
 
+impl DlReadWriteInd for MessageHandler {
     /// See 7.2.1.5 DL_Write
     /// The DL_Write service is used by System Management to write a Device parameter value to
     /// the Device via the page communication channel. The parameters of the service primitives are

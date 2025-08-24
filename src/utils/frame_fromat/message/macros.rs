@@ -4,7 +4,7 @@
 #[macro_export]
 macro_rules! clear_checksum_bits_0_to_5 {
     ($byte:expr) => {
-        ($byte) & 0xC0
+        ($byte) & 0b11000000u8
     };
 }
 

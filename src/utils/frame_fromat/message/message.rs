@@ -9,17 +9,19 @@ use crate::{config, types};
 use bitfields::bitfield;
 use heapless::Vec;
 
-
-pub const HEADER_SIZE: usize = 2; // Header size is 2 bytes (MC and length)
+pub const HEADER_SIZE_IN_FRAME: u8 = 2; // Header size is 2 bytes (MC and length)
 /// Maximum message buffer size for OD
-/// This is the maximum size of the message buffer used for OD messages.
-const MAX_OD_SIZE: usize = config::on_req_data::max_possible_od_length() as usize;
+/// This is the maximum size of the message buffer used for OD messages in operating modes.
+pub const MAX_POSSIBLE_OD_LEN_IN_FRAME: u8 = config::on_req_data::max_possible_od_length();
 /// Maximum message buffer size for PD
 /// This is the maximum size of the message buffer used for PD messages.
-const PD_IN_LENGTH: usize = config::process_data::pd_in::param_length() as usize;
-const PD_OUT_LENGTH: usize = config::process_data::pd_out::length() as usize;
+const PD_IN_LENGTH: u8 = config::process_data::pd_in::param_length();
+const PD_OUT_LENGTH: u8 = config::process_data::pd_out::length();
 /// Maximum frame size for IO-Link messages
-pub const MAX_FRAME_SIZE: usize = MAX_OD_SIZE + PD_OUT_LENGTH + HEADER_SIZE;
+pub const MAX_RX_FRAME_SIZE: usize =
+    (MAX_POSSIBLE_OD_LEN_IN_FRAME + PD_IN_LENGTH + HEADER_SIZE_IN_FRAME) as usize;
+pub const MAX_TX_FRAME_SIZE: usize =
+    (MAX_POSSIBLE_OD_LEN_IN_FRAME + PD_OUT_LENGTH + HEADER_SIZE_IN_FRAME) as usize;
 
 #[bitfield(u8)]
 #[derive(Clone, Copy)]
@@ -38,8 +40,55 @@ pub struct MsequenceControl {
 #[bitfield(u8)]
 #[derive(Clone, Copy)]
 pub struct ChecksumMsequenceType {
+    #[bits(6)]
+    pub checksum: u8,
     #[bits(2)]
     pub m_seq_type: types::MsequenceBaseType,
+}
+
+/// Checksum / status (CKS) octet structure for IO-Link device reply messages.
+///
+/// This structure represents the reply message's checksum/status octet sent from the Device to the Master,
+/// as described in IO-Link specification section A.1.5 (see Figure A.3 in the spec).
+///
+/// The octet is composed as follows:
+/// - **Bits 0 to 5: Checksum**
+///   - These 6 bits contain a 6-bit checksum to ensure data integrity of the reply message.
+///   - The checksum is calculated as specified in section A.1.6 of the IO-Link specification.
+///
+/// - **Bit 6: PD status**
+///   - This bit indicates whether the Device can provide valid Process Data (PD) or not.
+///   - The flag should be used for Devices with input Process Data. Devices with only output Process Data
+///     always indicate "Process Data valid".
+///   - If the PD status flag is set to "Process Data invalid" within a message, all the input Process Data
+///     of the complete Process Data cycle are invalid.
+///   - See Table A.5 for values:
+///     - 0: Process Data valid
+///     - 1: Process Data invalid
+///
+/// - **Bit 7: Event flag**
+///   - This bit indicates a Device-initiated event for the data category "Event" to be retrieved by the Master
+///     via the diagnostic communication channel.
+///   - The Device can report additional information such as errors, warnings, or events via Event response messages.
+///   - See Table A.6 for values:
+///     - 0: No Event
+///     - 1: Event
+///
+/// # Layout (bit order)
+/// ```text
+///  7      6         5 4 3 2 1 0
+/// +------+------+----------------+
+/// |Event | PD   |   Checksum     |
+/// |flag  |status|   (6 bits)     |
+/// +------+------+----------------+
+/// ```
+#[bitfield(u8)]
+#[derive(Clone, Copy)]
+pub struct ChecksumStatus {
+    #[bits(1)]
+    pub event_flag: bool,
+    #[bits(1)]
+    pub pd_status: types::PdStatus,
     #[bits(6)]
     pub checksum: u8,
 }
@@ -51,7 +100,7 @@ pub struct IoLinkMessage {
     /// Read/Write direction
     pub read_write: Option<types::RwDirection>,
     /// Message type
-    pub message_type: Option<types::MessageType>,
+    pub message_type: Option<types::MsequenceBaseType>,
     /// Communication channel
     pub com_channel: Option<types::ComChannel>,
     /// Contains the address or flow control value (see A.1.2).
@@ -59,9 +108,9 @@ pub struct IoLinkMessage {
     /// Event flag
     pub event_flag: bool,
     /// On Request Data (OD) response data
-    pub od: Option<Vec<u8, MAX_OD_SIZE>>,
+    pub od: Option<Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }>>,
     /// Process Data (PD) response data
-    pub pd: Option<Vec<u8, PD_OUT_LENGTH>>,
+    pub pd: Option<Vec<u8, { PD_OUT_LENGTH as usize }>>,
     /// Process Data input status
     pub pd_status: Option<types::PdStatus>,
 }
@@ -96,7 +145,9 @@ impl Default for IoLinkMessage {
 /// - `3` is reserved and should not be used
 ///
 /// Ensure consistency with the selected M-sequence type when defining dependent macros.
-pub const fn get_m_sequence_base_type(m_sequence_type: types::MsequenceType) -> types::MsequenceBaseType {
+pub const fn get_m_sequence_base_type(
+    m_sequence_type: types::MsequenceType,
+) -> types::MsequenceBaseType {
     match m_sequence_type {
         types::MsequenceType::Type0 => types::MsequenceBaseType::Type0,
         types::MsequenceType::Type12 => types::MsequenceBaseType::Type1,
@@ -105,8 +156,8 @@ pub const fn get_m_sequence_base_type(m_sequence_type: types::MsequenceType) -> 
     }
 }
 
-pub fn compile_mc_ckt_bytes(
-    buffer: &mut [u8],
+pub fn extract_mc_ckt_bytes(
+    buffer: &[u8],
 ) -> Result<(MsequenceControl, ChecksumMsequenceType), types::IoLinkError> {
     let mc = MsequenceControl::from(buffer[0]);
     let ckt = ChecksumMsequenceType::from(buffer[1]);
@@ -114,108 +165,153 @@ pub fn compile_mc_ckt_bytes(
 }
 
 pub fn compile_iolink_startup_frame(
-    tx_buffer: &mut [u8],
+    tx_buffer: &mut Vec<u8, { MAX_TX_FRAME_SIZE }>,
     io_link_message: &IoLinkMessage,
 ) -> Result<u8, types::IoLinkError> {
-    tx_buffer[0] = io_link_message
-        .od
-        .as_ref()
-        .ok_or(types::IoLinkError::InvalidData)?[0];
-    tx_buffer[1] = compile_checksum_status!(
-        tx_buffer[1],
-        io_link_message.event_flag as u8,
-        io_link_message
-            .pd_status
-            .unwrap_or(types::PdStatus::INVALID) as u8,
-        0 // Checksum will be calculated later
-    );
-    let checksum = calculate_checksum(2, &tx_buffer);
-    tx_buffer[1] = compile_checksum!(tx_buffer[1], checksum);
+    let cks = ChecksumStatusBuilder::new()
+        .with_event_flag(io_link_message.event_flag)
+        .with_pd_status(
+            io_link_message
+                .pd_status
+                .unwrap_or(types::PdStatus::INVALID),
+        )
+        .build();
+    // Index = 0
+    tx_buffer
+        .push(
+            io_link_message
+                .od
+                .as_ref()
+                .ok_or(types::IoLinkError::InvalidData)?[0],
+        )
+        .map_err(|_| types::IoLinkError::InvalidData)?;
+    // Index = 1
+    tx_buffer.push(cks.into_bits()).map_err(|_| types::IoLinkError::InvalidData)?;
+    let checksum = calculate_checksum(2, tx_buffer);
+    let tx_buffer_1 = match tx_buffer.get_mut(1) {
+        Some(val) => val,
+        None => return Err(types::IoLinkError::InvalidIndex),
+    };
+    *tx_buffer_1 = compile_checksum!(*tx_buffer_1, checksum);
     Ok(2)
 }
 
 pub fn compile_iolink_preoperate_frame(
-    tx_buffer: &mut [u8],
+    tx_buffer: &mut Vec<u8, { MAX_TX_FRAME_SIZE }>,
     io_link_message: &IoLinkMessage,
 ) -> Result<u8, types::IoLinkError> {
+    tx_buffer.clear();
     const OD_LENGTH: u8 = config::on_req_data::pre_operate::od_length();
     if io_link_message.od.is_none() {
         return Err(types::IoLinkError::InvalidData);
     }
-    for (i, &byte) in io_link_message.od.as_ref().unwrap().iter().enumerate() {
-        if i < OD_LENGTH as usize {
-            tx_buffer[i] = byte;
-        } else {
-            break; // Avoid out of bounds access
+    if let Some(od) = &io_link_message.od {
+        if od.len() > OD_LENGTH as usize {
+            return Err(types::IoLinkError::InvalidData);
+        }
+        for (i, &byte) in od.iter().enumerate() {
+            if i < OD_LENGTH as usize {
+                tx_buffer[i] = byte;
+            } else {
+                break; // Avoid out of bounds access
+            }
+        }
+    } else {
+        for i in 0..OD_LENGTH as usize {
+            tx_buffer[i] = 0;
         }
     }
-    tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
-        tx_buffer[OD_LENGTH as usize],
-        io_link_message.event_flag as u8,
-        io_link_message
-            .pd_status
-            .unwrap_or(types::PdStatus::INVALID) as u8,
-        0 // Checksum will be calculated later
-    );
-    let checksum = calculate_checksum(OD_LENGTH + 1, &tx_buffer);
-    tx_buffer[OD_LENGTH as usize] = compile_checksum!(tx_buffer[OD_LENGTH as usize], checksum);
+
+    let mut cks = ChecksumStatusBuilder::new()
+        .with_event_flag(io_link_message.event_flag)
+        .with_pd_status(
+            io_link_message
+                .pd_status
+                .unwrap_or(types::PdStatus::INVALID),
+        )
+        .build();
+    tx_buffer[OD_LENGTH as usize] = cks.into_bits();
+    let checksum = calculate_checksum(OD_LENGTH + 1, tx_buffer);
+    cks.set_checksum(checksum);
+    tx_buffer[OD_LENGTH as usize] = cks.into_bits();
     Ok(OD_LENGTH + 1)
 }
 
 pub fn compile_iolink_operate_frame(
-    tx_buffer: &mut [u8],
+    tx_buffer: &mut Vec<u8, { MAX_TX_FRAME_SIZE }>,
     io_link_message: &IoLinkMessage,
 ) -> Result<u8, types::IoLinkError> {
+    tx_buffer.clear();
     const OD_LENGTH: u8 = config::on_req_data::operate::od_length();
     const PD_LENGTH: u8 = config::process_data::pd_out::config_length_in_bytes();
 
-    if io_link_message.od.is_none() {
-        return Err(types::IoLinkError::InvalidData);
-    }
-    for (i, &byte) in io_link_message.od.as_ref().unwrap().iter().enumerate() {
-        if i < OD_LENGTH as usize {
-            tx_buffer[i] = byte;
-        } else {
-            break; // Avoid out of bounds access
+    if let Some(od) = &io_link_message.od {
+        if od.len() > OD_LENGTH as usize {
+            return Err(types::IoLinkError::InvalidData);
+        }
+        for (i, &byte) in od.iter().enumerate() {
+            if i < OD_LENGTH as usize {
+                tx_buffer[i] = byte;
+            } else {
+                break; // Avoid out of bounds access
+            }
+        }
+    } else {
+        for i in 0..OD_LENGTH as usize {
+            tx_buffer[i] = 0;
         }
     }
-    tx_buffer[OD_LENGTH as usize] = compile_checksum_status!(
-        tx_buffer[OD_LENGTH as usize],
-        io_link_message.event_flag as u8,
-        io_link_message
-            .pd_status
-            .unwrap_or(types::PdStatus::INVALID) as u8,
-        0 // Checksum will be calculated later
-    );
-    tx_buffer[PD_LENGTH as usize] = compile_checksum_status!(
-        tx_buffer[PD_LENGTH as usize],
-        io_link_message.event_flag as u8,
-        io_link_message
-            .pd_status
-            .unwrap_or(types::PdStatus::INVALID) as u8,
-        0 // Checksum will be calculated later
-    );
-    let checksum = calculate_checksum(OD_LENGTH + PD_LENGTH + 1, &tx_buffer);
-    tx_buffer[OD_LENGTH as usize] =
-        compile_checksum!(tx_buffer[(OD_LENGTH + PD_LENGTH) as usize], checksum);
-    Ok(OD_LENGTH + PD_LENGTH + 1)
+
+    if let Some(pd) = &io_link_message.pd {
+        if pd.len() > PD_LENGTH as usize {
+            return Err(types::IoLinkError::InvalidData);
+        }
+        for (i, &byte) in pd.iter().enumerate() {
+            if i < PD_LENGTH as usize {
+                tx_buffer[i] = byte;
+            } else {
+                break; // Avoid out of bounds access
+            }
+        }
+    } else {
+        for i in 0..PD_LENGTH as usize {
+            tx_buffer[i] = 0;
+        }
+    }
+    const TOTAL_LENGTH: u8 = OD_LENGTH + PD_LENGTH + 1;
+    let mut cks = ChecksumStatusBuilder::new()
+        .with_event_flag(io_link_message.event_flag)
+        .with_pd_status(
+            io_link_message
+                .pd_status
+                .unwrap_or(types::PdStatus::INVALID),
+        )
+        .build();
+    tx_buffer[TOTAL_LENGTH as usize] = cks.into_bits();
+    let checksum = calculate_checksum(TOTAL_LENGTH, tx_buffer);
+    cks.set_checksum(checksum);
+    tx_buffer[TOTAL_LENGTH as usize] = cks.into_bits();
+    Ok(TOTAL_LENGTH)
 }
 
 /// Parse IO-Link frame using nom
 /// See IO-Link v1.1.4 Section 6.1
-pub fn parse_iolink_startup_frame(input: &[u8]) -> types::IoLinkResult<IoLinkMessage> {
+pub fn parse_iolink_startup_frame(
+    input: &Vec<u8, { MAX_RX_FRAME_SIZE }>,
+) -> types::IoLinkResult<IoLinkMessage> {
     // Extracting `MC` byte properties
-    let read_write = types::RwDirection::try_from(extract_rw_direction!(input[0]))?;
-    let com_channel = types::ComChannel::try_from(extract_com_channel!(input[0]))?;
-    let address_fctrl = extract_address_fctrl!(input[0]);
-
     // Extracting `CKT` byte properties
-    let message_type = types::MessageType::try_from(extract_message_type!(input[1]))?;
+    let (mc, ckt) = extract_mc_ckt_bytes(input)?;
+
+    if ckt.m_seq_type() != types::MsequenceBaseType::Type0 {
+        return Err(types::IoLinkError::InvalidMseqType);
+    }
+
     // check for M-sequenceCapability
     // For STARTUP, we expect TYPE_0 (0b00), thus we can check directly
     // because message sequence is always TYPE_0.
     // OD length in startup is always 1 byte
-    let od: Option<Vec<u8, MAX_OD_SIZE>> = if input.len() > 2 {
+    let od: Option<Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }>> = if input.len() > 2 {
         let mut vec = Vec::new();
         vec.push(input[2])
             .map_err(|_| types::IoLinkError::InvalidData)?;
@@ -225,10 +321,10 @@ pub fn parse_iolink_startup_frame(input: &[u8]) -> types::IoLinkResult<IoLinkMes
     };
 
     Ok(IoLinkMessage {
-        read_write: Some(read_write),
-        message_type: Some(message_type),
-        com_channel: Some(com_channel),
-        address_fctrl: Some(address_fctrl),
+        read_write: Some(mc.read_write()),
+        message_type: Some(ckt.m_seq_type()),
+        com_channel: Some(mc.comm_channel()),
+        address_fctrl: Some(mc.address_fctrl()),
         event_flag: false, // Event flag is not set in startup frame
         od,
         pd: None,        // No PD in startup frame
@@ -236,60 +332,63 @@ pub fn parse_iolink_startup_frame(input: &[u8]) -> types::IoLinkResult<IoLinkMes
     })
 }
 
-pub fn parse_iolink_pre_operate_frame(input: &[u8]) -> types::IoLinkResult<IoLinkMessage> {
+pub fn parse_iolink_pre_operate_frame(
+    input: &Vec<u8, { MAX_RX_FRAME_SIZE }>,
+) -> types::IoLinkResult<IoLinkMessage> {
     // On-request Data (OD) length
     const OD_LENGTH: u8 = config::on_req_data::pre_operate::od_length();
+    const M_SEQ_TYPE: types::MsequenceBaseType =
+        config::m_seq_capability::pre_operate_m_sequence::m_sequence_base_type();
     // Extracting `MC` byte properties
-    let read_write = types::RwDirection::try_from(extract_rw_direction!(input[0]))?;
-    let com_channel = types::ComChannel::try_from(extract_com_channel!(input[0]))?;
-    let address_fctrl = extract_address_fctrl!(input[0]);
-
     // Extracting `CKT` byte properties
-    let rxed_message_type = types::MessageType::try_from(extract_message_type!(input[1]))?;
-    let od = if input.len() > 2 {
-        let mut vec: Vec<u8, MAX_OD_SIZE> = Vec::new();
-        // Extract OD data
-        for i in 2..(2 + OD_LENGTH as usize) {
-            if i < input.len() {
-                vec.push(input[i])
-                    .map_err(|_| types::IoLinkError::InvalidData)?;
-            } else {
-                break; // Avoid out of bounds access
-            }
+    let (mc, ckt) = extract_mc_ckt_bytes(input)?;
+
+    if M_SEQ_TYPE != ckt.m_seq_type() {
+        return Err(types::IoLinkError::InvalidMseqType);
+    }
+    if input.len() < (OD_LENGTH + HEADER_SIZE_IN_FRAME) as usize {
+        return Err(types::IoLinkError::InvalidData);
+    }
+    let mut od: Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }> = Vec::new();
+    // Extract OD data
+    for i in 2..(2 + OD_LENGTH as usize) {
+        if i < input.len() {
+            od.push(input[i])
+                .map_err(|_| types::IoLinkError::InvalidData)?;
+        } else {
+            break; // Avoid out of bounds access
         }
-        Some(vec)
-    } else {
-        None
-    };
+    }
 
     Ok(IoLinkMessage {
-        read_write: Some(read_write),
-        message_type: Some(rxed_message_type),
-        com_channel: Some(com_channel),
-        address_fctrl: Some(address_fctrl),
+        read_write: Some(mc.read_write()),
+        message_type: Some(ckt.m_seq_type()),
+        com_channel: Some(mc.comm_channel()),
+        address_fctrl: Some(mc.address_fctrl()),
         event_flag: false, // Event flag is not set in pre-operate frame
-        od,
+        od: Some(od),
         pd: None,        // No PD in pre-operate frame
         pd_status: None, // No PD status in pre-operate frame
     })
 }
 
 pub fn parse_iolink_operate_frame(
-    input: &[u8],
+    input: &Vec<u8, { MAX_RX_FRAME_SIZE }>,
 ) -> types::IoLinkResult<IoLinkMessage> {
     const OD_LENGTH_OCTETS: u8 = config::on_req_data::operate::od_length();
     const PD_LENGTH: u8 = config::process_data::pd_out::config_length_in_bytes();
+    const M_SEQ_TYPE: types::MsequenceBaseType =
+        config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
 
-    let read_write = types::RwDirection::try_from(extract_rw_direction!(input[0]))?;
-    let com_channel = types::ComChannel::try_from(extract_com_channel!(input[0]))?;
-    let address_fctrl = extract_address_fctrl!(input[0]);
-    let rxed_message_type = types::MessageType::try_from(extract_message_type!(input[1]))?;
+    // Extracting `MC` byte properties
+    // Extracting `CKT` byte properties
+    let (mc, ckt) = extract_mc_ckt_bytes(input)?;
 
-    if input.len() != HEADER_SIZE + OD_LENGTH_OCTETS as usize + PD_LENGTH as usize {
+    if input.len() != (HEADER_SIZE_IN_FRAME + OD_LENGTH_OCTETS + PD_LENGTH) as usize {
         return Err(types::IoLinkError::InvalidData);
     }
-    let mut od: Vec<u8, MAX_OD_SIZE> = Vec::new();
-    let mut pd: Vec<u8, PD_OUT_LENGTH> = Vec::new();
+    let mut od: Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }> = Vec::new();
+    let mut pd: Vec<u8, { PD_OUT_LENGTH as usize }> = Vec::new();
 
     for i in 2..(2 + OD_LENGTH_OCTETS as usize) {
         if i < input.len() {
@@ -310,10 +409,10 @@ pub fn parse_iolink_operate_frame(
     }
 
     Ok(IoLinkMessage {
-        read_write: Some(read_write),
-        message_type: Some(rxed_message_type),
-        com_channel: Some(com_channel),
-        address_fctrl: Some(address_fctrl),
+        read_write: Some(mc.read_write()),
+        message_type: Some(ckt.m_seq_type()),
+        com_channel: Some(mc.comm_channel()),
+        address_fctrl: Some(mc.address_fctrl()),
         event_flag: false, // Event flag is not set in pre-operate frame
         od: Some(od),
         pd: Some(pd),
@@ -323,16 +422,25 @@ pub fn parse_iolink_operate_frame(
 
 pub fn validate_checksum(length: u8, data: &mut [u8]) -> bool {
     // Validate the checksum of the received IO-Link message
-    let received_checksum = extract_checksum_bits!(data[1]);
+    let (_, ckt) = match extract_mc_ckt_bytes(data) {
+        Ok(val) => val,
+        Err(_) => return false,
+    };
+    let checksum = ckt.checksum();
     // clear the received checksum bits (0-5), Before calculating the checksum
     data[1] = clear_checksum_bits_0_to_5!(data[1]);
     let calculated_checksum = calculate_checksum(length, &data);
-    calculated_checksum == received_checksum
+    calculated_checksum == checksum
 }
 
 /// See A.1.6 Calculation of the checksum
 /// Calculate message checksum
-pub fn calculate_checksum(length: u8, data: &[u8]) -> u8 {
+#[cfg(feature = "default")]
+pub fn calculate_checksum_for_testing(length: u8, data: &[u8]) -> u8 {
+    calculate_checksum(length, data)
+}
+
+fn calculate_checksum(length: u8, data: &[u8]) -> u8 {
     // Seed value as per IO-Link spec
     let mut checksum = 0x52u8;
     for i in 0..length as usize {

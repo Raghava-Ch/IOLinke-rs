@@ -4,9 +4,10 @@
 //! IO-Link Specification v1.1.4 Section 7.3.5.3
 
 use heapless::Vec;
+use iolinke_macros::direct_parameter_address;
 
 use crate::{
-    al, config, dl::{self, DlInd}, log_state_transition, log_state_transition_error, system_management, types::{self, IoLinkError, IoLinkResult}
+    al, config, dl::{self, DlReadWriteInd}, log_state_transition, log_state_transition_error, system_management, types::{self, IoLinkError, IoLinkResult}
 };
 
 pub const OD_LENGTH: usize = config::on_req_data::max_possible_od_length() as usize;
@@ -30,7 +31,7 @@ pub trait DlWriteParamInd {
 
 pub trait DlParamRsp {
     /// See 7.2.1.4 DL_ReadParam.rsp
-    fn dl_read_param_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()>;
+    fn dl_read_param_rsp(&mut self, length: u8, data: u8) -> IoLinkResult<()>;
     fn dl_write_param_rsp(&mut self) -> IoLinkResult<()>;
 }
 
@@ -140,7 +141,7 @@ impl OnRequestDataHandler {
         use OnRequestHandlerState as State;
 
         let (new_transition, new_state) = match (self.state, event) {
-            (State::Inactive, Event::OhConfInactive) => (Transition::T1, State::Idle),
+            (State::Inactive, Event::OhConfActive) => (Transition::T1, State::Idle),
             (State::Idle, Event::OdIndParam) => {
                 (Transition::T2, State::Idle)
             }
@@ -254,11 +255,13 @@ impl OnRequestDataHandler {
             } else if od_ind_data.rw_direction == types::RwDirection::Write {
                 // Perform appropriate write action
                 application_layer.dl_write_param_ind(od_ind_data.address_ctrl, od_ind_data.data[0])?;
+                if od_ind_data.address_ctrl == direct_parameter_address!(MasterCommand) {
+                    command_handler.od_ind(&od_ind_data)?;
+                }
             }
         } else {
             return Err(IoLinkError::InvalidEvent);
         }
-        command_handler.od_ind(&od_ind_data)?;
         Ok(())
     }
 
@@ -270,7 +273,7 @@ impl OnRequestDataHandler {
         command_handler: &mut dl::command_handler::CommandHandler,
         system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
-        command_handler.od_ind(od_ind_data)?;
+        let _ = command_handler.od_ind(od_ind_data);
         let address = od_ind_data.address_ctrl;
         let value = od_ind_data.data[0];
         let _ = system_management.dl_write_ind(address, value);
@@ -329,10 +332,10 @@ impl OnRequestDataHandler {
     pub fn dl_read_param_rsp(
         &self,
         length: u8,
-        data: &[u8],
+        data: u8,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
-        let _ = self.od_rsp(length, data, message_handler);
+        let _ = self.od_rsp(length, &[data], message_handler);
         Ok(())
     }
 }

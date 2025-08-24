@@ -286,9 +286,9 @@ impl ProcessDataHandler {
         &mut self,
         _pd_in_address: u8, // Not required, because of legacy specification
         _pd_in_length: u8,  // Not required, because of legacy specification
-        pd_out: &Vec<u8, PD_OUTPUT_LENGTH>,
         _pd_out_address: u8, // Not required, because of legacy specification
         pd_out_length: u8,
+        pd_out: &Vec<u8, PD_OUTPUT_LENGTH>,
     ) -> IoLinkResult<()> {
         self.process_data.output = pd_out.clone();
         self.process_data.output_length = pd_out_length;

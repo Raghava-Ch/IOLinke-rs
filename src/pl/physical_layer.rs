@@ -53,7 +53,12 @@ pub trait PhysicalLayerInd {
     ///
     /// This is a placeholder implementation that should be replaced
     /// with actual hardware-specific code.
-    fn pl_transfer_ind(&mut self, rx_byte: u8) -> IoLinkResult<()> {
+    fn pl_transfer_ind<T: PhysicalLayerReq>(
+        &mut self,
+        physical_layer: &mut T,
+        rx_byte: u8,
+    ) -> IoLinkResult<()> {
+        let _ = physical_layer;
         let _ = rx_byte; // Placeholder for actual implementation
         Err(IoLinkError::NoImplFound)
     }
@@ -222,7 +227,7 @@ pub trait IoLinkTimer {
     /// # Returns
     ///
     /// `true` if the timer has expired, `false` otherwise.
-    fn timer_elapsed(&mut self, timer: Timer) -> bool;
+    fn timer_elapsed<T: PhysicalLayerReq>(&mut self, timer: Timer) -> bool;
 }
 
 /// UART abstraction for IO-Link serial communication.
@@ -353,8 +358,7 @@ pub trait IoLinkUart {
 /// independence, allowing the same code to work with different
 /// microcontroller platforms.
 
-pub struct PhysicalLayer {
-}
+pub struct PhysicalLayer {}
 
 pub trait PhysicalLayerReq {
     /// Sets the communication mode for the physical layer.
@@ -427,7 +431,7 @@ pub trait PhysicalLayerReq {
     /// # Note
     ///
     /// This method needs to be implemented with actual timer hardware.
-    fn stop_timer(&mut self, timer: Timer) -> IoLinkResult<()> {
+    fn stop_timer(&self, timer: Timer) -> IoLinkResult<()> {
         todo!("Implement timer stop logic");
     }
 
@@ -449,7 +453,7 @@ pub trait PhysicalLayerReq {
     /// # Note
     ///
     /// This method needs to be implemented with actual timer hardware.
-    fn start_timer(&mut self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+    fn start_timer(&self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
         todo!("Implement timer start logic");
     }
 
@@ -471,75 +475,7 @@ pub trait PhysicalLayerReq {
     /// # Note
     ///
     /// This method needs to be implemented with actual timer hardware.
-    fn restart_timer(&mut self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+    fn restart_timer(&self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
         todo!("Implement timer restart logic");
-    }
-
-    /// Reads data from a direct parameter page.
-    ///
-    /// This method reads data from the specified direct parameter page
-    /// address as defined in Annex B of the IO-Link specification.
-    ///
-    /// # Parameters
-    ///
-    /// * `address` - 8-bit page address (0x00-0x1F)
-    /// * `length` - Number of bytes to read
-    /// * `buffer` - Buffer to store read data
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(usize)` with the number of bytes read
-    /// - `Err(PageError)` if a page access error occurred
-    ///
-    /// # Specification Reference
-    ///
-    /// - IO-Link v1.1.4 Annex B: Parameter and Commands
-    /// - Section B.1: Direct Parameter Page 1 and 2
-    ///
-    /// # Note
-    ///
-    /// This method needs to be implemented with actual storage hardware.
-    fn read_direct_param_page(&mut self, address: u8, length: u8, buffer: &mut [u8]) -> PageResult<usize> {
-        let _ = address;
-        let _ = length;
-        let _ = buffer;
-
-        todo!("Implement read page logic");
-    }
-
-    /// Writes data to a direct parameter page.
-    ///
-    /// This method writes data to the specified direct parameter page
-    /// address as defined in Annex B of the IO-Link specification.
-    ///
-    /// # Parameters
-    ///
-    /// * `address` - 8-bit page address (0x00-0x1F)
-    /// * `length` - Number of bytes to write
-    /// * `data` - Data to write to the page
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if write was successful
-    /// - `Err(PageError)` if a page access error occurred
-    ///
-    /// # Specification Reference
-    ///
-    /// - IO-Link v1.1.4 Annex B: Parameter and Commands
-    /// - Section B.1: Direct Parameter Page 1 and 2
-    ///
-    /// # Note
-    ///
-    /// This method needs to be implemented with actual storage hardware.
-    fn write_direct_param_page(
-        &mut self,
-        address: u8,
-        length: u8,
-        data: &[u8],
-    ) -> PageResult<()> {
-        let _ = address;
-        let _ = length;
-
-        todo!("Implement write page logic");
     }
 }

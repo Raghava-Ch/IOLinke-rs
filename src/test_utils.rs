@@ -3,248 +3,234 @@
 // //! This module provides utilities and mock implementations for testing
 // //! the IO-Link device stack components.
 
-// use crate::{IoLinkError, IoLinkMode, IoLinkResult, PhysicalLayer, PhysicalLayerStatus};
+pub use crate::SystemManagementReq;
+pub use crate::config::m_seq_capability;
+pub use crate::types::ComChannel;
+pub use crate::types::MsequenceBaseType;
+pub use crate::types::MsequenceType;
+pub use crate::types::RwDirection;
+pub use crate::utils::frame_fromat::message::ChecksumMsequenceType;
+pub use crate::utils::frame_fromat::message::ChecksumMsequenceTypeBuilder;
+pub use crate::utils::frame_fromat::message::ChecksumStatus;
+pub use crate::utils::frame_fromat::message::ChecksumStatusBuilder;
+pub use crate::utils::frame_fromat::message::calculate_checksum_for_testing;
+pub use crate::utils::frame_fromat::message::{MsequenceControl, MsequenceControlBuilder};
+use crate::{IoLinkDevice, IoLinkError, IoLinkMode, IoLinkResult, PhysicalLayerReq, Timer};
 
-// /// Mock HAL implementation for testing
-// pub struct MockHal {
-//     mode: IoLinkMode,
-//     status: PhysicalLayerStatus,
-//     cq_state: bool,
-//     timer_expired: bool,
-//     tx_buffer: heapless::Vec<u8, 256>,
-//     rx_buffer: heapless::Vec<u8, 256>,
-// }
+use core::time::Duration;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use crate::pl::physical_layer::PhysicalLayerInd;
+use std::time::Instant;
 
-// impl MockHal {
-//     /// Create a new mock HAL instance
-//     pub fn new() -> Self {
-//         Self {
-//             mode: IoLinkMode::Sio,
-//             status: PhysicalLayerStatus::NoCommunication,
-//             cq_state: false,
-//             timer_expired: false,
-//             tx_buffer: heapless::Vec::new(),
-//             rx_buffer: heapless::Vec::new(),
-//         }
-//     }
+#[derive(Debug, Clone)]
+pub enum ThreadMessage {
+    TimerExpired(Timer),
+    RxData(Vec<u8>),
+    TxData(Vec<u8>),
+}
 
-//     /// Add data to the receive buffer for testing
-//     pub fn add_rx_data(&mut self, data: &[u8]) -> IoLinkResult<()> {
-//         for &byte in data {
-//             self.rx_buffer.push(byte).map_err(|_| IoLinkError::BufferOverflow)?;
-//         }
-//         Ok(())
-//     }
+pub struct MockPhysicalLayer {
+    mode: IoLinkMode,
+    tx_data: Vec<u8>,
+    rx_data: Vec<u8>,
+    timers: Arc<Mutex<Vec<MockTimerState>>>,
+    mock_to_usr_tx: Sender<ThreadMessage>,
+}
 
-//     /// Get transmitted data for verification
-//     pub fn get_tx_data(&self) -> &[u8] {
-//         &self.tx_buffer
-//     }
-// }
+pub struct MockTimerState {
+    timer_id: Timer,
+    start_time: Instant,
+    duration_us: u32,
+    active: bool,
+}
 
+impl MockTimerState {
+    fn new(timer_id: Timer, duration_us: u32) -> Self {
+        Self {
+            timer_id,
+            start_time: Instant::now(),
+            duration_us,
+            active: true,
+        }
+    }
 
-// impl PhysicalLayer for MockHal {
-//     fn pl_set_mode(&mut self, mode: IoLinkMode) -> IoLinkResult<()> {
-//         self.mode = mode;
-//         self.status = PhysicalLayerStatus::Communication;
-//         Ok(())
-//     }
+    fn is_expired(&self) -> bool {
+        if !self.active {
+            return false;
+        }
+        let elapsed = self.start_time.elapsed();
+        let elapsed_us = elapsed.as_micros() as u32;
+        elapsed_us >= self.duration_us
+    }
 
-//     fn pl_transfer(&mut self, tx_data: &[u8], rx_buffer: &mut [u8]) -> IoLinkResult<usize> {
-//         // Store transmitted data
-//         for &byte in tx_data {
-//             self.tx_buffer.push(byte).map_err(|_| IoLinkError::BufferOverflow)?;
-//         }
+    fn restart(&mut self, duration_us: u32) {
+        self.start_time = Instant::now();
+        self.duration_us = duration_us;
+        self.active = true;
+    }
 
-//         // Copy available receive data
-//         let copy_len = core::cmp::min(rx_buffer.len(), self.rx_buffer.len());
-//         rx_buffer[..copy_len].copy_from_slice(&self.rx_buffer[..copy_len]);
-        
-//         // Remove copied data from internal buffer
-//         for _ in 0..copy_len {
-//             self.rx_buffer.remove(0);
-//         }
+    fn stop(&mut self) {
+        self.active = false;
+    }
+}
 
-//         Ok(copy_len)
-//     }
+impl MockPhysicalLayer {
+    /// Create a new MockPhysicalLayer
+    ///
+    /// # Arguments
+    ///
+    /// * `usr_to_mock_rx` - A receiver for messages from the user thread
+    /// * `mock_to_usr_tx` - A sender for messages to the user thread
+    ///
+    /// # Returns
+    ///
+    /// A new MockPhysicalLayer
+    ///
+    pub fn new(mock_to_usr_tx: Sender<ThreadMessage>) -> Self {
+        Self {
+            mode: IoLinkMode::Inactive,
+            tx_data: Vec::new(),
+            rx_data: Vec::new(),
+            timers: Arc::new(Mutex::new(Vec::new())),
+            mock_to_usr_tx,
+        }
+    }
 
-//     fn pl_wake_up(&mut self) -> IoLinkResult<()> {
-//         self.status = PhysicalLayerStatus::Communication;
-//         Ok(())
-//     }
+    pub fn transfer_ind(&mut self, rx_buffer: &[u8], io_link_device: Arc<Mutex<IoLinkDevice>>) -> IoLinkResult<()> {
+        self.rx_data.extend_from_slice(rx_buffer);
+        let mut io_link_device_lock = io_link_device.lock().unwrap();
+        for rx_buffer_byte in rx_buffer {
+            let _ = io_link_device_lock.pl_transfer_ind(self, *rx_buffer_byte);
+        }
+        Ok(())
+    }
 
-//     fn pl_status(&self) -> PhysicalLayerStatus {
-//         self.status
-//     }
+    pub fn timer_expired(&mut self, timer: Timer) {
+        println!("Timer expired: {:?}", timer);
+        // Here you can add any specific logic needed when a timer expires
+        // For example, triggering state transitions or error handling
+    }
 
-//     fn data_available(&self) -> bool {
-//         !self.rx_buffer.is_empty()
-//     }
+    /// Check if any timers have expired and call timer_expired for them
+    pub fn check_timers(&mut self) {
+        let expired_timers = {
+            let mut timers = self.timers.lock().unwrap();
+            let mut expired_timers = Vec::new();
+            let mut i = 0;
 
-//     fn get_baud_rate(&self) -> u32 {
-//         match self.mode {
-//             IoLinkMode::Sio => 0,
-//             IoLinkMode::Com1 => 4800,
-//             IoLinkMode::Com2 => 38400,
-//             IoLinkMode::Com3 => 230400,
-//         }
-//     }
-// }
+            // Find expired timers
+            while i < timers.len() {
+                if timers[i].is_expired() {
+                    expired_timers.push(timers[i].timer_id);
+                    timers.remove(i);
+                } else {
+                    i += 1;
+                }
+            }
+            expired_timers
+        };
 
-// #[cfg(test)]
-// pub mod mock {
-//     use crate::hal::*;
-//     use crate::types::*;
-//     use super::MockHal;
+        // Call timer_expired for each expired timer (after releasing the lock)
+        for timer_id in expired_timers {
+            self.timer_expired(timer_id);
+        }
+    }
+}
 
-//     /// Extended mock HAL for comprehensive testing
-//     pub struct ExtendedMockHal {
-//         base: MockHal,
-//         gpio_state: bool,
-//         timer_duration: u32,
-//         timer_start_time: u32,
-//         current_time: u32,
-//     }
+impl PhysicalLayerReq for MockPhysicalLayer {
+    fn pl_set_mode_req(&mut self, mode: IoLinkMode) -> IoLinkResult<()> {
+        self.mode = mode;
+        Ok(())
+    }
 
-//     impl ExtendedMockHal {
-//         /// Create a new extended mock HAL
-//         pub fn new() -> Self {
-//             Self {
-//                 base: MockHal::new(),
-//                 gpio_state: false,
-//                 timer_duration: 0,
-//                 timer_start_time: 0,
-//                 current_time: 0,
-//             }
-//         }
+    fn pl_transfer_req(&mut self, tx_data: &[u8]) -> IoLinkResult<usize> {
+        self.tx_data.extend_from_slice(tx_data);
+        self.mock_to_usr_tx.send(ThreadMessage::TxData(self.tx_data.clone())).unwrap();
+        Ok(tx_data.len())
+    }
 
-//         /// Advance the mock time
-//         pub fn advance_time(&mut self, microseconds: u32) {
-//             self.current_time += microseconds;
-//         }
+    fn stop_timer(&self, timer: Timer) -> IoLinkResult<()> {
+        let mut timers = self.timers.lock().unwrap();
+        for timer_state in timers.iter_mut() {
+            if timer_state.timer_id == timer {
+                timer_state.stop();
+                break;
+            }
+        }
+        Ok(())
+    }
 
-//         /// Set GPIO state for testing
-//         pub fn set_gpio_state(&mut self, state: bool) {
-//             self.gpio_state = state;
-//         }
-//     }
+    fn start_timer(&self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+        let mut timers = self.timers.lock().unwrap();
+        let timer_state = MockTimerState::new(timer, duration_us);
+        timers.push(timer_state);
+        Ok(())
+    }
 
-//     impl PhysicalLayer for ExtendedMockHal {
-//         fn pl_set_mode(&mut self, mode: IoLinkMode) -> IoLinkResult<()> {
-//             self.base.pl_set_mode(mode)
-//         }
+    fn restart_timer(&self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+        let mut timers = self.timers.lock().unwrap();
+        for timer_state in timers.iter_mut() {
+            if timer_state.timer_id == timer {
+                timer_state.restart(duration_us);
+                return Ok(());
+            }
+        }
+        // If timer doesn't exist, create it
+        let timer_state = MockTimerState::new(timer, duration_us);
+        timers.push(timer_state);
+        Ok(())
+    }
+}
 
-//         fn pl_transfer(&mut self, tx_data: &[u8], rx_buffer: &mut [u8]) -> IoLinkResult<usize> {
-//             self.base.pl_transfer(tx_data, rx_buffer)
-//         }
-
-//         fn pl_wake_up(&mut self) -> IoLinkResult<()> {
-//             self.base.pl_wake_up()
-//         }
-
-//         fn pl_status(&self) -> PhysicalLayerStatus {
-//             self.base.pl_status()
-//         }
-
-//         fn data_available(&self) -> bool {
-//             self.base.data_available()
-//         }
-
-//         fn get_baud_rate(&self) -> u32 {
-//             self.base.get_baud_rate()
-//         }
-//     }
-
-//     impl IoLinkTimer for ExtendedMockHal {
-//         fn start_timer(&mut self, duration_us: u32) -> IoLinkResult<()> {
-//             self.timer_duration = duration_us;
-//             self.timer_start_time = self.current_time;
-//             Ok(())
-//         }
-
-//         fn is_timer_expired(&self) -> bool {
-//             (self.current_time - self.timer_start_time) >= self.timer_duration
-//         }
-
-//         fn stop_timer(&mut self) {
-//             self.timer_duration = 0;
-//         }
-
-//         fn get_time_us(&self) -> u32 {
-//             self.current_time
-//         }
-//     }
-
-//     impl IoLinkUart for ExtendedMockHal {
-//         fn configure(&mut self, _baud_rate: u32) -> IoLinkResult<()> {
-//             Ok(())
-//         }
-
-//         fn send(&mut self, data: &[u8]) -> IoLinkResult<()> {
-//             // Store in base mock
-//             self.base.add_rx_data(data)?;
-//             Ok(())
-//         }
-
-//         fn receive(&mut self, buffer: &mut [u8]) -> IoLinkResult<usize> {
-//             self.base.pl_transfer(&[], buffer)
-//         }
-
-//         fn is_tx_complete(&self) -> bool {
-//             true
-//         }
-
-//         fn is_rx_ready(&self) -> bool {
-//             self.base.data_available()
-//         }
-
-//         fn flush_tx(&mut self) -> IoLinkResult<()> {
-//             Ok(())
-//         }
-
-//         fn clear_rx(&mut self) {
-//             // Clear would be implemented here
-//         }
-
-//         fn set_enabled(&mut self, _enabled: bool) -> IoLinkResult<()> {
-//             Ok(())
-//         }
-//     }
-// }
-
-// /// Test helper functions
-// #[cfg(test)]
-// pub mod helpers {
-//     use crate::types::*;
-
-//     /// Create test process data
-//     pub fn create_test_process_data() -> ProcessData {
-//         let mut data = ProcessData::default();
-//         data.input.push(0xAA).unwrap();
-//         data.input.push(0xBB).unwrap();
-//         data.output.push(0xCC).unwrap();
-//         data.output.push(0xDD).unwrap();
-//         data.valid = true;
-//         data
-//     }
-
-//     /// Create test event
-//     pub fn create_test_event() -> Event {
-//         Event {
-//             event_type: EventType::DeviceAppears,
-//             qualifier: 0x01,
-//             mode: 0x02,
-//             data: heapless::Vec::new(),
-//         }
-//     }
-
-//     /// Create test device identification
-//     pub fn create_test_device_id() -> DeviceIdentification {
-//         DeviceIdentification {
-//             vendor_id: 0x1234,
-//             device_id: 0x56789ABC,
-//             function_id: 0xDEF0,
-//             reserved: 0x00,
-//         }
-//     }
-// }
+/// This function is used to poll the device and check for expired timers.
+pub fn take_care_of_poll_nb(
+    io_link_device: Arc<Mutex<IoLinkDevice>>,
+    usr_to_mock_rx: Receiver<ThreadMessage>,
+    mock_to_usr_tx: Sender<ThreadMessage>,
+) {
+    // Main device loop
+    std::thread::spawn(move || {
+        // Check for expired timers before polling
+        let mut physical_layer: MockPhysicalLayer = MockPhysicalLayer::new(mock_to_usr_tx);
+        // Poll all protocol layers
+        loop {
+            match usr_to_mock_rx.recv_timeout(Duration::from_micros(50)) {
+                Ok(msg) => {
+                    match msg {
+                        ThreadMessage::RxData(data) => {
+                            let io_link_device_clone = Arc::clone(&io_link_device);
+                            let _ = physical_layer.transfer_ind(&data, io_link_device_clone);
+                        }
+                        _ => {
+                            // Do nothing
+                        }
+                    }
+                }
+                Err(_e) => {
+                    // eprintln!("Error receiving message: {:?}", e);
+                    // No message received, continue polling
+                }
+            }
+            {
+                let mut io_link_device_lock = io_link_device.lock().unwrap();
+                match io_link_device_lock.poll(&mut physical_layer) {
+                    Ok(()) => {
+                        // Device operating normally
+                        // In a real implementation, you might add some delay here
+                        // sleep(Duration::from_millis(10));
+                    }
+                    Err(IoLinkError::NoImplFound) => {
+                        // Feature not implemented yet, continue operation
+                        // This is expected in the basic example
+                    }
+                    Err(e) => {
+                        // Handle other errors
+                        eprintln!("Device error: {:?}", e);
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_micros(10));
+        }
+    });
+}

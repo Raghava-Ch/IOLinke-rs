@@ -124,7 +124,7 @@ pub fn read<T: pl::physical_layer::PhysicalLayerReq>(
         }
     }
 
-    pl.read_direct_param_page(address, length, buffer)?;
+    // pl.read_direct_param_page(address, length, buffer)?;
     Ok(())
 }
 
@@ -168,6 +168,6 @@ pub fn write<T: pl::physical_layer::PhysicalLayerReq>(
         }
     }
 
-    pl.write_direct_param_page(address, length, buffer)?;
+    // pl.write_direct_param_page(address, length, buffer)?;
     Ok(())
 }

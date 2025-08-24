@@ -72,13 +72,10 @@ mod system_management;
 pub mod ffi;
 mod types;
 
-use utils::page_params::page1;
+use utils::{page_params::page1, frame_fromat};
 
 #[cfg(feature = "default")]
 pub mod test_utils;
-
-
-pub use utils::log_utils::*;
 
 // Re-export main traits and types
 pub use types::*;
@@ -91,17 +88,14 @@ pub use pl::physical_layer::Timer;
 pub use system_management::SystemManagementReq;
 pub use system_management::DeviceCom;
 pub use system_management::SioMode;
-pub use system_management::TransmissionRate;
 pub use system_management::DeviceMode;
+pub use frame_fromat::com_timing::TransmissionRate;
 
-pub use page1::MinCycleTime;
-pub use page1::MsequenceCapability;
-pub use page1::RevisionId;
-pub use page1::ProcessDataIn;
-pub use page1::ProcessDataOut;
+pub use page1::{CycleTime, CycleTimeBuilder};
+pub use page1::{MsequenceCapability, MsequenceCapabilityBuilder};
+pub use page1::{RevisionId, RevisionIdBuilder};
+pub use page1::{ProcessDataIn, ProcessDataInBuilder, ProcessDataOut, ProcessDataOutBuilder};
 pub use page1::DeviceIdent;
-
-pub use dl::DataLinkLayer;
 
 /// Main IO-Link device implementation that orchestrates all protocol layers.
 ///
@@ -198,6 +192,17 @@ impl IoLinkDevice {
             reserved: 0,
         };
         // TODO: Store device identification in system management
+    }
+
+    /// This function is called when the communication is successful.
+    /// It will change the DL mode to the corresponding communication mode.
+    /// # Parameters
+    /// * `transmission_rate` - The transmission rate of the communication
+    /// # Returns
+    /// * `Ok(())` if the communication is successful
+    /// * `Err(IoLinkError)` if an error occurred
+    pub fn successful_com(&mut self, transmission_rate: TransmissionRate) {
+        let _ = self.dl.successful_com(transmission_rate);
     }
 
     /// Main polling function that advances all protocol state machines.
@@ -409,8 +414,12 @@ impl system_management::SystemManagementReq for IoLinkDevice {
 
 
 impl pl::physical_layer::PhysicalLayerInd for IoLinkDevice {
-    fn pl_transfer_ind(&mut self, rx_byte: u8) -> IoLinkResult<()> {
-        self.dl.pl_transfer_ind(rx_byte)?;
+    fn pl_transfer_ind<T: pl::physical_layer::PhysicalLayerReq>(
+        &mut self,
+        physical_layer: &mut T,
+        rx_byte: u8,
+    ) -> IoLinkResult<()> {
+        self.dl.pl_transfer_ind(physical_layer, rx_byte)?;
         Ok(())
     }
 

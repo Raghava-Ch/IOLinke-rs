@@ -22,12 +22,15 @@
 use iolinke_macros::{direct_parameter_address, master_command};
 
 use crate::{
-    IoLinkDevice, IoLinkMode, al,
-    dl::DlInd,
+    IoLinkMode, al,
+    dl::{DlModeInd, DlReadWriteInd},
     log_state_transition, log_state_transition_error, pl,
     types::{self, IoLinkError, IoLinkResult},
-    utils::page_params::page1::{
-        DeviceIdent, MinCycleTime, MsequenceCapability, ProcessDataIn, ProcessDataOut, RevisionId,
+    utils::{
+        frame_fromat::com_timing::TransmissionRate,
+        page_params::page1::{
+            CycleTime, DeviceIdent, MsequenceCapability, ProcessDataIn, ProcessDataOut, RevisionId,
+        },
     },
 };
 
@@ -72,33 +75,6 @@ impl Default for SioMode {
         Self::Inactive
     }
 }
-
-/// Transmission rate configuration for IO-Link communication.
-///
-/// The transmission rate determines the baud rate used for
-/// master-device communication.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Section 5.2.2: Communication Modes
-/// - Table 5.1: Communication mode characteristics
-#[derive(Clone, Debug)]
-pub enum TransmissionRate {
-    /// COM1 mode - 1200 baud effective rate
-    Com1,
-    /// COM2 mode - 2400 baud effective rate
-    Com2,
-    /// COM3 mode - 4800 baud effective rate
-    Com3,
-}
-
-impl Default for TransmissionRate {
-    /// Default transmission rate is COM1 (1200 baud).
-    fn default() -> Self {
-        Self::Com1
-    }
-}
-
 /// Device operating mode as per Section 6.3.
 ///
 /// The device mode represents the current state of the IO-Link
@@ -157,7 +133,7 @@ pub struct DeviceCom {
     /// Transmission rate for IO-Link communication
     pub transmission_rate: TransmissionRate,
     /// Minimum cycle time configuration
-    pub min_cycle_time: MinCycleTime,
+    pub min_cycle_time: CycleTime,
     /// M-sequence capability configuration
     pub msequence_capability: MsequenceCapability,
     /// Protocol revision identifier
@@ -174,7 +150,7 @@ impl Default for DeviceCom {
         Self {
             suppported_sio_mode: SioMode::default(),
             transmission_rate: TransmissionRate::default(),
-            min_cycle_time: MinCycleTime::default(),
+            min_cycle_time: CycleTime::default(),
             msequence_capability: MsequenceCapability::default(),
             revision_id: RevisionId::default(),
             process_data_in: ProcessDataIn::default(),
@@ -1013,7 +989,7 @@ impl SystemManagement {
             TransmissionRate::Com3 => IoLinkMode::Com3,
         };
         // Invoke PL_SetMode(COMx)
-        physical_layer.pl_set_mode_req(com_mode)?;
+        let _ = physical_layer.pl_set_mode_req(com_mode);
         // Invoke SM_DeviceMode(ESTABCOM)
         let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Estabcom);
         Ok(())
@@ -1027,7 +1003,7 @@ impl SystemManagement {
     ) -> IoLinkResult<()> {
         // TODO: Cleanup any active communication sessions and reset state
         // Invoke PL_SetMode(INACTIVE)
-        physical_layer.pl_set_mode_req(IoLinkMode::Inactive)?;
+        let _ = physical_layer.pl_set_mode_req(IoLinkMode::Inactive);
         // Invoke SM_DeviceMode(IDLE)
         let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Idle);
         Ok(())
@@ -1126,7 +1102,12 @@ impl SystemManagement {
         // TODO: Implement transmission rate change logic based on device identification requirements
         // Invoke PL_SetMode(COMx)
         // TODO: Change the COM1 to actual communication mode from the application
-        physical_layer.pl_set_mode_req(IoLinkMode::Com1)?;
+        let mode = match self.device_com.transmission_rate {
+            TransmissionRate::Com1 => IoLinkMode::Com1,
+            TransmissionRate::Com2 => IoLinkMode::Com2,
+            TransmissionRate::Com3 => IoLinkMode::Com3,
+        };
+        let _ = physical_layer.pl_set_mode_req(mode);
         // Invoke SM_DeviceMode(ESTABCOM)
         let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Estabcom);
         Ok(())
@@ -1150,7 +1131,7 @@ impl Default for SystemManagement {
     }
 }
 
-impl DlInd for SystemManagement {
+impl DlModeInd for SystemManagement {
     fn dl_mode_ind(&mut self, mode: types::DlMode) -> IoLinkResult<()> {
         use types::DlMode;
         match mode {
@@ -1171,7 +1152,9 @@ impl DlInd for SystemManagement {
             _ => Err(IoLinkError::InvalidEvent),
         }
     }
+}
 
+impl DlReadWriteInd for SystemManagement {
     fn dl_write_ind(&mut self, address: u8, value: u8) -> IoLinkResult<()> {
         match (address, value) {
             (direct_parameter_address!(MasterCommand), master_command!(MasterIdent)) => {

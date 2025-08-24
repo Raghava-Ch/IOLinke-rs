@@ -4,16 +4,19 @@
 //! IO-Link Specification v1.1.4 Section 6.2
 
 use crate::types::{IoLinkError, IoLinkMode, IoLinkResult};
+use crate::utils::frame_fromat::com_timing;
 use crate::{DlMode, MHInfo, MasterCommand};
 use crate::{dl, log_state_transition, log_state_transition_error, pl, system_management, types};
 
 /// DL indications to other modules
-pub trait DlInd {
+pub trait DlModeInd {
     /// See 7.2.1.14 DL_Mode
     /// The DL uses the DL_Mode service to report to System Management that a certain operating
     /// status has been reached. The parameters of the service primitives are listed in Table 29.
     fn dl_mode_ind(&mut self, mode: DlMode) -> IoLinkResult<()>;
+}
 
+pub trait DlReadWriteInd {
     /// See 7.2.1.5 DL_Write
     /// The DL_Write service is used by System Management to write a Device parameter value to
     /// the Device via the page communication channel. The parameters of the service primitives are
@@ -116,7 +119,7 @@ enum DlModeEvent {
     PlWakeUp,
     /// Mode change request
     /// Table 45 – T2
-    ComChange(IoLinkMode),
+    ComChange(com_timing::TransmissionRate),
     /// Table 45 – T3
     MasterCommandPreoperate,
     /// Table 45 – T4, T5
@@ -136,8 +139,8 @@ enum DlModeEvent {
 pub struct DlModeHandler {
     state: DlModeState,
     exec_transition: Transition,
-    current_mode: IoLinkMode,
-    target_mode: IoLinkMode,
+    current_mode: com_timing::TransmissionRate,
+    target_mode: com_timing::TransmissionRate,
 }
 
 impl DlModeHandler {
@@ -146,8 +149,8 @@ impl DlModeHandler {
         Self {
             state: DlModeState::Idle,
             exec_transition: Transition::Tn,
-            current_mode: IoLinkMode::Sio,
-            target_mode: IoLinkMode::Sio,
+            current_mode: com_timing::TransmissionRate::default(),
+            target_mode: com_timing::TransmissionRate::default(),
         }
     }
 
@@ -211,7 +214,12 @@ impl DlModeHandler {
             }
             Transition::T2 => {
                 self.exec_transition = Transition::Tn;
-                let _ = self.execute_t2(od_handler, command_handler, system_management);
+                let _ = self.execute_t2(
+                    od_handler,
+                    command_handler,
+                    system_management,
+                    message_handler,
+                );
             }
             Transition::T3 => {
                 self.exec_transition = Transition::Tn;
@@ -337,12 +345,12 @@ impl DlModeHandler {
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
         command_handler: &mut dl::command_handler::CommandHandler,
         system_management: &mut system_management::SystemManagement,
+        message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         log::debug!(
             "DL-Mode: T2 - Communication mode {:?} established",
             self.target_mode
         );
-        self.current_mode = self.target_mode;
         // Activate On-request Data (call OH_Conf_ACTIVE in Figure 49)
         let _ = od_handler.oh_conf(crate::ChConfState::Active);
         // Activate command handler (call CH_Conf_ACTIVE in Figure 54)
@@ -350,12 +358,12 @@ impl DlModeHandler {
         // Indicate state via service DL_Mode.ind (COM1, COM2, or COM3) to SM
         // TODO: Implement the actual COMx mode handling
         let dl_mode = match self.current_mode {
-            IoLinkMode::Com1 => DlMode::Com1,
-            IoLinkMode::Com2 => DlMode::Com2,
-            IoLinkMode::Com3 => DlMode::Com3,
-            _ => return Err(IoLinkError::InvalidEvent),
+            com_timing::TransmissionRate::Com1 => DlMode::Com1,
+            com_timing::TransmissionRate::Com2 => DlMode::Com2,
+            com_timing::TransmissionRate::Com3 => DlMode::Com3,
         };
         let _ = system_management.dl_mode_ind(dl_mode);
+        let _ = message_handler.dl_mode_ind(dl_mode);
 
         Ok(())
     }
@@ -536,7 +544,7 @@ impl DlModeHandler {
         system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         log::debug!("DL-Mode: T10 - Unsuccessful wakeup, establishing SIO mode");
-        self.current_mode = IoLinkMode::Sio;
+        self.current_mode = com_timing::TransmissionRate::default();
         // After unsuccessful wakeup procedures, establish configured SIO mode
         // Deactivate all handlers (call xx_Conf_INACTIVE)
         let _ = isdu_handler.ih_conf(types::IhConfState::Inactive);
@@ -598,7 +606,8 @@ impl DlModeHandler {
     /// One out of three possible SDCI communication modes COM1, COM2, or COM3
     /// See Figure 37 – State machine of the Device DL-mode handler
     /// This function is called to indicate communication is successful.
-    pub fn com_mode_update(&mut self, com_mode: IoLinkMode) {
+    pub fn successful_com(&mut self, com_mode: com_timing::TransmissionRate) {
+        self.current_mode = com_mode;
         let _ = self.process_event(DlModeEvent::ComChange(com_mode));
     }
 

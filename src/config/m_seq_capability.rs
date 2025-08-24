@@ -234,7 +234,7 @@ pub mod operate_m_sequence {
         match m_sequence_type() {
             crate::types::MsequenceType::Type0 => crate::types::MsequenceBaseType::Type0,
             crate::types::MsequenceType::Type12 => crate::types::MsequenceBaseType::Type1,
-            crate::types::MsequenceType::Type1V => crate::types::MsequenceBaseType::Type2,
+            crate::types::MsequenceType::Type2V => crate::types::MsequenceBaseType::Type2,
             _ => panic!("Invalid M-sequence type"),
         }
     }
@@ -276,12 +276,12 @@ pub const fn isdu_supported() -> bool {
 ///
 /// ### Bits 6 to 7: Reserved
 /// - These bits are reserved and shall be set to `0`
-pub const fn config_m_sequence_capability() -> u8 {
+pub const fn m_sequence_capability_parameter() -> crate::utils::page_params::page1::MsequenceCapability {
     use crate::utils::page_params::page1;
     use operate_m_sequence::{m_sequence_type, operate_m_sequence_code};
     let mut m_sequence_cap: page1::MsequenceCapability = page1::MsequenceCapability::new();
     m_sequence_cap.set_isdu(isdu_supported());
     m_sequence_cap.set_preoperate_m_sequence(operate_m_sequence_code() as u8);
     m_sequence_cap.set_operate_m_sequence(m_sequence_type() as u8);
-    m_sequence_cap.into_bits()
+    m_sequence_cap
 }
