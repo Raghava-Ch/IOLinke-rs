@@ -96,6 +96,27 @@ pub mod min_cycle_time {
         multiplier
     }
 
+    /// Returns the minimum cycle time in milliseconds as configured for the device.
+    ///
+    /// This value determines the minimum allowed process data cycle time according to
+    /// IO-Link Specification Table B.3. The value is used to encode the CycleTime parameter.
+    ///
+    /// # Returns
+    /// The minimum cycle time in milliseconds as an `f32`.
+    ///
+    /// # Example
+    /// ```
+    /// let min_time = config::timings::time_in_ms();
+    /// ```
+    ///
+    /// # Specification
+    /// - IO-Link Spec Table B.3: MinCycleTime encoding
+    ///
+    /// # Panics
+    /// Panics if the value is not within the valid IO-Link ranges.
+    ///
+    /// # Note
+    /// This function is intended for use in parameter encoding and device configuration.
     pub const fn min_cycle_time_parameter() -> crate::utils::page_params::page1::CycleTime {
         const TIME_BASE: u8 = time_base();
         const MULTIPLIER: u8 = multiplier();

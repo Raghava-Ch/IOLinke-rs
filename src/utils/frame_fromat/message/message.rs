@@ -3,7 +3,7 @@ use crate::{
     compile_pd_status, construct_u8, extract_address_fctrl, extract_checksum_bits,
     extract_com_channel, extract_message_type, extract_rw_direction, get_bit_0, get_bit_1,
     get_bit_2, get_bit_3, get_bit_4, get_bit_5, get_bit_6, get_bit_7, get_bits_0_4, get_bits_5_6,
-    get_bits_6_7, set_bit_6, set_bit_7, set_bits_0_5,
+    get_bits_6_7, log_fn_call, set_bit_6, set_bit_7, set_bits_0_5,
 };
 use crate::{config, types};
 use bitfields::bitfield;
@@ -22,6 +22,13 @@ pub const MAX_RX_FRAME_SIZE: usize =
     (MAX_POSSIBLE_OD_LEN_IN_FRAME + PD_IN_LENGTH + HEADER_SIZE_IN_FRAME) as usize;
 pub const MAX_TX_FRAME_SIZE: usize =
     (MAX_POSSIBLE_OD_LEN_IN_FRAME + PD_OUT_LENGTH + HEADER_SIZE_IN_FRAME) as usize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceMode {
+    Startup,
+    PreOperate,
+    Operate,
+}
 
 #[bitfield(u8)]
 #[derive(Clone, Copy)]
@@ -97,6 +104,8 @@ pub struct ChecksumStatus {
 /// See IO-Link v1.1.4 Section 6.1
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IoLinkMessage {
+    /// Will be used decide the frame type to be compiled
+    pub frame_type: DeviceMode,
     /// Read/Write direction
     pub read_write: Option<types::RwDirection>,
     /// Message type
@@ -115,9 +124,10 @@ pub struct IoLinkMessage {
     pub pd_status: Option<types::PdStatus>,
 }
 
-impl Default for IoLinkMessage {
-    fn default() -> Self {
+impl IoLinkMessage {
+    pub fn new(device_mode: DeviceMode) -> Self {
         Self {
+            frame_type: device_mode,
             read_write: None,
             message_type: None,
             com_channel: None,
@@ -168,7 +178,7 @@ pub fn compile_iolink_startup_frame(
     tx_buffer: &mut Vec<u8, { MAX_TX_FRAME_SIZE }>,
     io_link_message: &IoLinkMessage,
 ) -> Result<u8, types::IoLinkError> {
-    let cks = ChecksumStatusBuilder::new()
+    let mut cks = ChecksumStatusBuilder::new()
         .with_event_flag(io_link_message.event_flag)
         .with_pd_status(
             io_link_message
@@ -177,23 +187,34 @@ pub fn compile_iolink_startup_frame(
         )
         .build();
     // Index = 0
-    tx_buffer
-        .push(
-            io_link_message
-                .od
-                .as_ref()
-                .ok_or(types::IoLinkError::InvalidData)?[0],
-        )
-        .map_err(|_| types::IoLinkError::InvalidData)?;
-    // Index = 1
-    tx_buffer.push(cks.into_bits()).map_err(|_| types::IoLinkError::InvalidData)?;
-    let checksum = calculate_checksum(2, tx_buffer);
-    let tx_buffer_1 = match tx_buffer.get_mut(1) {
-        Some(val) => val,
-        None => return Err(types::IoLinkError::InvalidIndex),
-    };
-    *tx_buffer_1 = compile_checksum!(*tx_buffer_1, checksum);
-    Ok(2)
+    if io_link_message.od.is_some() && io_link_message.od.as_ref().unwrap().len() > 0 {
+        let od_byte = io_link_message
+            .od
+            .as_ref()
+            .ok_or(types::IoLinkError::InvalidData)?[0];
+        tx_buffer
+            .push(od_byte)
+            .map_err(|_| types::IoLinkError::InvalidData)?;
+        // Index = 1
+        tx_buffer
+            .push(cks.into_bits())
+            .map_err(|_| types::IoLinkError::InvalidData)?;
+        let checksum = calculate_checksum(2, tx_buffer);
+        cks.set_checksum(checksum);
+        let tx_buffer_1 = match tx_buffer.get_mut(1) {
+            Some(val) => val,
+            None => return Err(types::IoLinkError::InvalidIndex),
+        };
+        *tx_buffer_1 = cks.into_bits();
+    } else {
+        tx_buffer
+            .push(cks.into_bits())
+            .map_err(|_| types::IoLinkError::InvalidData)?;
+        let checksum = calculate_checksum(1, tx_buffer);
+        cks.set_checksum(checksum);
+        tx_buffer[0] = cks.into_bits();
+    }
+    Ok(tx_buffer.len() as u8)
 }
 
 pub fn compile_iolink_preoperate_frame(
@@ -201,24 +222,24 @@ pub fn compile_iolink_preoperate_frame(
     io_link_message: &IoLinkMessage,
 ) -> Result<u8, types::IoLinkError> {
     tx_buffer.clear();
-    const OD_LENGTH: u8 = config::on_req_data::pre_operate::od_length();
+    const OD_LENGTH_BYTES: u8 = config::on_req_data::pre_operate::od_length();
     if io_link_message.od.is_none() {
         return Err(types::IoLinkError::InvalidData);
     }
     if let Some(od) = &io_link_message.od {
-        if od.len() > OD_LENGTH as usize {
+        if od.len() > OD_LENGTH_BYTES as usize {
             return Err(types::IoLinkError::InvalidData);
         }
-        for (i, &byte) in od.iter().enumerate() {
-            if i < OD_LENGTH as usize {
-                tx_buffer[i] = byte;
+        for index in 0..OD_LENGTH_BYTES as usize {
+            if index < od.len() {
+                tx_buffer.push(od[index]).map_err(|_| types::IoLinkError::InvalidData)?;
             } else {
-                break; // Avoid out of bounds access
+                tx_buffer.push(0).map_err(|_| types::IoLinkError::InvalidData)?;
             }
         }
     } else {
-        for i in 0..OD_LENGTH as usize {
-            tx_buffer[i] = 0;
+        for _ in 0..OD_LENGTH_BYTES as usize {
+            tx_buffer.push(0).map_err(|_| types::IoLinkError::InvalidData)?;
         }
     }
 
@@ -230,11 +251,12 @@ pub fn compile_iolink_preoperate_frame(
                 .unwrap_or(types::PdStatus::INVALID),
         )
         .build();
-    tx_buffer[OD_LENGTH as usize] = cks.into_bits();
-    let checksum = calculate_checksum(OD_LENGTH + 1, tx_buffer);
+    tx_buffer.push(cks.into_bits()).map_err(|_| types::IoLinkError::InvalidData)?;
+    let checksum = calculate_checksum(OD_LENGTH_BYTES + 1, tx_buffer);
     cks.set_checksum(checksum);
-    tx_buffer[OD_LENGTH as usize] = cks.into_bits();
-    Ok(OD_LENGTH + 1)
+    tx_buffer.pop();
+    tx_buffer.push(cks.into_bits()).map_err(|_| types::IoLinkError::InvalidData)?;
+    Ok(OD_LENGTH_BYTES + 1)
 }
 
 pub fn compile_iolink_operate_frame(
@@ -321,6 +343,7 @@ pub fn parse_iolink_startup_frame(
     };
 
     Ok(IoLinkMessage {
+        frame_type: DeviceMode::Startup,
         read_write: Some(mc.read_write()),
         message_type: Some(ckt.m_seq_type()),
         com_channel: Some(mc.comm_channel()),
@@ -346,7 +369,12 @@ pub fn parse_iolink_pre_operate_frame(
     if M_SEQ_TYPE != ckt.m_seq_type() {
         return Err(types::IoLinkError::InvalidMseqType);
     }
-    if input.len() < (OD_LENGTH + HEADER_SIZE_IN_FRAME) as usize {
+    let expected_frame_length = if mc.read_write() == types::RwDirection::Read {
+        HEADER_SIZE_IN_FRAME
+    } else {
+        HEADER_SIZE_IN_FRAME + OD_LENGTH
+    };
+    if input.len() < expected_frame_length as usize {
         return Err(types::IoLinkError::InvalidData);
     }
     let mut od: Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }> = Vec::new();
@@ -361,6 +389,7 @@ pub fn parse_iolink_pre_operate_frame(
     }
 
     Ok(IoLinkMessage {
+        frame_type: DeviceMode::PreOperate,
         read_write: Some(mc.read_write()),
         message_type: Some(ckt.m_seq_type()),
         com_channel: Some(mc.comm_channel()),
@@ -409,6 +438,7 @@ pub fn parse_iolink_operate_frame(
     }
 
     Ok(IoLinkMessage {
+        frame_type: DeviceMode::Operate,
         read_write: Some(mc.read_write()),
         message_type: Some(ckt.m_seq_type()),
         com_channel: Some(mc.comm_channel()),
@@ -420,7 +450,7 @@ pub fn parse_iolink_operate_frame(
     })
 }
 
-pub fn validate_checksum(length: u8, data: &mut [u8]) -> bool {
+pub fn validate_master_frame_checksum(length: u8, data: &mut [u8]) -> bool {
     // Validate the checksum of the received IO-Link message
     let (_, ckt) = match extract_mc_ckt_bytes(data) {
         Ok(val) => val,

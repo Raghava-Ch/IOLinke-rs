@@ -1,3 +1,5 @@
+use crate::RevisionId;
+
 pub const MAX_WRITE_BUFFER_SIZE: usize = 65535;
 pub const MAX_PARAM_ENTRIES: usize = 100;
 
@@ -84,7 +86,7 @@ pub const fn minor_revision_id() -> u8 {
     0x4u8
 }
 
-pub const fn revision_id() -> u8 {
+pub const fn revision_id_parameter() -> RevisionId {
     const MAJOR_REVISION_ID: u8 = major_revision_id();
     const MINOR_REVISION_ID: u8 = minor_revision_id();
 
@@ -94,7 +96,10 @@ pub const fn revision_id() -> u8 {
     if MINOR_REVISION_ID > 0b1111 {
         panic!("Invalid minor revision id provided is not in the range 0-15");
     }
-    MAJOR_REVISION_ID << 4 | MINOR_REVISION_ID
+    let mut revision_id = RevisionId::new();
+    revision_id.set_major_rev(MAJOR_REVISION_ID);
+    revision_id.set_minor_rev(MINOR_REVISION_ID);
+    revision_id
 }
 
 pub const fn vendor_id_1() -> u8 {
@@ -591,26 +596,17 @@ pub mod storage_config {
         /// Returns the revision ID configuration value.
         #[inline(always)]
         pub const fn revision_id() -> u8 {
-            config::vendor_specifics::revision_id()
+            config::vendor_specifics::revision_id_parameter().into_bits()
         }
         /// Returns the process data in configuration value.
         #[inline(always)]
         pub const fn process_data_in() -> u8 {
-            config::process_data::pd_in::config_length_in_bytes()
+            config::process_data::pd_in::pd_in_parameter().into_bits()
         }
         /// Returns the process data out configuration value.
         #[inline(always)]
         pub const fn process_data_out() -> u8 {
-            use config::process_data::ProcessDataLength::*;
-            match config::process_data::pd_out::config_length() {
-                Bit(bit_length) => {
-                    // The ceiling division technique:
-                    // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
-                    // Formula is ceil(a/b) = (a + b - 1) / b
-                    (bit_length + 7) / 8
-                },
-                Octet(octet_length) => octet_length,
-            }
+            config::process_data::pd_out::pd_out_parameter().into_bits()
         }
         /// Returns the vendor ID 1 configuration value.
         #[inline(always)]

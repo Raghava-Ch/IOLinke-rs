@@ -22,16 +22,12 @@
 use iolinke_macros::{direct_parameter_address, master_command};
 
 use crate::{
-    IoLinkMode, al,
-    dl::{DlModeInd, DlReadWriteInd},
-    log_state_transition, log_state_transition_error, pl,
-    types::{self, IoLinkError, IoLinkResult},
-    utils::{
+    al, dl::{DlModeInd, DlReadWriteInd, DlWriteParamInd}, log_state_transition, log_state_transition_error, pl, types::{self, IoLinkError, IoLinkResult}, utils::{
         frame_fromat::com_timing::TransmissionRate,
         page_params::page1::{
             CycleTime, DeviceIdent, MsequenceCapability, ProcessDataIn, ProcessDataOut, RevisionId,
         },
-    },
+    }, IoLinkMode
 };
 
 /// System Management error types.

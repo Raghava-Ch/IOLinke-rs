@@ -18,7 +18,7 @@ pub mod pre_operate {
     ///   when the Master restarts communication.
     pub const fn od_length() -> u8 {
         // PREOPERATE OD length configuration accepted length values are 1, 2, 8, 32
-        match /*CONFIG:PRE_OP_OD_LEN*/ 1 /*ENDCONFIG*/ {
+        match /*CONFIG:PRE_OP_OD_LEN*/ 2 /*ENDCONFIG*/ {
             1 => 1u8,
             2 => 2u8,
             8 => 8u8,

@@ -59,9 +59,9 @@ pub struct CycleTime {
 /// | R | R |PRE|PRE| O | O | O | I |
 /// +---+---+---+---+---+---+---+---+
 ///   |   |   |   |   |   |   |   +-- Bit 0: ISDU (0 = not supported, 1 = supported)
-///   |   |   |   |   |   +------+ Bits 1-3: OPERATE M-sequence code
-///   |   +---+---+-------------- Bits 4-5: PREOPERATE M-sequence code
-///   +---+---------------------- Bits 6-7: Reserved (must be 0)
+///   |   |   |   |   +---+---+------ Bits 1-3: OPERATE M-sequence code
+///   |   +---+---+------------------ Bits 4-5: PREOPERATE M-sequence code
+///   +---+-------------------------- Bits 6-7: Reserved (must be 0)
 /// ```
 ///
 /// - **Bit 0 (ISDU):** Indicates whether the ISDU communication channel is supported.
@@ -173,28 +173,26 @@ pub struct ProcessDataIn {
     pub length: u8,
 }
 
-/// Represents the ProcessDataIn parameter as defined in IO-Link Specification v1.1.4 Section B.1.6.
+/// Represents the ProcessDataOut parameter as defined in IO-Link Specification v1.1.4 Section B.1.6.
 ///
-/// The ProcessDataIn parameter is a single byte (u8) structured as follows:
+/// The ProcessDataOut parameter is a single byte (u8) structured as follows:
 ///
 /// ```text
 ///  7   6   5   4   3   2   1   0
 /// +---+---+---+---+---+---+---+---+
-/// | B | S | R |      Length      |
+/// | B | R | R |      Length      |
 /// +---+---+---+---+---+---+---+---+
 ///   |   |   |         |
 ///   |   |   |         +-- Bits 0-4: Length (length of input data)
 ///   |   |   +------------ Bit 5: Reserved (must be 0)
-///   |   +---------------- Bit 6: SIO (0 = SIO mode not supported, 1 = SIO mode supported)
+///   |   +---------------- Bit 6: Reserved (must be 0)
 ///   +-------------------- Bit 7: BYTE (0 = bit Process Data, 1 = byte Process Data)
 /// ```
 ///
-/// - **Bits 0-4 (Length):** Length of the input data (Process Data from Device to Master).
+/// - **Bits 0-4 (Length):** Length of the output data (Process Data from Master to Device).
 ///   - Permissible values depend on the BYTE bit (see Table B.6 below).
 /// - **Bit 5 (Reserved):** Reserved, must be set to 0.
-/// - **Bit 6 (SIO):** Indicates if SIO (Switching Signal) mode is supported.
-///   - 0: SIO mode not supported
-///   - 1: SIO mode supported
+/// - **Bit 6 (Reserved):** Reserved, must be set to 0.
 /// - **Bit 7 (BYTE):** Indicates the unit for Length.
 ///   - 0: Length is in bits (bit Process Data)
 ///   - 1: Length is in bytes (octets, byte Process Data)
@@ -219,12 +217,12 @@ pub struct ProcessDataIn {
 #[bitfield(u8)]
 #[derive(Clone, Copy)]
 pub struct ProcessDataOut {
-    #[bits(1)]
-    pub byte: bool,
-    #[bits(2)]
-    __: u8, // Reserved bit, must be 0
     #[bits(5)]
     pub length: u8,
+    #[bits(2)]
+    __: u8, // Reserved bit, must be 0
+    #[bits(1)]
+    pub byte: bool,
 }
 
 /// Device identification parameters.

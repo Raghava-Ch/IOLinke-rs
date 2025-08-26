@@ -64,6 +64,9 @@ mod al;
 mod dl;
 mod pl;
 mod utils;
+#[cfg(feature = "std")]
+pub mod config;
+#[cfg(not(feature = "std"))]
 mod config;
 mod storage;
 mod system_management;
@@ -74,8 +77,9 @@ mod types;
 
 use utils::{page_params::page1, frame_fromat};
 
-#[cfg(feature = "default")]
+#[cfg(feature = "std")]
 pub mod test_utils;
+#[cfg(feature = "std")]
 
 // Re-export main traits and types
 pub use types::*;
@@ -132,7 +136,7 @@ pub use page1::DeviceIdent;
 /// ```
 pub struct IoLinkDevice {
     /// Data link layer managing protocol state machines and message handling
-    dl: dl::DataLinkLayer,
+    data_link_layer: dl::DataLinkLayer,
     /// System management handling device identification and communication setup
     system_management: system_management::SystemManagement,
     /// Application layer providing parameter access and event handling
@@ -157,7 +161,7 @@ impl IoLinkDevice {
     pub fn new() -> Self {
         Self {
             system_management: system_management::SystemManagement::default(),
-            dl: dl::DataLinkLayer::default(),
+            data_link_layer: dl::DataLinkLayer::default(),
             application_layer: al::ApplicationLayer::default(),
         }
     }
@@ -202,7 +206,7 @@ impl IoLinkDevice {
     /// * `Ok(())` if the communication is successful
     /// * `Err(IoLinkError)` if an error occurred
     pub fn successful_com(&mut self, transmission_rate: TransmissionRate) {
-        let _ = self.dl.successful_com(transmission_rate);
+        let _ = self.data_link_layer.successful_com(transmission_rate);
     }
 
     /// Main polling function that advances all protocol state machines.
@@ -252,8 +256,8 @@ impl IoLinkDevice {
     /// ```
     pub fn poll<T: pl::physical_layer::PhysicalLayerReq>(&mut self, physical_layer: &mut T) -> IoLinkResult<()> {
         // Poll all state machines in dependency order
-        self.application_layer.poll(&mut self.dl)?;
-        self.dl.poll(
+        self.application_layer.poll(&mut self.data_link_layer)?;
+        self.data_link_layer.poll(
             &mut self.system_management,
             physical_layer,
             &mut self.application_layer,
@@ -419,12 +423,12 @@ impl pl::physical_layer::PhysicalLayerInd for IoLinkDevice {
         physical_layer: &mut T,
         rx_byte: u8,
     ) -> IoLinkResult<()> {
-        self.dl.pl_transfer_ind(physical_layer, rx_byte)?;
+        self.data_link_layer.pl_transfer_ind(physical_layer, rx_byte)?;
         Ok(())
     }
 
     fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
-        let _ = self.dl.pl_wake_up_ind();
+        let _ = self.data_link_layer.pl_wake_up_ind();
         Ok(())
     }
 }

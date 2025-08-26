@@ -22,13 +22,6 @@ use crate::utils::frame_fromat::message;
 use crate::{get_bits_0_4, get_bits_5_6, get_bits_6_7};
 use heapless::Vec;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DeviceMode {
-    Startup,
-    PreOperate,
-    Operate,
-}
-
 /// Message Handler states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MessageHandlerState {
@@ -130,7 +123,7 @@ pub struct MessageHandler {
     buffers: Buffers,
     tx_message: message::IoLinkMessage,
     rx_message: message::IoLinkMessage,
-    device_operate_state: DeviceMode,
+    device_operate_state: message::DeviceMode,
     pd_in_valid_status: types::PdStatus,
 
     transmission_rate: com_timing::TransmissionRate,
@@ -141,7 +134,7 @@ impl MessageHandler {
     /// Create a new Message Handler
     pub fn new() -> Self {
         Self {
-            state: MessageHandlerState::Idle,
+            state: MessageHandlerState::Inactive,
             exec_transition: Transition::Tn,
             buffers: Buffers {
                 rx_buffer: Vec::new(),
@@ -149,9 +142,9 @@ impl MessageHandler {
                 tx_buffer: Vec::new(),
                 tx_buffer_len: 0,
             },
-            tx_message: message::IoLinkMessage::default(),
-            rx_message: message::IoLinkMessage::default(),
-            device_operate_state: DeviceMode::Startup,
+            tx_message: message::IoLinkMessage::new(message::DeviceMode::Startup),
+            rx_message: message::IoLinkMessage::new(message::DeviceMode::Startup),
+            device_operate_state: message::DeviceMode::Startup,
             pd_in_valid_status: types::PdStatus::INVALID,
             transmission_rate: com_timing::TransmissionRate::default(),
             expected_rx_bytes: 0, // 0 means not set
@@ -215,7 +208,6 @@ impl MessageHandler {
         mode_handler: &mut dl::mode_handler::DlModeHandler,
         physical_layer: &mut T,
     ) -> IoLinkResult<()> {
-        let _ = self.poll_active_states::<T>();
         match self.exec_transition {
             Transition::Tn => {
                 // No transition, remain in current state
@@ -267,6 +259,8 @@ impl MessageHandler {
                 self.execute_t11()?;
             }
         }
+
+        let _ = self.poll_active_states::<T>();
         Ok(())
     }
 
@@ -296,11 +290,13 @@ impl MessageHandler {
             MessageHandlerState::CreateMessage => {
                 // Check the response is ready to be sent
                 match self.device_operate_state {
-                    DeviceMode::Startup | DeviceMode::PreOperate => {
+                    message::DeviceMode::Startup | message::DeviceMode::PreOperate => {
                         self.execute_create_message_startup_preoperate()?;
+                        self.tx_message = message::IoLinkMessage::new(self.tx_message.frame_type);
                     }
-                    DeviceMode::Operate => {
+                    message::DeviceMode::Operate => {
                         self.execute_create_message_operate()?;
+                        self.tx_message = message::IoLinkMessage::new(self.tx_message.frame_type);
                     }
                 }
             }
@@ -355,6 +351,7 @@ impl MessageHandler {
                 Self::calculate_expected_rx_bytes(self.device_operate_state, mc, ckt);
         }
         if self.expected_rx_bytes == self.buffers.rx_buffer.len() as u8 {
+            self.tx_message.frame_type = self.device_operate_state;
             let _ = self.process_event(MessageHandlerEvent::Completed);
         }
         Ok(())
@@ -402,7 +399,7 @@ impl MessageHandler {
             data: od_data.clone(),
         };
         let _ = od_handler.od_ind(&od_ind_data);
-        if self.device_operate_state == DeviceMode::Operate {
+        if self.device_operate_state == message::DeviceMode::Operate {
             let pd_data = match self.rx_message.pd.as_ref() {
                 Some(pd_data) => pd_data,
                 None => return Err(IoLinkError::InvalidParameter),
@@ -415,6 +412,7 @@ impl MessageHandler {
             let pd_out_len = pd_data.len() as u8;
             let _ = pd_handler.pd_ind(0, 0, 0, pd_out_len, pd_data);
         }
+        self.rx_message = message::IoLinkMessage::new(self.device_operate_state);
         Ok(())
     }
 
@@ -467,12 +465,12 @@ impl MessageHandler {
     }
 
     fn calculate_expected_rx_bytes(
-        device_mode: DeviceMode,
+        device_mode: message::DeviceMode,
         mc: utils::frame_fromat::message::MsequenceControl,
         ckt: utils::frame_fromat::message::ChecksumMsequenceType,
     ) -> u8 {
         match device_mode {
-            DeviceMode::Startup => {
+            message::DeviceMode::Startup => {
                 if ckt.m_seq_type() == types::MsequenceBaseType::Type0 {
                     if mc.read_write() == types::RwDirection::Read {
                         // Receivable bytes will be 2 bytes.
@@ -485,7 +483,7 @@ impl MessageHandler {
                     0 // Invalid M-sequence type
                 }
             }
-            DeviceMode::PreOperate => {
+            message::DeviceMode::PreOperate => {
                 use config::m_seq_capability::pre_operate_m_sequence;
                 use config::on_req_data::pre_operate;
                 use utils::frame_fromat::message;
@@ -499,7 +497,7 @@ impl MessageHandler {
                     0 // Invalid M-sequence type
                 }
             }
-            DeviceMode::Operate => {
+            message::DeviceMode::Operate => {
                 use config::m_seq_capability::operate_m_sequence;
                 use config::on_req_data::operate;
                 use utils::frame_fromat::message;
@@ -630,14 +628,14 @@ impl MessageHandler {
         let io_link_message = &self.tx_message;
         // let tx_buffer = &mut self.buffers.tx_buffer;
         self.buffers.tx_buffer.clear();
-        let length = match self.device_operate_state {
-            DeviceMode::Startup => {
+        let length = match self.tx_message.frame_type {
+            message::DeviceMode::Startup => {
                 message::compile_iolink_startup_frame(&mut self.buffers.tx_buffer, io_link_message)?
             }
-            DeviceMode::PreOperate => {
+            message::DeviceMode::PreOperate => {
                 message::compile_iolink_preoperate_frame(&mut self.buffers.tx_buffer, io_link_message)?
             }
-            DeviceMode::Operate => {
+            message::DeviceMode::Operate => {
                 message::compile_iolink_operate_frame(&mut self.buffers.tx_buffer, io_link_message)?
             }
         };
@@ -653,13 +651,13 @@ impl MessageHandler {
         use utils::frame_fromat::message;
 
         let rx_buffer: &mut Vec<u8, { message::MAX_RX_FRAME_SIZE }> = &mut self.buffers.rx_buffer;
-        if message::validate_checksum(rx_buffer.len() as u8, rx_buffer) == false {
+        if message::validate_master_frame_checksum(rx_buffer.len() as u8, rx_buffer) == false {
             // If checksum is invalid, indicate error
             return Err(IoLinkError::ChecksumError);
         }
         let ckt = message::ChecksumMsequenceType::from_bits(rx_buffer[1]);
         let io_link_message = match self.device_operate_state {
-            DeviceMode::Startup => {
+            message::DeviceMode::Startup => {
                 const M_SEQ_BASE_TYPE: MsequenceBaseType =
                     message::get_m_sequence_base_type(MsequenceType::Type0);
                 if M_SEQ_BASE_TYPE != ckt.m_seq_type() {
@@ -667,7 +665,7 @@ impl MessageHandler {
                 }
                 message::parse_iolink_startup_frame(rx_buffer)
             }
-            DeviceMode::PreOperate => {
+            message::DeviceMode::PreOperate => {
                 let m_seq_base_type: MsequenceBaseType =
                     message::get_m_sequence_base_type(pre_operate_m_sequence::m_sequence_type());
                 if m_seq_base_type != ckt.m_seq_type() {
@@ -675,7 +673,7 @@ impl MessageHandler {
                 }
                 message::parse_iolink_pre_operate_frame(rx_buffer)
             }
-            DeviceMode::Operate => {
+            message::DeviceMode::Operate => {
                 let m_seq_base_type: MsequenceBaseType =
                     message::get_m_sequence_base_type(operate_m_sequence::m_sequence_type());
                 if m_seq_base_type != ckt.m_seq_type() {
@@ -695,7 +693,7 @@ impl MessageHandler {
         self.buffers.rx_buffer_len = 0;
         self.buffers.tx_buffer.fill(0);
         self.buffers.tx_buffer_len = 0;
-        self.tx_message = message::IoLinkMessage::default();
+        self.tx_message = message::IoLinkMessage::new(self.tx_message.frame_type);
     }
 }
 
@@ -751,16 +749,16 @@ impl DlModeInd for MessageHandler {
     fn dl_mode_ind(&mut self, mode: DlMode) -> IoLinkResult<()> {
         match mode {
             DlMode::Startup => {
-                self.device_operate_state = DeviceMode::Startup;
+                self.device_operate_state = message::DeviceMode::Startup;
             }
             DlMode::PreOperate => {
-                self.device_operate_state = DeviceMode::PreOperate;
+                self.device_operate_state = message::DeviceMode::PreOperate;
             }
             DlMode::Operate => {
-                self.device_operate_state = DeviceMode::Operate;
+                self.device_operate_state = message::DeviceMode::Operate;
             }
             DlMode::Inactive => {
-                self.device_operate_state = DeviceMode::Startup;
+                self.device_operate_state = message::DeviceMode::Startup;
             }
             DlMode::Com1 => {
                 self.transmission_rate = com_timing::TransmissionRate::Com1;
@@ -802,15 +800,4 @@ impl Default for MessageHandler {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_message_parsing() {}
-
-    #[test]
-    fn test_checksum_calculation() {}
 }

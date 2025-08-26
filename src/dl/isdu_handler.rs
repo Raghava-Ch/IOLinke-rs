@@ -154,7 +154,7 @@ impl IsduHandler {
     /// Create a new ISDU Handler
     pub fn new() -> Self {
         Self {
-            state: IsduHandlerState::Idle,
+            state: IsduHandlerState::Inactive,
             exec_transition: Transition::Tn,
             message_buffer: Vec::new(),
             od_ind_data_length: 0,

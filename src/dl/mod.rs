@@ -212,6 +212,7 @@ impl DataLinkLayer {
             let _ = self.od_handler.poll(
                 &mut self.command_handler,
                 &mut self.isdu_handler,
+                &mut self.message_handler,
                 &mut self.event_handler,
                 application_layer,
                 system_management,
@@ -258,8 +259,7 @@ impl od_handler::DlParamRsp for DataLinkLayer {
     /// for write operations, but this method provides a hook for
     /// potential future extensions.
     fn dl_write_param_rsp(&mut self) -> IoLinkResult<()> {
-        // No response is expected in specs
-        Ok(())
+        self.od_handler.dl_write_param_rsp(&mut self.message_handler)
     }
 }
 

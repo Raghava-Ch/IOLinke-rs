@@ -82,6 +82,15 @@ pub enum ParameterManagerState {
     Upload,
 }
 
+pub enum WriteCycleStatus {
+    /// Write cycle is not active
+    Successful,
+    /// Write cycle is active
+    Failed,
+    /// Write cycle is waiting for request
+    WaitingForRequest,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidityCheckResult {
     /// Parameter is valid
@@ -225,6 +234,7 @@ pub struct ParameterManager {
     ds_store_request: bool,
     param_storage: ParameterStorage,
     read_cycle: Option<(u16, u8)>, // (index, sub_index)
+    write_cycle_status: WriteCycleStatus,
     ds_command: Option<data_storage::DsCommand>,
 }
 
@@ -240,6 +250,7 @@ impl ParameterManager {
             ds_store_request: false,
             param_storage: ParameterStorage::new(),
             read_cycle: None,
+            write_cycle_status: WriteCycleStatus::WaitingForRequest,
             ds_command: None,
         }
     }
@@ -534,6 +545,20 @@ impl ParameterManager {
                 self.read_cycle = None;
             }
             None => {}
+        }
+        match self.write_cycle_status {
+            WriteCycleStatus::Successful => {
+                self.write_cycle_status = WriteCycleStatus::WaitingForRequest;
+                od_handler.al_write_rsp(Ok(()))?;
+            }
+            WriteCycleStatus::Failed => {
+                self.write_cycle_status = WriteCycleStatus::WaitingForRequest;
+                // TODO: Error codes must be verified and handled properly
+                let error_codes = isdu_error_code!(SERV_NOTAVAIL);  
+                od_handler.al_write_rsp(Err(al::services::AlRspError::Error(error_codes.0, error_codes.1)))?;
+            }
+            WriteCycleStatus::WaitingForRequest => {
+            }
         }
         if let Some(ds_command) = self.ds_command {
             data_storage.ds_command(ds_command)?;
@@ -934,10 +959,12 @@ impl al::ApplicationLayerReadWriteInd for ParameterManager {
             match self.param_storage.set_parameter(index, sub_index, data) {
                 Ok(_) => {
                     self.data_valid = ValidityCheckResult::Valid;
+                    self.write_cycle_status = WriteCycleStatus::Successful;
                 }
                 Err(e) => {
                     log::error!("Failed to set parameter: {:?}", e);
                     self.data_valid = ValidityCheckResult::Invalid;
+                    self.write_cycle_status = WriteCycleStatus::Failed;
                 }
             }
         }

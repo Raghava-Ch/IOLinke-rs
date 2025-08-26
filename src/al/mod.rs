@@ -31,6 +31,7 @@ pub mod services;
 mod data_storage;
 
 use heapless::Vec;
+use iolinke_macros::device_parameter_index;
 pub use parameter_manager::DeviceParametersIndex;
 pub use parameter_manager::SubIndex;
 pub use parameter_manager::DirectParameterPage1SubIndex;
@@ -285,7 +286,6 @@ impl system_management::SystemManagementInd for ApplicationLayer {
     fn sm_device_mode_ind(&mut self, mode: types::DeviceMode) -> system_management::SmResult<()> {
         let _ = self.parameter_manager.sm_device_mode_ind(mode);
         let _ = self.data_storage.sm_device_mode_ind(mode);
-
         Ok(())
     }
 }

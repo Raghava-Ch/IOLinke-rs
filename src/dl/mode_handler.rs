@@ -665,12 +665,6 @@ impl dl::command_handler::MasterCommandInd for DlModeHandler {
             MasterCommand::Fallback => {
                 let _ = self.process_event(DlModeEvent::MasterCommandFallback);
             }
-            MasterCommand::DeviceIdent => {
-                todo!()
-            }
-            MasterCommand::MasterIdent => {
-                todo!()
-            }
             _ => return Err(IoLinkError::InvalidEvent),
         }
         Ok(())

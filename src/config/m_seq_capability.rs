@@ -115,7 +115,7 @@ pub mod operate_m_sequence {
     use crate::{config};
 
     /// M-sequence types for the OPERATE mode (standard protocol) as per IO-Link Specification (Table A.10).
-    pub const fn operate_m_sequence_code() -> u8 {
+    pub const fn m_sequence_code() -> u8 {
         use crate::config::process_data::ProcessDataLength::{self, *};
         const PD_IN_LEN: ProcessDataLength = config::process_data::pd_in::config_length();
         const PD_OUT_LEN: ProcessDataLength = config::process_data::pd_out::config_length();
@@ -278,10 +278,9 @@ pub const fn isdu_supported() -> bool {
 /// - These bits are reserved and shall be set to `0`
 pub const fn m_sequence_capability_parameter() -> crate::utils::page_params::page1::MsequenceCapability {
     use crate::utils::page_params::page1;
-    use operate_m_sequence::{m_sequence_type, operate_m_sequence_code};
     let mut m_sequence_cap: page1::MsequenceCapability = page1::MsequenceCapability::new();
     m_sequence_cap.set_isdu(isdu_supported());
-    m_sequence_cap.set_preoperate_m_sequence(operate_m_sequence_code() as u8);
-    m_sequence_cap.set_operate_m_sequence(m_sequence_type() as u8);
+    m_sequence_cap.set_preoperate_m_sequence(pre_operate_m_sequence::m_sequence_code() as u8);
+    m_sequence_cap.set_operate_m_sequence(operate_m_sequence::m_sequence_code() as u8);
     m_sequence_cap
 }

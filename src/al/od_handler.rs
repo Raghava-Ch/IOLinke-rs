@@ -217,7 +217,7 @@ impl OnRequestDataHandler {
 
     /// Execute transition T2: Invoke DL_WriteParam (16 to 31)
     fn execute_t2(&mut self, data_link_layer: &mut dl::DataLinkLayer) -> IoLinkResult<()> {
-        // TODO: Invoke DL_WriteParam (16 to 31)
+        // TODO: Invoke DL_WriteParam (16 to 31)?
         data_link_layer.dl_write_param_rsp()?;
         Ok(())
     }
