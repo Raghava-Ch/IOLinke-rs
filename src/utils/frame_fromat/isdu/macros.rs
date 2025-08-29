@@ -101,15 +101,6 @@ macro_rules! isdu_extended_length_code {
 /// See table A.13 – ISDU syntax
 /// Table A.13 specifies the syntax of the ISDUs. ErrorType can be found in Annex C.
 #[macro_export]
-macro_rules! isdu_busy {
-    () => {
-        0xD
-    };
-}
-
-/// See table A.13 – ISDU syntax
-/// Table A.13 specifies the syntax of the ISDUs. ErrorType can be found in Annex C.
-#[macro_export]
 macro_rules! isdu_no_service {
     () => {
         0x0

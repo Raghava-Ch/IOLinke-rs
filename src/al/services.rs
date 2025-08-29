@@ -29,7 +29,7 @@ pub enum AlRspError {
 pub type AlResult<T> = Result<T, AlRspError>;
 
 pub trait AlReadRsp {
-    fn al_read_rsp(&mut self, result: AlResult<&[u8]>) -> IoLinkResult<()>;
+    fn al_read_rsp(&mut self, result: AlResult<(u8, &[u8])>) -> IoLinkResult<()>;
 }
 pub trait AlWriteRsp {
     fn al_write_rsp(&mut self, result: AlResult<()>) -> IoLinkResult<()>;

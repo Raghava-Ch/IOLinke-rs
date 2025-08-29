@@ -73,6 +73,7 @@ mod system_management;
 
 #[cfg(feature = "std")]
 pub mod ffi;
+
 mod types;
 
 use utils::{page_params::page1, frame_fromat};
@@ -100,6 +101,8 @@ pub use page1::{MsequenceCapability, MsequenceCapabilityBuilder};
 pub use page1::{RevisionId, RevisionIdBuilder};
 pub use page1::{ProcessDataIn, ProcessDataInBuilder, ProcessDataOut, ProcessDataOutBuilder};
 pub use page1::DeviceIdent;
+pub use al::parameter_manager::DeviceParametersIndex;
+pub use al::parameter_manager::SubIndex;
 
 /// Main IO-Link device implementation that orchestrates all protocol layers.
 ///

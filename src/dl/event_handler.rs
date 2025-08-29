@@ -329,7 +329,7 @@ impl dl::od_handler::OdInd for EventHandler {
         let event = if od_ind_data.rw_direction == types::RwDirection::Read
             && od_ind_data.com_channel == types::ComChannel::Diagnosis
         {
-            EventHandlerEvent::EventRead(od_ind_data.address_ctrl, od_ind_data.length)
+            EventHandlerEvent::EventRead(od_ind_data.address_ctrl, od_ind_data.req_length)
         } else if od_ind_data.rw_direction == types::RwDirection::Write
             && od_ind_data.com_channel == types::ComChannel::Diagnosis
             && od_ind_data.address_ctrl == 0x00

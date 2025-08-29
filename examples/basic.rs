@@ -26,7 +26,7 @@ use iolinke_device::{
     ComChannel, DeviceCom, DeviceIdent, DeviceMode, IoLinkDevice, CycleTimeBuilder,
     MsequenceBaseType, MsequenceCapability, PhysicalLayerInd, ProcessDataInBuilder,
     ProcessDataOutBuilder, RevisionIdBuilder, RwDirection, SioMode, TransmissionRate,
-    test_utils::{self, SystemManagementReq, ThreadMessage, take_care_of_poll_nb},
+    test_utils::{self, SystemManagementReq, ThreadMessage, take_care_of_poll},
 };
 use iolinke_macros::direct_parameter_address;
 use std::{
@@ -45,7 +45,7 @@ fn main() {
 
     let io_link_device_clone = Arc::clone(&io_link_device);
     let io_link_device_clone_poll = Arc::clone(&io_link_device);
-    take_care_of_poll_nb(io_link_device_clone_poll, usr_to_mock_rx, mock_to_usr_tx);
+    take_care_of_poll(io_link_device_clone_poll, usr_to_mock_rx, mock_to_usr_tx);
 
         let mseq_cap = test_utils::m_seq_capability::m_sequence_capability_parameter();
 

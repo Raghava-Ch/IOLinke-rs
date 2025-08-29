@@ -1,5 +1,5 @@
 use crate::{
-    IoLinkError, IoLinkResult, isdu_busy, isdu_extended_length_code, isdu_no_service,
+    IoLinkError, IoLinkResult, isdu_extended_length_code, isdu_no_service,
     isdu_read_failure_code, isdu_read_request_index_code,
     isdu_read_request_index_index_subindex_code, isdu_read_request_index_subindex_code,
     isdu_read_success_code, isdu_write_failure_code, isdu_write_request_index_code,
@@ -38,46 +38,49 @@ pub struct IsduService {
     pub length: u8,
 }
 
-pub fn compile_isdu_write_success_response(buffer: &mut [u8]) -> IoLinkResult<()> {
+pub fn compile_isdu_write_success_response(buffer: &mut Vec<u8, MAX_ISDU_LENGTH>) -> IoLinkResult<()> {
     let i_service = IsduServiceBuilder::new()
         .with_i_service(isdu_write_success_code!())
         .with_length(2)
         .build();
-    buffer[0] = i_service.into_bits();
-    buffer[1] = 0;
+    buffer.push(i_service.into_bits()).map_err(|_| IoLinkError::InvalidLength)?;
+    buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?;
     let chkpdu = calculate_checksum(2, &buffer[0..2]);
-    buffer[1] = chkpdu;
+    buffer.pop();
+    buffer.push(chkpdu).map_err(|_| IoLinkError::InvalidLength)?;
     Ok(())
 }
 
 pub fn compile_isdu_read_success_response(
     length: u8,
     data: &[u8],
-    buffer: &mut [u8],
+    buffer: &mut Vec<u8, MAX_ISDU_LENGTH>,
 ) -> IoLinkResult<()> {
-    if (1..=15).contains(&length) {
+    if (2..=15).contains(&length) {
         // Valid data length range (excluding length byte and checksum)
         let i_service = IsduServiceBuilder::new()
             .with_i_service(isdu_read_success_code!())
-            .with_length(length + 2) // +2 for length byte and checksum
+            .with_length(length + 1) // +1 for checksum byte
             .build();
-        buffer[0] = i_service.into_bits();
-        buffer[1..1 + length as usize].copy_from_slice(&data[..length as usize]);
+        buffer.push(i_service.into_bits()).map_err(|_| IoLinkError::InvalidLength)?;
+        buffer.extend_from_slice(&data[..length as usize]).map_err(|_| IoLinkError::InvalidLength)?;
         let total_length = 1 + length as usize;
-        buffer[total_length] = 0;
+        buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?;
         let chkpdu = calculate_checksum(total_length as u8, &buffer[0..total_length]);
-        buffer[total_length] = chkpdu;
+        buffer.pop();
+        buffer.push(chkpdu).map_err(|_| IoLinkError::InvalidLength)?;
     } else {
         let i_service = IsduServiceBuilder::new()
             .with_i_service(isdu_read_success_code!())
             .with_length(isdu_extended_length_code!())
             .build();
-        buffer[0] = i_service.into_bits();
-        buffer[1] = 2 + length; // Extended length byte
-        buffer[2..2 + length as usize].copy_from_slice(&data[..length as usize]);
+        buffer.push(i_service.into_bits()).map_err(|_| IoLinkError::InvalidLength)?;
+        buffer.push(2 + length).map_err(|_| IoLinkError::InvalidLength)?; // Extended length byte
+        buffer.extend_from_slice(data).map_err(|_| IoLinkError::InvalidLength)?;
         let total_length = 2 + length as usize;
         let chkpdu = calculate_checksum(total_length as u8, &buffer[0..total_length]);
-        buffer[total_length] = chkpdu;
+        buffer.pop();
+        buffer.push(chkpdu).map_err(|_| IoLinkError::InvalidLength)?;
     }
     Ok(())
 }
@@ -85,41 +88,44 @@ pub fn compile_isdu_read_success_response(
 pub fn compile_isdu_read_failure_response(
     error_code: u8,
     additional_error_code: u8,
-    buffer: &mut [u8],
-) {
+    buffer: &mut Vec<u8, MAX_ISDU_LENGTH>,
+) -> IoLinkResult<()> {
     let i_service = IsduServiceBuilder::new()
         .with_i_service(isdu_read_failure_code!())
         .with_length(4)
         .build();
-    buffer[0] = i_service.into_bits();
-    buffer[1] = error_code;
-    buffer[2] = additional_error_code;
-    buffer[3] = 0;
+    buffer.push(i_service.into_bits()).map_err(|_| IoLinkError::InvalidLength)?;
+    buffer.push(error_code).map_err(|_| IoLinkError::InvalidLength)?;
+    buffer.push(additional_error_code).map_err(|_| IoLinkError::InvalidLength)?;
+    buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?;
     let chkpdu = calculate_checksum(4, &buffer[0..4]);
-    buffer[3] = chkpdu;
+    buffer.pop();
+    buffer.push(chkpdu).map_err(|_| IoLinkError::InvalidLength)?;
+    Ok(())
 }
 
 pub fn compile_isdu_write_failure_response(
     error_code: u8,
     additional_error_code: u8,
-    buffer: &mut [u8],
+    buffer: &mut Vec<u8, MAX_ISDU_LENGTH>,
 ) -> IoLinkResult<()> {
     let i_service = IsduServiceBuilder::new()
         .with_i_service(isdu_write_failure_code!())
         .with_length(3)
         .build();
-    buffer[0] = i_service.into_bits();
-    buffer[1] = error_code;
-    buffer[2] = additional_error_code;
-    buffer[3] = 0;
+    buffer.push(i_service.into_bits()).map_err(|_| IoLinkError::InvalidLength)?;
+    buffer.push(error_code).map_err(|_| IoLinkError::InvalidLength)?;
+    buffer.push(additional_error_code).map_err(|_| IoLinkError::InvalidLength)?;
+    buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?;
     let chkpdu = calculate_checksum(4, &buffer[0..4]);
-    buffer[3] = chkpdu;
+    buffer.pop();
+    buffer.push(chkpdu).map_err(|_| IoLinkError::InvalidLength)?;
     Ok(())
 }
 
-pub fn compile_isdu_busy_failure_response() -> IoLinkResult<[u8; 1]> {
+pub fn compile_isdu_busy_response() -> IoLinkResult<[u8; 1]> {
     let i_service = IsduServiceBuilder::new()
-        .with_length(isdu_busy!())
+        .with_length(1)
         .build();
     let buffer = i_service.into_bits();
     Ok([buffer])
@@ -158,12 +164,13 @@ pub fn parse_isdu_read_request(buffer: &[u8]) -> IoLinkResult<(IsduService, u16,
     if buffer.len() < 3 {
         return Err(IoLinkError::InvalidParameter);
     }
+    println!("buffer: {:?}", buffer);
     if calculate_checksum(buffer.len() as u8, buffer) != 0 {
         // Invalid checksum
         return Err(IoLinkError::ChecksumError);
     }
     let i_service: IsduService = IsduService::from_bits(buffer[0]);
-    if i_service.i_service() != isdu_read_request_index_code!() {
+    if i_service.i_service() == isdu_read_request_index_code!() {
         parse_read_request_with_index(buffer)
     } else if i_service.i_service() == isdu_read_request_index_subindex_code!() {
         parse_read_request_with_index_subindex(buffer)

@@ -3,9 +3,12 @@
 //! This module implements the Parameter Manager as defined in
 //! IO-Link Specification v1.1.4
 
-use crate::al::{data_storage, services};
 use crate::al::services::AlReadRsp;
+use crate::al::{data_storage, services};
 use crate::storage::parameters_memory::ParameterStorage;
+pub use crate::storage::parameters_memory::{
+    DataStorageIndexSubIndex, DeviceParametersIndex, DirectParameterPage1SubIndex, SubIndex,
+};
 use crate::{
     al::{self, od_handler, services::AlWriteRsp},
     block_param_support, isdu_error_code,
@@ -14,9 +17,8 @@ use crate::{
 };
 use crate::{log_state_transition, log_state_transition_error};
 use bitfields::bitfield;
-use iolinke_macros::{bitfield_support, device_parameter_index, system_commands};
+use iolinke_macros::{bitfield_support, system_commands};
 
-device_parameter_index!(DeviceParametersIndex);
 system_commands!(SystemCommand);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -528,11 +530,11 @@ impl ParameterManager {
         match self.read_cycle {
             Some((index, sub_index)) => {
                 // Avoid creating a temporary that is dropped while borrowed
-                let param: Result<&[u8], _> = self.param_storage.get_parameter(index, sub_index);
+                let param: Result<(u8, &[u8]), _> = self.param_storage.get_parameter(index, sub_index);
                 match param {
-                    Ok(data) => {
-                        let result: Result<&[u8], al::services::AlRspError> =
-                            al::services::AlResult::Ok(data);
+                    Ok((length, data)) => {
+                        let result: Result<(u8, &[u8]), al::services::AlRspError> =
+                            al::services::AlResult::Ok((length, data));
                         od_handler.al_read_rsp(result)?;
                     }
                     Err(_) => {
@@ -554,11 +556,13 @@ impl ParameterManager {
             WriteCycleStatus::Failed => {
                 self.write_cycle_status = WriteCycleStatus::WaitingForRequest;
                 // TODO: Error codes must be verified and handled properly
-                let error_codes = isdu_error_code!(SERV_NOTAVAIL);  
-                od_handler.al_write_rsp(Err(al::services::AlRspError::Error(error_codes.0, error_codes.1)))?;
+                let error_codes = isdu_error_code!(SERV_NOTAVAIL);
+                od_handler.al_write_rsp(Err(al::services::AlRspError::Error(
+                    error_codes.0,
+                    error_codes.1,
+                )))?;
             }
-            WriteCycleStatus::WaitingForRequest => {
-            }
+            WriteCycleStatus::WaitingForRequest => {}
         }
         if let Some(ds_command) = self.ds_command {
             data_storage.ds_command(ds_command)?;
@@ -882,7 +886,7 @@ impl ParameterManager {
             al::SubIndex::DataStorageIndex(al::DataStorageIndexSubIndex::StateProperty),
         );
 
-        let state_property = self
+        let (_length, state_property) = self
             .param_storage
             .get_parameter(STATE_PROPERTY_INDEX, STATE_PROPERTY_SUBINDEX)
             .map_err(|_| IoLinkError::FailedToGetParameter)?;
@@ -913,7 +917,7 @@ impl ParameterManager {
             al::SubIndex::DataStorageIndex(al::DataStorageIndexSubIndex::StateProperty),
         );
 
-        let state_property = self
+        let (_length, state_property) = self
             .param_storage
             .get_parameter(STATE_PROPERTY_INDEX, STATE_PROPERTY_SUBINDEX)
             .map_err(|_| IoLinkError::FailedToGetParameter)?;

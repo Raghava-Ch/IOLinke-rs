@@ -9,9 +9,6 @@ use crate::dl;
 use crate::dl::DlModeInd;
 use crate::dl::DlReadWriteInd;
 use crate::dl::{od_handler::OdInd, pd_handler};
-use crate::extract_address_fctrl;
-use crate::extract_com_channel;
-use crate::extract_message_type;
 use crate::log_state_transition;
 use crate::log_state_transition_error;
 use crate::pl;
@@ -19,7 +16,6 @@ use crate::types::{self, IoLinkError, IoLinkResult};
 use crate::utils;
 use crate::utils::frame_fromat::com_timing;
 use crate::utils::frame_fromat::message;
-use crate::{get_bits_0_4, get_bits_5_6, get_bits_6_7};
 use heapless::Vec;
 
 /// Message Handler states
@@ -201,8 +197,6 @@ impl MessageHandler {
     /// See IO-Link v1.1.4 Section 6.3
     pub fn poll<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
-        event_handler: &mut dl::event_handler::EventHandler,
-        isdu_handler: &mut dl::isdu_handler::IsduHandler,
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
         pd_handler: &mut pd_handler::ProcessDataHandler,
         mode_handler: &mut dl::mode_handler::DlModeHandler,
@@ -232,7 +226,7 @@ impl MessageHandler {
             }
             Transition::T5 => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t5(event_handler, isdu_handler, od_handler, pd_handler)?;
+                self.execute_t5(od_handler, pd_handler)?;
             }
             Transition::T6 => {
                 self.exec_transition = Transition::Tn;
@@ -371,11 +365,14 @@ impl MessageHandler {
     /// Invoke OD.ind and PD.ind service indications
     fn execute_t5(
         &mut self,
-        event_handler: &mut dl::event_handler::EventHandler,
-        isdu_handler: &mut dl::isdu_handler::IsduHandler,
         od_handler: &mut dl::od_handler::OnRequestDataHandler,
         pd_handler: &mut pd_handler::ProcessDataHandler,
     ) -> IoLinkResult<()> {
+        let od_data_len = match self.tx_message.frame_type {
+            message::DeviceMode::Startup => 1,
+            message::DeviceMode::PreOperate => config::on_req_data::pre_operate::od_length() as u8,
+            message::DeviceMode::Operate => config::on_req_data::operate::od_length() as u8,
+        };
         let rw = match self.rx_message.read_write {
             Some(rw) => rw,
             None => return Err(IoLinkError::InvalidParameter),
@@ -388,15 +385,13 @@ impl MessageHandler {
             Some(addr_ctrl) => addr_ctrl,
             None => return Err(IoLinkError::InvalidParameter),
         };
-        let od_data: Vec<u8, { message::MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }> =
-            self.rx_message.od.clone().unwrap_or_default();
 
         let od_ind_data = dl::od_handler::OdIndData {
             rw_direction: rw,
             com_channel: channel,
             address_ctrl: addr_ctrl,
-            length: od_data.len() as u8,
-            data: od_data.clone(),
+            req_length: od_data_len,
+            data: self.rx_message.od.clone().unwrap_or_default(),
         };
         let _ = od_handler.od_ind(&od_ind_data);
         if self.device_operate_state == message::DeviceMode::Operate {

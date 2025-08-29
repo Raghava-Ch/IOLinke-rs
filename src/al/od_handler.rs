@@ -4,7 +4,7 @@
 //! IO-Link Specification v1.1.4
 
 use crate::{
-    al::{self, services::ApplicationLayerServicesInd, ApplicationLayerReadWriteInd},
+    al::{self, ApplicationLayerReadWriteInd, services::ApplicationLayerServicesInd},
     dl::{self, DlIsduTransportRsp, DlParamRsp},
     types::{IoLinkError, IoLinkResult},
 };
@@ -38,7 +38,7 @@ enum Transition {
     T3(u8), // (address)
     /// T4: State: AwaitAlReadRsp (2) -> Idle (0)
     /// Action: Invoke DL_ReadParam (0 to 31)
-    T4([u8; dl::MAX_ISDU_LENGTH]), // (data)
+    T4(u8, [u8; dl::MAX_ISDU_LENGTH]), // (length, data)
     /// T5: State: Idle (0) -> AwaitAlRwRsp (3)
     /// Action: Invoke AL_Read
     T5(dl::Isdu),
@@ -47,7 +47,7 @@ enum Transition {
     T6(dl::Isdu),
     /// T7: State: AwaitAlRwRsp (3) -> Idle (0)
     /// Action: Invoke DL_ISDUTransport (read)
-    T7(u16, u8, [u8; dl::MAX_ISDU_LENGTH]), // (index, sub_index, data)
+    T7(u16, u8, u8, [u8; dl::MAX_ISDU_LENGTH]), // (index, sub_index, length, data)
     /// T8: State: AwaitAlRwRsp (3) -> Idle (0)
     /// Action: Invoke DL_ISDUTransport (write)
     T8,
@@ -76,7 +76,7 @@ pub enum OnRequestHandlerEvent {
     /// {DL_ReadParam_ind}
     DlReadParamInd(u8), // (address)
     /// {AL_Read_rsp}
-    AlReadRsp([u8; dl::MAX_ISDU_LENGTH]), // (data)
+    AlReadRsp(u8, [u8; dl::MAX_ISDU_LENGTH]), // (length, data)
     /// {DL_ISDUTransport_ind[DirRead]}
     DlIsduTransportIndDirRead(dl::Isdu),
     /// {DL_ISDUTransport_ind[DirWrite]}
@@ -104,8 +104,8 @@ impl OnRequestDataHandler {
 
     /// Process an event
     pub fn process_event(&mut self, event: OnRequestHandlerEvent) -> IoLinkResult<()> {
-        use OnRequestHandlerEvent as Event;
         use OnRequestDataHandlerState as State;
+        use OnRequestHandlerEvent as Event;
 
         let (new_transition, new_state) = match (self.state, event) {
             // Valid transitions according to Table 75
@@ -123,12 +123,12 @@ impl OnRequestDataHandler {
                 (Transition::T6(isdu), State::AwaitAlRwRsp)
             }
             (State::AwaitAlWriteRsp, Event::AlWriteRsp) => (Transition::T2, State::Idle),
-            (State::AwaitAlReadRsp, Event::AlReadRsp(data)) => {
-                (Transition::T4(data), State::Idle)
+            (State::AwaitAlReadRsp, Event::AlReadRsp(length, data)) => {
+                (Transition::T4(length, data), State::Idle)
             }
             (State::AwaitAlRwRsp, Event::DlIsduAbort) => (Transition::T10, State::Idle),
-            (State::AwaitAlRwRsp, Event::AlReadRsp(data)) => {
-                (Transition::T7(0, 0, data), State::Idle)
+            (State::AwaitAlRwRsp, Event::AlReadRsp(length, data)) => {
+                (Transition::T7(0, 0, length, data), State::Idle)
             }
             (State::AwaitAlRwRsp, Event::AlWriteRsp) => (Transition::T8, State::Idle),
             (State::AwaitAlRwRsp, Event::AlAbort) => (Transition::T9, State::Idle),
@@ -166,7 +166,7 @@ impl OnRequestDataHandler {
                 self.exec_transition = Transition::Tn;
                 self.execute_t3(address, parameter_manager)?;
             }
-            Transition::T4(data) => {
+            Transition::T4(_length, data) => {
                 self.exec_transition = Transition::Tn;
                 self.execute_t4(&data, data_link_layer)?;
             }
@@ -178,9 +178,9 @@ impl OnRequestDataHandler {
                 self.exec_transition = Transition::Tn;
                 self.execute_t6(isdu, parameter_manager)?;
             }
-            Transition::T7(index, _, data) => {
+            Transition::T7(index, _sub_index, length, data) => {
                 self.exec_transition = Transition::Tn;
-                self.execute_t7(index, &data, data_link_layer)?;
+                self.execute_t7(index, length, &data, data_link_layer)?;
             }
             Transition::T8 => {
                 self.exec_transition = Transition::Tn;
@@ -275,11 +275,12 @@ impl OnRequestDataHandler {
     fn execute_t7(
         &mut self,
         index: u16,
+        length: u8,
         data: &[u8; dl::MAX_ISDU_LENGTH],
         data_link_layer: &mut dl::DataLinkLayer,
     ) -> IoLinkResult<()> {
         // TODO: Invoke DL_ISDUTransport (read)
-        data_link_layer.dl_isdu_transport_read_rsp(index as u8, data)?;
+        data_link_layer.dl_isdu_transport_read_rsp(length, data)?;
         Ok(())
     }
 
@@ -358,12 +359,12 @@ impl dl::DlIsduTransportInd for OnRequestDataHandler {
 }
 
 impl al::services::AlReadRsp for OnRequestDataHandler {
-    fn al_read_rsp(&mut self, result: al::services::AlResult<&[u8]>) -> IoLinkResult<()> {
+    fn al_read_rsp(&mut self, result: al::services::AlResult<(u8, &[u8])>) -> IoLinkResult<()> {
         // Handle AL_Read response
-        let data = result.map_err(|_| IoLinkError::InvalidData)?;
+        let (length, data) = result.map_err(|_| IoLinkError::InvalidData)?;
         let mut data_array = [0; dl::MAX_ISDU_LENGTH];
-        data_array[..data.len()].copy_from_slice(data);
-        self.process_event(OnRequestHandlerEvent::AlReadRsp(data_array))?;
+        data_array[..length as usize].copy_from_slice(data);
+        self.process_event(OnRequestHandlerEvent::AlReadRsp(length, data_array))?;
         Ok(())
     }
 }

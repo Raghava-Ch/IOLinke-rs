@@ -50,7 +50,7 @@ pub struct OdIndData {
     pub rw_direction: types::RwDirection,
     pub com_channel: types::ComChannel,
     pub address_ctrl: u8,
-    pub length: u8,
+    pub req_length: u8,
     pub data: Vec<u8, OD_LENGTH>,
 }
 
@@ -60,7 +60,7 @@ impl OdIndData {
             rw_direction: types::RwDirection::Read,
             com_channel: types::ComChannel::Page,
             address_ctrl: 0,
-            length: 0,
+            req_length: 0,
             data: Vec::new(),
         }
     }

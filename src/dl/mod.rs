@@ -198,8 +198,6 @@ impl DataLinkLayer {
         // Message handler poll - coordinates all message operations
         {
             let _ = self.message_handler.poll(
-                &mut self.event_handler,
-                &mut self.isdu_handler,
                 &mut self.od_handler,
                 &mut self.pd_handler,
                 &mut self.mode_handler,
@@ -280,7 +278,7 @@ impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
     /// - `Err(IoLinkError)` if an error occurred
     fn dl_isdu_transport_read_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
         self.isdu_handler
-            .dl_isdu_transport_read_rsp(length, data, &mut self.message_handler)
+            .dl_isdu_transport_read_rsp(length, data)
     }
 
     /// Handles ISDU write responses from the application layer.
@@ -294,7 +292,7 @@ impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
     /// - `Err(IoLinkError)` if an error occurred
     fn dl_isdu_transport_write_rsp(&mut self) -> IoLinkResult<()> {
         self.isdu_handler
-            .dl_isdu_transport_write_rsp(&mut self.message_handler)
+            .dl_isdu_transport_write_rsp()
     }
 
     /// Handles ISDU read error responses from the application layer.
@@ -319,7 +317,6 @@ impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
         self.isdu_handler.dl_isdu_transport_read_error_rsp(
             error,
             additional_error,
-            &mut self.message_handler,
         )
     }
 
@@ -345,7 +342,6 @@ impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
         self.isdu_handler.dl_isdu_transport_write_error_rsp(
             error,
             additional_error,
-            &mut self.message_handler,
         )
     }
 }

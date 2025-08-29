@@ -130,16 +130,16 @@ pub const fn function_id_2() -> u8 {
     0x01u8
 }
 
-pub const fn vendor_name() -> &'static [u8] {
-    b"IOLinke"
+pub const fn vendor_name() -> &'static str {
+    "IOLinke"
 }
 
 pub const fn vendor_name_length() -> u8 {
     vendor_name().len() as u8
 }
 
-pub const fn product_name() -> &'static [u8] {
-    b"IOLinke"
+pub const fn product_name() -> &'static str {
+    "IOLinke"
 }
 
 pub const fn product_name_length() -> u8 {
@@ -559,7 +559,7 @@ pub mod storage_config {
 
         /// Returns the vendor name as a byte slice.
         #[inline(always)]
-        pub const fn vendor_name() -> &'static [u8] {
+        pub const fn vendor_name() -> &'static str {
             config::vendor_specifics::vendor_name()
         }
         /// Returns the length of the vendor name.
@@ -569,7 +569,7 @@ pub mod storage_config {
         }
         /// Returns the product name as a byte slice.
         #[inline(always)]
-        pub const fn product_name() -> &'static [u8] {
+        pub const fn product_name() -> &'static str {
             config::vendor_specifics::product_name()
         }
         /// Returns the length of the product name.
@@ -681,10 +681,10 @@ pub mod storage_config {
 
     // --- Vendor/Product Name (0x0010, 0x0012) ---
     const _VENDOR_NAME_INDEX: u16 = param_indices::vendor_name();
-    const VENDOR_NAME: &[u8] = vendor_product_info::vendor_name();
+    const VENDOR_NAME: &'static str = vendor_product_info::vendor_name();
     const _VENDOR_NAME_LENGTH: u8 = vendor_product_info::vendor_name_length();
     const _PRODUCT_NAME_INDEX: u16 = param_indices::product_name();
-    const PRODUCT_NAME: &[u8] = vendor_product_info::product_name();
+    const PRODUCT_NAME: &'static str = vendor_product_info::product_name();
     const _PRODUCT_NAME_LENGTH: u8 = vendor_product_info::product_name_length();
 
     // --- Configuration Values ---
@@ -732,7 +732,7 @@ pub mod storage_config {
         (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,     /* DATA_STORAGE_SIZE_SUBINDEX */ 0x03,             /* Default */  1,       0..0, ReadWrite,   u8, &[0]),
         (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,    /* PARAMETER_CHECKSUM_SUBINDEX */ 0x04,             /* Default */  1,       0..0, ReadWrite,   u8, &[0]),
         (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,            /* INDEX_LIST_SUBINDEX */ 0x05,   /* INDEX_LIST_LENGTH */ 30,      0..29, ReadWrite,   u8, &[0]),
-        (       /* VENDOR_NAME_INDEX */ 0x0010,           /* VENDOR_NAME_SUBINDEX */ 0x00,  /* VENDOR_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, VENDOR_NAME),
-        (      /* PRODUCT_NAME_INDEX */ 0x0012,          /* PRODUCT_NAME_SUBINDEX */ 0x00, /* PRODUCT_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, PRODUCT_NAME),
+        (       /* VENDOR_NAME_INDEX */ 0x0010,           /* VENDOR_NAME_SUBINDEX */ 0x00,  /* VENDOR_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, VENDOR_NAME.as_bytes()),
+        (      /* PRODUCT_NAME_INDEX */ 0x0012,          /* PRODUCT_NAME_SUBINDEX */ 0x00, /* PRODUCT_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, PRODUCT_NAME.as_bytes()),
     }
 }
