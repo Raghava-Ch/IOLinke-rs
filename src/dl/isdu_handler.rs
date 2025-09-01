@@ -2,8 +2,8 @@
 //!
 //! This module implements the ISDU Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 8.4.3
-use crate::config;
 use crate::utils::frame_fromat::isdu::MAX_ISDU_LENGTH;
+use crate::{RwDirection, config};
 use crate::{
     al::{self},
     dl::{self, od_handler},
@@ -265,7 +265,7 @@ impl IsduHandler {
             Transition::T8 => {
                 // State: ISDUResponse (4) -> Idle (1)
                 self.exec_transition = Transition::Tn;
-                let _ = self.execute_t8();
+                let _ = self.execute_t8(message_handler);
             }
             Transition::T9 => {
                 // State: ISDURequest (2) -> Idle (1)
@@ -316,6 +316,7 @@ impl IsduHandler {
     fn execute_t1(&mut self) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
+        self.message_buffer.tx_buffer.clear();
         Ok(())
     }
 
@@ -327,6 +328,7 @@ impl IsduHandler {
     ) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
+        self.message_buffer.tx_buffer.clear();
         // Hanled in od_ind function
         let _ = message_handler.od_rsp(0, &[]);
         Ok(())
@@ -352,37 +354,46 @@ impl IsduHandler {
     ) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
-        let _ = message_handler.od_rsp(0, &[]);
+        self.message_buffer.tx_buffer.clear();
+        let isdu_busy = utils::frame_fromat::isdu::compile_isdu_busy_response()?;
+        let _ = message_handler.od_rsp(isdu_busy.len() as u8, &isdu_busy);
         // self.invoke_dl_isdu_transport_ind(od_ind_data)
-        let (i_service, index, sub_index) = match utils::frame_fromat::isdu::parse_isdu_read_request(
-            &self.message_buffer.rx_buffer,
-        ) {
-            Ok(result) => result,
-            Err(_) => {
-                self.process_event(IsduHandlerEvent::IsduError)?;
-                return Err(IoLinkError::InvalidData);
-            }
-        };
+        let (i_service, index, sub_index, range) =
+            match utils::frame_fromat::isdu::parse_isdu_request(&self.message_buffer.rx_buffer) {
+                Ok(result) => result,
+                Err(_) => {
+                    self.process_event(IsduHandlerEvent::IsduError)?;
+                    return Err(IoLinkError::InvalidData);
+                }
+            };
         let i_service = i_service.i_service();
         let is_write = if i_service == isdu_read_request_index_code!()
             || i_service == isdu_read_request_index_subindex_code!()
             || i_service == isdu_read_request_index_index_subindex_code!()
         {
-            false
+            RwDirection::Read
         } else if i_service == isdu_write_request_index_code!()
             || i_service == isdu_write_request_index_subindex_code!()
             || i_service == isdu_write_request_index_index_subindex_code!()
         {
-            true
+            RwDirection::Write
         } else {
             self.process_event(IsduHandlerEvent::IsduError)?;
             return Err(IoLinkError::InvalidData);
         };
-
+        let data: Vec<u8, MAX_ISDU_LENGTH> = if let Some(range) = range {
+            let from = range.0;
+            let to = range.1;
+            Vec::from_slice(&self.message_buffer.rx_buffer[from..to])
+                .map_err(|_| IoLinkError::InvalidLength)?
+        } else {
+            Vec::from_slice(&self.message_buffer.rx_buffer)
+                .map_err(|_| IoLinkError::InvalidLength)?
+        };
         application_layer.dl_isdu_transport_ind(Isdu {
             index,
             sub_index,
-            data: Vec::new(),
+            data,
             direction: is_write,
         })
     }
@@ -458,9 +469,15 @@ impl IsduHandler {
 
     /// Execute transition T8: ISDUResponse (4) -> Idle (1)
     /// Action: -
-    fn execute_t8(&mut self) -> IoLinkResult<()> {
+    fn execute_t8(
+        &mut self,
+        message_handler: &mut dl::message_handler::MessageHandler,
+    ) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
+        self.message_buffer.tx_buffer.clear();
+        let isdu_no_service = utils::frame_fromat::isdu::compile_isdu_no_service_response()?;
+        message_handler.od_rsp(isdu_no_service.len() as u8, &isdu_no_service)?;
         Ok(())
     }
 
@@ -469,6 +486,7 @@ impl IsduHandler {
     fn execute_t9(&mut self) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
+        self.message_buffer.tx_buffer.clear();
         Ok(())
     }
 
@@ -477,6 +495,7 @@ impl IsduHandler {
     fn execute_t10(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
+        self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
 
@@ -485,6 +504,7 @@ impl IsduHandler {
     fn execute_t11(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
+        self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
 
@@ -499,6 +519,7 @@ impl IsduHandler {
     fn execute_t13(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
+        self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
 
@@ -518,6 +539,7 @@ impl IsduHandler {
     fn execute_t15(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
+        self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
 
@@ -526,6 +548,7 @@ impl IsduHandler {
     fn execute_t16(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer_ready = false;
+        self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
 
@@ -589,75 +612,69 @@ impl IsduHandler {
 
 impl dl::od_handler::OdInd for IsduHandler {
     fn od_ind(&mut self, od_ind_data: &od_handler::OdIndData) -> IoLinkResult<()> {
-        use types::RwDirection::Read;
-        use types::RwDirection::Write;
-        // Process the ISDU request
-        let event = if od_ind_data.com_channel == types::ComChannel::Isdu {
-            // Determine event based on the OD.ind parameters
-            match (od_ind_data.rw_direction, od_ind_data.address_ctrl) {
-                // ISDUWrite: OD.ind(W, ISDU, FlowCtrl, Data)
-                (Write, (0..=0x0Fu8)) => {
-                    let isdu_data = od_ind_data.data.clone();
-                    if isdu_data.len() + self.message_buffer.rx_buffer.len() > 238 {
-                        return Err(IoLinkError::InvalidLength);
-                    }
-                    self.message_buffer.rx_buffer.extend(isdu_data);
-                    IsduHandlerEvent::IsduWrite
-                }
+        use types::RwDirection::{Read, Write};
 
-                // ISDURead: OD.ind(R, ISDU, Start or FlowCtrl, ...)
-                (Read, (0..=0x0Fu8)) => {
-                    if self.state != IsduHandlerState::ISDURequest && self.state != IsduHandlerState::Inactive {
-                        IsduHandlerEvent::IsduRead(od_ind_data.address_ctrl, od_ind_data.req_length)
-                    } else {
-                        IsduHandlerEvent::IsduError
-                    }
-                }
+        // Only handle ISDU channel
+        if od_ind_data.com_channel != types::ComChannel::Isdu {
+            return Err(IoLinkError::InvalidEvent);
+        }
 
-                // ISDURecComplete: If OD.ind(R, ISDU, Start, ...) received
-                // (Read, addr_ctrl) where addr_ctrl == flow_ctrl!(START)
-                (Read, flow_ctrl!(START)) => {
-                    if self.state == IsduHandlerState::ISDURequest {
-                        IsduHandlerEvent::IsduRecComplete
-                    } else if self.state == IsduHandlerState::ISDUWait {
+        let event = match (od_ind_data.rw_direction, od_ind_data.address_ctrl) {
+            // ISDUWrite: OD.ind(W, ISDU, FlowCtrl, Data)
+            (Write, 0x00..=0x0F) => {
+                let isdu_data = od_ind_data.data.clone();
+                if isdu_data.len() + self.message_buffer.rx_buffer.len() > 238 {
+                    return Err(IoLinkError::InvalidLength);
+                }
+                self.message_buffer.rx_buffer.extend(isdu_data);
+                IsduHandlerEvent::IsduWrite
+            }
+
+            // ISDURead: OD.ind(R, ISDU, Start or FlowCtrl, ...)
+            (Read, 0x00..=0x0F) => {
+                if self.state != IsduHandlerState::ISDURequest
+                    && self.state != IsduHandlerState::Inactive
+                {
+                    IsduHandlerEvent::IsduRead(od_ind_data.address_ctrl, od_ind_data.req_length)
+                } else {
+                    IsduHandlerEvent::IsduError
+                }
+            }
+
+            // ISDURecComplete: If OD.ind(R, ISDU, Start, ...) received
+            (Read, flow_ctrl!(START)) => {
+                match self.state {
+                    IsduHandlerState::ISDURequest => IsduHandlerEvent::IsduRecComplete,
+                    IsduHandlerState::ISDUWait => {
                         if self.message_buffer.tx_buffer_ready {
-                            IsduHandlerEvent::IsduRespStart(
-                                0, /* First segment */
-                                od_ind_data.req_length,
-                            )
+                            IsduHandlerEvent::IsduRespStart(0, od_ind_data.req_length)
                         } else {
-                            // Isdu response is not ready, 
+                            // Isdu response is not ready,
                             // so we need to send a busy isdu response,
                             // So segment number is dont care
-                            IsduHandlerEvent::IsduRead(
-                                0, /* Dummy segment */
-                                od_ind_data.req_length,
-                            )
+                            IsduHandlerEvent::IsduRead(0, od_ind_data.req_length)
                         }
-                    } else {
-                        IsduHandlerEvent::IsduError
                     }
+                    _ => IsduHandlerEvent::IsduError,
                 }
-
-                // ISDUStart: OD.ind(W, ISDU, Start, Data)
-                (Write, flow_ctrl!(START)) => {
-                    let isdu_data = od_ind_data.data.clone();
-                    self.message_buffer.rx_buffer.clear();
-                    self.message_buffer.rx_buffer.extend(isdu_data);
-                    IsduHandlerEvent::IsduStart
-                }
-
-                // ISDUSendComplete: If OD.ind(R, ISDU, IDLE, ...) received
-                (Read, flow_ctrl!(IDLE_1)) => IsduHandlerEvent::IsduSendComplete,
-
-                // ISDUAbort: OD.ind(R/W, ISDU, Abort, ...)
-                (_, flow_ctrl!(ABORT)) => IsduHandlerEvent::IsduAbort,
-
-                // ISDUError: If ISDU structure is incorrect or FlowCTRL error detected
-                _ => IsduHandlerEvent::IsduError,
             }
-        } else {
-            return Err(IoLinkError::InvalidEvent);
+
+            // ISDUStart: OD.ind(W, ISDU, Start, Data)
+            (Write, flow_ctrl!(START)) => {
+                let isdu_data = od_ind_data.data.clone();
+                self.message_buffer.rx_buffer.clear();
+                self.message_buffer.rx_buffer.extend(isdu_data);
+                IsduHandlerEvent::IsduStart
+            }
+
+            // ISDUSendComplete: If OD.ind(R, ISDU, IDLE, ...) received
+            (Read, flow_ctrl!(IDLE_1)) => IsduHandlerEvent::IsduSendComplete,
+
+            // ISDUAbort: OD.ind(R/W, ISDU, Abort, ...)
+            (_, flow_ctrl!(ABORT)) => IsduHandlerEvent::IsduAbort,
+
+            // ISDUError: If ISDU structure is incorrect or FlowCTRL error detected
+            _ => IsduHandlerEvent::IsduError,
         };
 
         self.process_event(event)?;

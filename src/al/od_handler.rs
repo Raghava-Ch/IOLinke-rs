@@ -4,6 +4,7 @@
 //! IO-Link Specification v1.1.4
 
 use crate::{
+    RwDirection,
     al::{self, ApplicationLayerReadWriteInd, services::ApplicationLayerServicesInd},
     dl::{self, DlIsduTransportRsp, DlParamRsp},
     types::{IoLinkError, IoLinkResult},
@@ -347,10 +348,10 @@ impl dl::DlIsduAbort for OnRequestDataHandler {
 impl dl::DlIsduTransportInd for OnRequestDataHandler {
     fn dl_isdu_transport_ind(&mut self, isdu: dl::Isdu) -> IoLinkResult<()> {
         match isdu.direction {
-            true => {
+            RwDirection::Write => {
                 self.process_event(OnRequestHandlerEvent::DlIsduTransportIndDirWrite(isdu))?;
             }
-            false => {
+            RwDirection::Read => {
                 self.process_event(OnRequestHandlerEvent::DlIsduTransportIndDirRead(isdu))?;
             }
         }

@@ -102,7 +102,7 @@ pub use page1::{RevisionId, RevisionIdBuilder};
 pub use page1::{ProcessDataIn, ProcessDataInBuilder, ProcessDataOut, ProcessDataOutBuilder};
 pub use page1::DeviceIdent;
 pub use al::parameter_manager::DeviceParametersIndex;
-pub use al::parameter_manager::SubIndex;
+pub use al::parameter_manager::{SubIndex, DataStorageIndexSubIndex};
 
 /// Main IO-Link device implementation that orchestrates all protocol layers.
 ///

@@ -701,8 +701,10 @@ impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler {
         rx_byte: u8,
     ) -> IoLinkResult<()> {
         use MessageHandlerState as State;
+        let current_state = self.state;
         let event = MessageHandlerEvent::PlTransfer;
-        match self.state {
+        let _ = self.process_event(event);
+        match current_state {
             State::Idle => {
                 self.execute_t2(physical_layer, rx_byte)?;
             }
@@ -714,7 +716,6 @@ impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler {
                 // Other state actvities are handled in 'process_event'.
             }
         }
-        let _ = self.process_event(event);
         Ok(())
     }
 }
