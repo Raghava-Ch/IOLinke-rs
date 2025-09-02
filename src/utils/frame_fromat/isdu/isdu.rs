@@ -66,7 +66,7 @@ pub fn compile_isdu_read_success_response(
         // Valid data length range (excluding length byte and checksum)
         let i_service = IsduServiceBuilder::new()
             .with_i_service(isdu_read_success_code!())
-            .with_length(length + 1) // +1 for checksum byte
+            .with_length(length + 2) // +2 for iservice and for checksum byte
             .build();
         buffer
             .push(i_service.into_bits())
@@ -74,7 +74,7 @@ pub fn compile_isdu_read_success_response(
         buffer
             .extend_from_slice(&data[..length as usize])
             .map_err(|_| IoLinkError::InvalidLength)?;
-        let total_length = 1 + length as usize;
+        let total_length = 2 + length as usize;
         buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?;
         let chkpdu = calculate_checksum(total_length as u8, &buffer[0..total_length]);
         buffer.pop();
@@ -90,12 +90,13 @@ pub fn compile_isdu_read_success_response(
             .push(i_service.into_bits())
             .map_err(|_| IoLinkError::InvalidLength)?;
         buffer
-            .push(2 + length)
+            .push(3 + length) // isdu service byte + Length byte + checksum byte
             .map_err(|_| IoLinkError::InvalidLength)?; // Extended length byte
         buffer
-            .extend_from_slice(data)
+            .extend_from_slice(&data[..length as usize])
             .map_err(|_| IoLinkError::InvalidLength)?;
-        let total_length = 2 + length as usize;
+        buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?; // Placeholder for checksum, Initially 0
+        let total_length = 3 + length as usize;
         let chkpdu = calculate_checksum(total_length as u8, &buffer[0..total_length]);
         buffer.pop();
         buffer
@@ -297,7 +298,7 @@ pub fn parse_write_request_with_index_subindex(
         length = *buffer.get(1).ok_or(IoLinkError::InvalidParameter)?;
         let index = *buffer.get(2).ok_or(IoLinkError::InvalidParameter)?;
         let subindex = *buffer.get(3).ok_or(IoLinkError::InvalidParameter)?;
-        return Ok((i_service, index as u16, subindex, (3, 3 + length as usize)))
+        return Ok((i_service, index as u16, subindex, (4, 4 + length as usize)))
     }
     if !(2..=15).contains(&length) {
         let index = *buffer.get(1).ok_or(IoLinkError::InvalidParameter)?;

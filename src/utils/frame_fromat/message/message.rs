@@ -125,10 +125,10 @@ pub struct IoLinkMessage {
 }
 
 impl IoLinkMessage {
-    pub fn new(device_mode: DeviceMode) -> Self {
+    pub fn new(device_mode: DeviceMode, read_write: Option<types::RwDirection>) -> Self {
         Self {
             frame_type: device_mode,
-            read_write: None,
+            read_write: read_write,
             message_type: None,
             com_channel: None,
             address_fctrl: None,
@@ -226,20 +226,26 @@ pub fn compile_iolink_preoperate_frame(
     if io_link_message.od.is_none() {
         return Err(types::IoLinkError::InvalidData);
     }
-    if let Some(od) = &io_link_message.od {
-        if od.len() > OD_LENGTH_BYTES as usize {
+    
+    if matches!(io_link_message.read_write, Some(types::RwDirection::Read)) {
+        let od = io_link_message.od.as_ref();
+        let od_len = od.map_or(0, |o| o.len());
+        if od_len > OD_LENGTH_BYTES as usize {
             return Err(types::IoLinkError::InvalidData);
         }
         for index in 0..OD_LENGTH_BYTES as usize {
-            if index < od.len() {
-                tx_buffer.push(od[index]).map_err(|_| types::IoLinkError::InvalidData)?;
+            let byte = if let Some(od) = od {
+                if index < od.len() {
+                    od[index]
+                } else {
+                    0
+                }
             } else {
-                tx_buffer.push(0).map_err(|_| types::IoLinkError::InvalidData)?;
-            }
-        }
-    } else {
-        for _ in 0..OD_LENGTH_BYTES as usize {
-            tx_buffer.push(0).map_err(|_| types::IoLinkError::InvalidData)?;
+                0
+            };
+            tx_buffer
+                .push(byte)
+                .map_err(|_| types::IoLinkError::InvalidData)?;
         }
     }
 
@@ -251,11 +257,15 @@ pub fn compile_iolink_preoperate_frame(
                 .unwrap_or(types::PdStatus::INVALID),
         )
         .build();
-    tx_buffer.push(cks.into_bits()).map_err(|_| types::IoLinkError::InvalidData)?;
+    tx_buffer
+        .push(cks.into_bits())
+        .map_err(|_| types::IoLinkError::InvalidData)?;
     let checksum = calculate_checksum(OD_LENGTH_BYTES + 1, tx_buffer);
     cks.set_checksum(checksum);
     tx_buffer.pop();
-    tx_buffer.push(cks.into_bits()).map_err(|_| types::IoLinkError::InvalidData)?;
+    tx_buffer
+        .push(cks.into_bits())
+        .map_err(|_| types::IoLinkError::InvalidData)?;
     Ok(OD_LENGTH_BYTES + 1)
 }
 

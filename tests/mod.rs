@@ -20,6 +20,13 @@ fn mock_test_device_operations() {
     // Test startup sequence is successful and device is in startup mode
     let result = test_utils::util_test_startup_sequence(&poll_tx, &poll_response_rx);
     assert!(result.is_ok(), "Test startup sequence failed");
+    let result = test_utils::util_test_change_operation_mode(
+        &poll_tx,
+        &poll_response_rx,
+        TestDeviceMode::Startup,
+        TestDeviceMode::Preoperate,
+    );
+    assert!(result.is_ok(), "Test change operation mode failed");
 
     // Startup is successfull now command device to preop mode
     let result = test_utils::util_test_preop_sequence(&poll_tx, &poll_response_rx);
@@ -88,5 +95,21 @@ fn mock_test_device_operations() {
             &index_list_data,
         );
         assert!(result.is_ok(), "Test isdu sequence failed");
+
+        let result = test_utils::util_test_isdu_sequence_read(
+                &poll_tx,
+                &poll_response_rx,
+                data_storage_index_index,
+                Some(index_list_subindex),
+            );
+            assert!(result.as_ref().is_ok(), "Test isdu sequence failed");
+            assert!(
+                index_list_data.len() as u8 == result.as_ref().unwrap().len() as u8,
+                "ISDU data length not matching"
+            );
+            assert!(
+                index_list_data == result.as_ref().unwrap().as_slice(),
+                "ISDU data not matching"
+            );
     }
 }

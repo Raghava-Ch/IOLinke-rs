@@ -430,16 +430,16 @@ impl IsduHandler {
         data_length: u8,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
-        if segment != self.expected_segment {
+        if segment != self.expected_segment % 16 {
             let _ = self.process_event(IsduHandlerEvent::IsduError);
             return Err(IoLinkError::InvalidIndex);
         }
-        self.expected_segment = segment + 1; // Next expected segment number
         const MAX_POSSIBLE_OD_SIZE: u8 = config::on_req_data::max_possible_od_length();
         // Extract ISDU response segment from self.message_buffer.tx_buffer
-        let from = (data_length as usize) * (segment as usize);
+        let from = (data_length as usize) * (self.expected_segment as usize);
         let to = from + (data_length as usize);
         let buffer_len = self.message_buffer.tx_buffer.len();
+        self.expected_segment += 1; // Next expected segment number
 
         // If 'to' exceeds buffer length, pad with zeros
         let isdu_response = if from < buffer_len {
@@ -553,6 +553,7 @@ impl IsduHandler {
     }
 
     pub fn dl_isdu_transport_read_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
+        self.message_buffer.tx_buffer.clear();
         let _ = utils::frame_fromat::isdu::compile_isdu_read_success_response(
             length,
             data,

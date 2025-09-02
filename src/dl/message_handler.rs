@@ -138,8 +138,8 @@ impl MessageHandler {
                 tx_buffer: Vec::new(),
                 tx_buffer_len: 0,
             },
-            tx_message: message::IoLinkMessage::new(message::DeviceMode::Startup),
-            rx_message: message::IoLinkMessage::new(message::DeviceMode::Startup),
+            tx_message: message::IoLinkMessage::new(message::DeviceMode::Startup, None),
+            rx_message: message::IoLinkMessage::new(message::DeviceMode::Startup, None),
             device_operate_state: message::DeviceMode::Startup,
             pd_in_valid_status: types::PdStatus::INVALID,
             transmission_rate: com_timing::TransmissionRate::default(),
@@ -279,6 +279,11 @@ impl MessageHandler {
                     }
                 };
                 self.rx_message = io_link_message;
+                self.tx_message.read_write = Some(
+                    self.rx_message
+                        .read_write
+                        .unwrap_or(types::RwDirection::Write),
+                );
                 self.process_event(MessageHandlerEvent::NoError)?;
             }
             MessageHandlerState::CreateMessage => {
@@ -286,11 +291,13 @@ impl MessageHandler {
                 match self.device_operate_state {
                     message::DeviceMode::Startup | message::DeviceMode::PreOperate => {
                         self.execute_create_message_startup_preoperate()?;
-                        self.tx_message = message::IoLinkMessage::new(self.tx_message.frame_type);
+                        self.tx_message =
+                            message::IoLinkMessage::new(self.tx_message.frame_type, self.tx_message.read_write);
                     }
                     message::DeviceMode::Operate => {
                         self.execute_create_message_operate()?;
-                        self.tx_message = message::IoLinkMessage::new(self.tx_message.frame_type);
+                        self.tx_message =
+                            message::IoLinkMessage::new(self.tx_message.frame_type, self.tx_message.read_write);
                     }
                 }
             }
@@ -407,7 +414,7 @@ impl MessageHandler {
             let pd_out_len = pd_data.len() as u8;
             let _ = pd_handler.pd_ind(0, 0, 0, pd_out_len, pd_data);
         }
-        self.rx_message = message::IoLinkMessage::new(self.device_operate_state);
+        self.rx_message = message::IoLinkMessage::new(self.device_operate_state, None);
         Ok(())
     }
 
@@ -586,7 +593,8 @@ impl MessageHandler {
         if length > od.capacity() as u8 {
             return Err(IoLinkError::InvalidLength);
         }
-        od.extend_from_slice(&data[..length as usize]).map_err(|_| IoLinkError::InvalidParameter)?;
+        od.extend_from_slice(&data[..length as usize])
+            .map_err(|_| IoLinkError::InvalidParameter)?;
         Ok(())
     }
 
@@ -627,9 +635,10 @@ impl MessageHandler {
             message::DeviceMode::Startup => {
                 message::compile_iolink_startup_frame(&mut self.buffers.tx_buffer, io_link_message)?
             }
-            message::DeviceMode::PreOperate => {
-                message::compile_iolink_preoperate_frame(&mut self.buffers.tx_buffer, io_link_message)?
-            }
+            message::DeviceMode::PreOperate => message::compile_iolink_preoperate_frame(
+                &mut self.buffers.tx_buffer,
+                io_link_message,
+            )?,
             message::DeviceMode::Operate => {
                 message::compile_iolink_operate_frame(&mut self.buffers.tx_buffer, io_link_message)?
             }
@@ -688,7 +697,7 @@ impl MessageHandler {
         self.buffers.rx_buffer_len = 0;
         self.buffers.tx_buffer.fill(0);
         self.buffers.tx_buffer_len = 0;
-        self.tx_message = message::IoLinkMessage::new(self.tx_message.frame_type);
+        self.tx_message = message::IoLinkMessage::new(self.tx_message.frame_type, None);
     }
 }
 
