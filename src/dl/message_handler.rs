@@ -288,7 +288,7 @@ impl MessageHandler {
             }
             MessageHandlerState::CreateMessage => {
                 // Check the response is ready to be sent
-                match self.device_operate_state {
+                match self.tx_message.frame_type {
                     message::DeviceMode::Startup | message::DeviceMode::PreOperate => {
                         self.execute_create_message_startup_preoperate()?;
                         self.tx_message =

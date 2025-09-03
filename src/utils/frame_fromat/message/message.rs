@@ -160,9 +160,15 @@ pub const fn get_m_sequence_base_type(
 ) -> types::MsequenceBaseType {
     match m_sequence_type {
         types::MsequenceType::Type0 => types::MsequenceBaseType::Type0,
+        types::MsequenceType::Type11 => types::MsequenceBaseType::Type1,
         types::MsequenceType::Type12 => types::MsequenceBaseType::Type1,
         types::MsequenceType::Type1V => types::MsequenceBaseType::Type2,
-        _ => panic!("Invalid M-sequence type"),
+        types::MsequenceType::Type21 => types::MsequenceBaseType::Type2,
+        types::MsequenceType::Type22 => types::MsequenceBaseType::Type2,
+        types::MsequenceType::Type23 => types::MsequenceBaseType::Type2,
+        types::MsequenceType::Type24 => types::MsequenceBaseType::Type2,
+        types::MsequenceType::Type25 => types::MsequenceBaseType::Type2,
+        types::MsequenceType::Type2V => types::MsequenceBaseType::Type2,
     }
 }
 

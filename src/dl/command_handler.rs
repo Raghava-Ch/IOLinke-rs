@@ -151,7 +151,7 @@ impl CommandHandler {
             }
             Transition::T2(master_command) => {
                 self.exec_transition = Transition::Tn;
-                let _ = self.execute_t2(master_command, application_layer);
+                let _ = self.execute_t2(master_command, application_layer, mode_handler);
             }
             Transition::T3(code) => {
                 self.exec_transition = Transition::Tn;
@@ -186,16 +186,19 @@ impl CommandHandler {
         &mut self,
         master_command: MasterCommand,
         application_layer: &mut al::ApplicationLayer,
+        mode_handler: &mut dl::mode_handler::DlModeHandler,
     ) -> IoLinkResult<()> {
         // T2: State: Idle (1) -> Idle (1)
         // Action: Invoke DL_Control.ind (PDOUTVALID) if received MasterCommand = 0x98.
         // Invoke DL_Control.ind (PDOUTINVALID) if received MasterCommand = 0x99.
         match master_command {
             MasterCommand::ProcessDataOutputOperate => {
-                application_layer.dl_control_ind(types::DlControlCode::PDOUTVALID)?;
+                let _ = application_layer.dl_control_ind(types::DlControlCode::PDOUTVALID);
+                let _ = mode_handler.master_command_ind(MasterCommand::DeviceOperate);
             }
             MasterCommand::DeviceOperate => {
-                application_layer.dl_control_ind(types::DlControlCode::PDOUTINVALID)?;
+                let _ = application_layer.dl_control_ind(types::DlControlCode::PDOUTINVALID);
+                let _ = mode_handler.master_command_ind(MasterCommand::DeviceOperate);
             }
             _ => {
                 return Err(IoLinkError::InvalidEvent);

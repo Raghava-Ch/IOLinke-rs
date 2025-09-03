@@ -68,11 +68,17 @@ pub fn read_m_sequence_capability(
         );
         const EXPECTED_BYTES: u8 = 1 + 1 /* OD + CKS Bytes */;
         (rx_buffer, EXPECTED_BYTES)
-    } else {
+    } else if device_mode == TestDeviceMode::Preoperate {
         let rx_buffer = frame_utils::create_preop_read_request(
             direct_parameter_address!(MSequenceCapability),
         );
         const EXPECTED_BYTES: u8 = config::on_req_data::pre_operate::od_length() + 1 /* CKS Byte */;
+        (rx_buffer, EXPECTED_BYTES)
+    } else {
+        let rx_buffer = frame_utils::create_op_read_request(
+            direct_parameter_address!(MSequenceCapability),
+        );
+        const EXPECTED_BYTES: u8 = config::on_req_data::operate::od_length() + 1 /* CKS Byte */;
         (rx_buffer, EXPECTED_BYTES)
     };
 

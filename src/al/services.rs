@@ -89,7 +89,7 @@ impl Default for ApplicationLayerServices {
 
 impl dl::DlControlInd for ApplicationLayerServices {
     fn dl_control_ind(&mut self, control_code: types::DlControlCode) -> IoLinkResult<()> {
-        todo!()
+        Ok(())
     }
 }
 

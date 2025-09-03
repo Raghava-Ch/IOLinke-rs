@@ -328,8 +328,35 @@ pub fn create_preop_write_isdu_complete_request() -> Vec<u8> {
     rx_buffer
 }
 
+/// Creates a read request message for testing
 pub fn create_op_read_request(address: u8) -> Vec<u8> {
-    todo!()
+    const BASE_TYPE: MsequenceBaseType = config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
+    let mc = test_utils::MsequenceControlBuilder::new()
+        .with_read_write(RwDirection::Read)
+        .with_comm_channel(ComChannel::Page)
+        .with_address_fctrl(address)
+        .build();
+        
+        let mut ckt = test_utils::ChecksumMsequenceTypeBuilder::new()
+        .with_m_seq_type(BASE_TYPE)
+        .with_checksum(0)
+        .build();
+        
+        
+        let mc_bits = mc.into_bits();
+        let ckt_bits = ckt.into_bits();
+
+        let mut rx_buffer = Vec::new();
+        rx_buffer.push(mc_bits);
+        rx_buffer.push(ckt_bits);
+        let checksum =
+        test_utils::calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    ckt.set_checksum(checksum);
+
+    let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
+    *tx_buffer_1 = ckt.into_bits();
+
+    rx_buffer
 }
 
 /// Creates a write request message for testing
