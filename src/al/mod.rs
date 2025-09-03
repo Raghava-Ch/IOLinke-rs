@@ -20,21 +20,20 @@
 //! - Section 8.3: Event Handling and Reporting
 //! - Annex B: Parameter Definitions and Access
 
-use crate::dl::DlPDOutputTransportInd;
-use crate::{dl, storage, system_management, types, IoLinkResult};
+use crate::{IoLinkResult, dl, storage, system_management, types, utils};
 
+mod data_storage;
 mod event_handler;
 pub mod od_handler;
-mod parameter_manager;
+pub mod parameter_manager;
 mod pd_handler;
 pub mod services;
-mod data_storage;
 
 use heapless::Vec;
-pub use parameter_manager::DeviceParametersIndex;
-pub use parameter_manager::SubIndex;
-pub use parameter_manager::DirectParameterPage1SubIndex;
 pub use parameter_manager::DataStorageIndexSubIndex;
+pub use parameter_manager::DeviceParametersIndex;
+pub use parameter_manager::DirectParameterPage1SubIndex;
+pub use parameter_manager::SubIndex;
 
 /// Application Layer Read/Write Interface for parameter access.
 ///
@@ -240,10 +239,12 @@ impl ApplicationLayer {
         // Poll all components in dependency order
         self.event_handler
             .poll(&mut self.services, data_link_layer)?;
-        self.od_handler.poll(&mut self.services, data_link_layer)?;
+        self.od_handler
+            .poll(&mut self.parameter_manager, data_link_layer)?;
         self.parameter_manager
             .poll(&mut self.od_handler, &mut self.data_storage)?;
-        self.data_storage.poll(&mut self.event_handler, &mut self.parameter_manager)?;
+        self.data_storage
+            .poll(&mut self.event_handler, &mut self.parameter_manager)?;
         Ok(())
     }
 }
@@ -263,7 +264,11 @@ impl services::AlEventReq for ApplicationLayer {
     ///
     /// - `Ok(())` if events were reported successfully
     /// - `Err(IoLinkError)` if an error occurred
-    fn al_event_req(&mut self, event_count: u8, event_entries: &[storage::event_memory::EventEntry]) -> IoLinkResult<()> {
+    fn al_event_req(
+        &mut self,
+        event_count: u8,
+        event_entries: &[storage::event_memory::EventEntry],
+    ) -> IoLinkResult<()> {
         self.event_handler.al_event_req(event_count, event_entries)
     }
 }
@@ -285,7 +290,6 @@ impl system_management::SystemManagementInd for ApplicationLayer {
     fn sm_device_mode_ind(&mut self, mode: types::DeviceMode) -> system_management::SmResult<()> {
         let _ = self.parameter_manager.sm_device_mode_ind(mode);
         let _ = self.data_storage.sm_device_mode_ind(mode);
-
         Ok(())
     }
 }
@@ -366,7 +370,7 @@ impl system_management::SystemManagementCnf for ApplicationLayer {
     /// - `Err(SmError)` if an error occurred
     fn sm_get_device_ident_cnf(
         &self,
-        result: system_management::SmResult<&system_management::DeviceIdent>,
+        result: system_management::SmResult<&utils::page_params::page1::DeviceIdent>,
     ) -> system_management::SmResult<()> {
         todo!("Implement device identification get confirmation");
     }
@@ -435,7 +439,10 @@ impl ApplicationLayerReadWriteInd for ApplicationLayer {
 }
 
 impl dl::DlPDOutputTransportInd for ApplicationLayer {
-    fn dl_pd_output_transport_ind(&mut self, pd_out: &Vec<u8, {dl::PD_OUTPUT_LENGTH}>) -> IoLinkResult<()> {
+    fn dl_pd_output_transport_ind(
+        &mut self,
+        pd_out: &Vec<u8, { dl::PD_OUTPUT_LENGTH }>,
+    ) -> IoLinkResult<()> {
         todo!()
     }
 

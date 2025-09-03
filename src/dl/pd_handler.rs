@@ -6,10 +6,10 @@
 use heapless::Vec;
 
 use crate::{
-    al, config, dl, types::{self, IoLinkError, IoLinkResult}
+    al, config, dl, log_state_transition, log_state_transition_error, types::{self, IoLinkError, IoLinkResult}
 };
 
-pub const PD_INPUT_LENGTH: usize = config::process_data::pd_in::length() as usize;
+pub const PD_INPUT_LENGTH: usize = config::process_data::pd_in::param_length() as usize;
 pub const PD_OUTPUT_LENGTH: usize = config::process_data::pd_out::length() as usize;
 
 /// Process data input/output structure
@@ -130,8 +130,23 @@ impl ProcessDataHandler {
             (State::HandlePD, Event::PDIncomplete) => (Transition::T5, State::PDActive),
             (State::HandlePD, Event::PDComplete) => (Transition::T6, State::PDActive),
             (State::HandlePD, Event::CycleComplete) => (Transition::T7, State::PDActive),
-            _ => return Err(IoLinkError::InvalidEvent),
+            _ => {
+                log_state_transition_error!(
+                    module_path!(),
+                    "process_event",
+                    self.state,
+                    event
+                );
+                (Transition::Tn, self.state)
+            }
         };
+        log_state_transition!(
+            module_path!(),
+            "process_event",
+            self.state,
+            new_state,
+            event
+        );
         self.exec_transition = new_transition;
         self.state = new_state;
 
@@ -271,9 +286,9 @@ impl ProcessDataHandler {
         &mut self,
         _pd_in_address: u8, // Not required, because of legacy specification
         _pd_in_length: u8,  // Not required, because of legacy specification
-        pd_out: &Vec<u8, PD_OUTPUT_LENGTH>,
         _pd_out_address: u8, // Not required, because of legacy specification
         pd_out_length: u8,
+        pd_out: &Vec<u8, PD_OUTPUT_LENGTH>,
     ) -> IoLinkResult<()> {
         self.process_data.output = pd_out.clone();
         self.process_data.output_length = pd_out_length;

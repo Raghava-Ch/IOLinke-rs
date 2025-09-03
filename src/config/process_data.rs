@@ -1,3 +1,7 @@
+pub enum ProcessDataLength {
+    Bit(u8),
+    Octet(u8),
+}
 /// Constructs the `ProcessDataIn` parameter byte (see IO-Link Spec v1.1.4, Section B.1.6, Figure B.5).
 ///
 /// This byte is structured as follows:
@@ -51,34 +55,96 @@
 /// - Table B.5 (SIO Values)
 /// - Table B.6 (BYTE + LENGTH combinations)
 pub mod pd_in {
+    use crate::utils::page_params::page1;
+
     /// See B.1.6 ProcessDataIn or
     /// check the pd_in module documentation for details
     /// Configure the Process Data Input length
-    pub const fn length() -> u8 {
-        0x01 // Accepted values from 0 to 31
+    pub const fn config_length() -> super::ProcessDataLength {
+        use super::ProcessDataLength::*;
+        // Acceptable values are 0-32 for octets, 0-16 for bits
+        match /*CONFIG:OP_PD_IN_LEN*/ Octet(3) /*ENDCONFIG*/ {
+            Bit(bit_length) => {
+                if bit_length > 16 {
+                    panic!("Invalid PD length for OPERATE M-sequence configuration");
+                }
+                Bit(bit_length)
+            },
+            Octet(octet_length) => {
+                if octet_length > 32 {
+                    panic!("Invalid PD length for OPERATE M-sequence configuration");
+                }
+                Octet(octet_length)
+            }
+        }
+    }
+
+    /// Returns the Process Data Output length in bytes
+    pub const fn config_length_in_bytes() -> u8 {
+        use super::ProcessDataLength::*;
+        match config_length() {
+            Bit(bit_length) => {
+                // The ceiling division technique:
+                // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+                // Formula is ceil(a/b) = (a + b - 1) / b
+                (bit_length + 7) / 8
+
+            },
+            Octet(octet_length) => octet_length,
+        }
     }
 
     /// Configure the Process Data Input SIO support
     /// See B.1.6 ProcessDataIn or
     /// check the pd_in module documentation for details
-    pub const fn sio() -> u8 {
-        0x01 // 0 for not supported, 1 for supported
+    pub const fn sio() -> bool {
+        true // false for not supported, true for supported
     }
 
     /// Configure the Process Data Input BYTE value
     /// See B.1.6 ProcessDataIn or
     /// check the pd_in module documentation for details
-    pub const fn byte() -> u8 {
-        0x00 // 0 for bit-oriented, 1 for byte-oriented
+    pub const fn byte() -> bool {
+        use super::ProcessDataLength::*;
+        // 0 for bit-oriented, 1 for byte-oriented
+        match /*CONFIG:OP_PD_IN_BYTE*/ Bit(0) /*ENDCONFIG*/ {
+            Bit(_) => false,
+            Octet(_) => true,
+        }
+    }
+
+    pub const fn param_length() -> u8 {
+        use super::ProcessDataLength::*;
+        let length = match config_length() {
+            Bit(bit_length) => match bit_length {
+                0 => 0,
+                1 => 1,
+                2..=15 => bit_length,
+                16 => 16,
+                _ => panic!("Invalid PD length for OPERATE M-sequence configuration"),
+            },
+            Octet(octet_length) => match octet_length {
+                0 | 1 => panic!("Invalid PD length for OPERATE M-sequence configuration"),
+                2 => 3,
+                3..=31 => octet_length - 1,
+                32 => 31,
+                _ => panic!("Invalid PD length for OPERATE M-sequence configuration"),
+            },
+        };
+        length
     }
 
     /// See B.1.6 ProcessDataIn
     /// Construct the Process Data Input configuration byte
-    pub const fn pd_in() -> u8 {
-        byte() << 7 |
-        sio() << 6 |
-        0 << 5 | // Reserved bit
-        length()
+    pub const fn pd_in_parameter() -> page1::ProcessDataIn {
+        const BYTE: bool = byte();
+        const SIO: bool = sio();
+        const LENGTH: u8 = param_length();
+        let mut pd_in_page_param: page1::ProcessDataIn = page1::ProcessDataIn::new();
+        pd_in_page_param.set_byte(BYTE);
+        pd_in_page_param.set_sio(SIO);
+        pd_in_page_param.set_length(LENGTH);
+        pd_in_page_param
     }
 }
 
@@ -133,29 +199,87 @@ pub mod pd_in {
 /// - Table B.5 (SIO Values)
 /// - Table B.6 (BYTE + LENGTH combinations)
 pub mod pd_out {
+    use crate::utils::page_params::page1;
+
     /// See B.1.6 ProcessDataOut or
     /// check the pd_out module documentation for details
     /// Configure the Process Data Output length
     /// See B.1.6 ProcessDataOut or
     /// check the pd_out module documentation for details
     /// Configure the Process Data Output length
-    pub const fn length() -> u8 {
-        0x01 // Accepted values from 0 to 31
+    pub const fn config_length() -> super::ProcessDataLength {
+        use super::ProcessDataLength::*;
+        // Acceptable values are 0-32 for octets, 0-16 for bits
+        match /*CONFIG:OP_PD_OUT_LEN*/ Octet(4) /*ENDCONFIG*/ {
+            Bit(bit_length) => {
+                if bit_length > 16 {
+                    panic!("Invalid PD length for OPERATE M-sequence configuration");
+                }
+                Bit(bit_length)
+            },
+            Octet(octet_length) => {
+                if octet_length > 32 {
+                    panic!("Invalid PD length for OPERATE M-sequence configuration");
+                }
+                Octet(octet_length)
+            }
+        }
     }
 
-    /// Configure the Process Data Output BYTE value
-    /// See B.1.6 ProcessDataOut or
-    /// check the pd_out module documentation for details
-    pub const fn byte() -> u8 {
-        0x00 // 0 for bit-oriented, 1 for byte-oriented
+    /// Returns the Process Data Output length in bytes
+    pub const fn config_length_in_bytes() -> u8 {
+        use super::ProcessDataLength::*;
+        match config_length() {
+            Bit(bit_length) => {
+                // The ceiling division technique:
+                // Instead of using floating-point math like ceil(bits / 8.0), this uses the mathematical identity:
+                // Formula is ceil(a/b) = (a + b - 1) / b
+                (bit_length + 7) / 8
+
+            },
+            Octet(octet_length) => octet_length,
+        }
+    }
+
+    /// Configure the Process Data Input BYTE value
+    /// See B.1.6 ProcessDataIn or
+    /// check the pd_in module documentation for details
+    pub const fn byte() -> bool {
+        use super::ProcessDataLength::*;
+        // 0 for bit-oriented, 1 for byte-oriented
+        match /*CONFIG:OP_PD_IN_BYTE*/ Bit(0) /*ENDCONFIG*/ {
+            Bit(_) => false,
+            Octet(_) => true,
+        }
+    }
+
+    pub const fn length() -> u8 {
+        use super::ProcessDataLength::*;
+        let length = match config_length() {
+            Bit(bit_length) => match bit_length {
+                0 => 0,
+                1 => 1,
+                2..=15 => bit_length,
+                16 => 16,
+                _ => panic!("Invalid PD out length for OPERATE M-sequence configuration"),
+            },
+            Octet(octet_length) => match octet_length {
+                0 | 1 => panic!("Invalid PD out length for OPERATE M-sequence configuration"),
+                2 => 3,
+                3..=31 => octet_length - 1,
+                32 => 31,
+                _ => panic!("Invalid PD  length for OPERATE M-sequence configuration"),
+            },
+        };
+        length
     }
 
     /// See B.1.7 ProcessDataOut
     /// Construct the Process Data Output configuration byte
-    pub const fn pd_out() -> u8 {
-        byte() << 7 |
-        0 << 6 | // Reserved bit
-        0 << 5 | // Reserved bit
-        length()
+    pub const fn pd_out_parameter() -> page1::ProcessDataOut {
+        let mut pd_out_page_param: page1::ProcessDataOut = page1::ProcessDataOut::new();
+        pd_out_page_param.set_byte(byte());
+        pd_out_page_param.set_length(length());
+        pd_out_page_param
     }
 }

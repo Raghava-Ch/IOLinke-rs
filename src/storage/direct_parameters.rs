@@ -106,8 +106,8 @@ const _RESERVED: [u8; 1] = [iolinke_macros::direct_parameter_address!(Reserved0E
 /// - Reserved parameters address (0x0E) cannot be accessed
 /// - Valid address range: 0x00-0x1F
 /// - Page 2 (0x10-0x1F) is Vendor-specific
-pub fn read(
-    pl: &mut pl::physical_layer::PhysicalLayer,
+pub fn read<T: pl::physical_layer::PhysicalLayerReq>(
+    pl: &mut T,
     address: u8,
     length: u8,
     buffer: &mut [u8],
@@ -124,7 +124,7 @@ pub fn read(
         }
     }
 
-    pl.read_direct_param_page(address, length, buffer)?;
+    // pl.read_direct_param_page(address, length, buffer)?;
     Ok(())
 }
 
@@ -150,8 +150,8 @@ pub fn read(
 /// - Reserved parameters address [0x0E] cannot be accessed
 /// - Valid address range for writes: 0x00-0x0F (page 1 only)
 /// - Page 2 [0x10-0x1F] is Vendor-specific
-pub fn write(
-    pl: &mut pl::physical_layer::PhysicalLayer,
+pub fn write<T: pl::physical_layer::PhysicalLayerReq>(
+    pl: &mut T,
     address: u8,
     length: u8,
     buffer: &[u8],
@@ -168,6 +168,6 @@ pub fn write(
         }
     }
 
-    pl.write_direct_param_page(address, length, buffer)?;
+    // pl.write_direct_param_page(address, length, buffer)?;
     Ok(())
 }

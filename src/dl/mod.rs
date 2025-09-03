@@ -21,21 +21,23 @@
 //! - Section 7.4: Message Handling and Transmission
 //! - Annex A: Protocol Details and Timing
 
-use crate::{IoLinkResult, pl, system_management};
+use crate::utils::frame_fromat::com_timing;
+use crate::{pl, system_management, types, IoLinkResult};
 use crate::{al, storage};
 
 mod command_handler;
 mod event_handler;
 mod isdu_handler;
-mod message_handler;
 mod mode_handler;
 mod od_handler;
 mod pd_handler;
+pub mod message_handler;
 
+pub use crate::utils::frame_fromat::isdu::{MAX_ISDU_LENGTH, Isdu};
 pub use command_handler::DlControlInd;
 pub use event_handler::{DlEventReq, DlEventTriggerConf};
-pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, DlIsduTransportRsp, Isdu, MAX_ISDU_LENGTH, IsduService};
-pub use mode_handler::DlInd;
+pub use isdu_handler::{DlIsduAbort, DlIsduTransportInd, DlIsduTransportRsp};
+pub use mode_handler::{DlModeInd, DlReadWriteInd};
 pub use od_handler::{DlParamRsp, DlReadParamInd, DlWriteParamInd};
 pub use pd_handler::{DlPDInputUpdate, DlPDOutputTransportInd, PD_OUTPUT_LENGTH};
 
@@ -92,6 +94,17 @@ pub struct DataLinkLayer {
 }
 
 impl DataLinkLayer {
+    /// This function is called when the communication is successful.
+    /// It will change the DL mode to the corresponding communication mode.
+    /// # Parameters
+    /// * `transmission_rate` - The transmission rate of the communication
+    /// # Returns
+    /// * `Ok(())` if the communication is successful
+    /// * `Err(IoLinkError)` if an error occurred
+    pub fn successful_com(&mut self, transmission_rate: com_timing::TransmissionRate) {
+        let _ = self.mode_handler.successful_com(transmission_rate);
+    }
+
     /// Polls all data link layer components to advance their state.
     ///
     /// This method must be called regularly to:
@@ -138,19 +151,19 @@ impl DataLinkLayer {
     ///     }
     /// }
     /// ```
-    pub fn poll(
+    pub fn poll<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
         system_management: &mut system_management::SystemManagement,
-        physical_layer: &mut pl::physical_layer::PhysicalLayer,
+        physical_layer: &mut T,
         application_layer: &mut al::ApplicationLayer,
     ) -> IoLinkResult<()> {
         // Command handler poll - handles master commands
         {
             let _ = self
                 .command_handler
-                .poll(&mut self.message_handler, application_layer);
+                .poll(&mut self.message_handler, application_layer, &mut self.mode_handler);
         }
-        
+
         // Mode handler poll - manages protocol state machines
         {
             let _ = self.mode_handler.poll(
@@ -163,46 +176,47 @@ impl DataLinkLayer {
                 system_management,
             );
         }
-        
+
         // Event handler poll - processes device events
         {
             let _ = self.event_handler.poll(&mut self.message_handler);
         }
-        
+
         // Process data handler poll - handles real-time data exchange
         {
-            let _ = self.pd_handler.poll(&mut self.message_handler, application_layer);
+            let _ = self
+                .pd_handler
+                .poll(&mut self.message_handler, application_layer);
         }
-        
+
         // ISDU handler poll - manages service data unit communication
         {
             let isdu_handler = &mut self.isdu_handler;
             let _ = isdu_handler.poll(&mut self.message_handler, application_layer);
         }
-        
+
         // Message handler poll - coordinates all message operations
         {
             let _ = self.message_handler.poll(
-                &mut self.event_handler,
-                &mut self.isdu_handler,
                 &mut self.od_handler,
                 &mut self.pd_handler,
                 &mut self.mode_handler,
                 physical_layer,
             );
         }
-        
+
         // On-request data handler poll - manages parameter operations
         {
             let _ = self.od_handler.poll(
                 &mut self.command_handler,
                 &mut self.isdu_handler,
+                &mut self.message_handler,
                 &mut self.event_handler,
                 application_layer,
                 system_management,
             );
         }
-        
+
         Ok(())
     }
 }
@@ -222,7 +236,7 @@ impl od_handler::DlParamRsp for DataLinkLayer {
     ///
     /// - `Ok(())` if response was processed successfully
     /// - `Err(IoLinkError)` if an error occurred
-    fn dl_read_param_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
+    fn dl_read_param_rsp(&mut self, length: u8, data: u8) -> IoLinkResult<()> {
         self.od_handler
             .dl_read_param_rsp(length, data, &mut self.message_handler)
     }
@@ -243,8 +257,7 @@ impl od_handler::DlParamRsp for DataLinkLayer {
     /// for write operations, but this method provides a hook for
     /// potential future extensions.
     fn dl_write_param_rsp(&mut self) -> IoLinkResult<()> {
-        // No response is expected in specs
-        Ok(())
+        self.od_handler.dl_write_param_rsp(&mut self.message_handler)
     }
 }
 
@@ -265,7 +278,7 @@ impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
     /// - `Err(IoLinkError)` if an error occurred
     fn dl_isdu_transport_read_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
         self.isdu_handler
-            .dl_isdu_transport_read_rsp(length, data, &mut self.message_handler)
+            .dl_isdu_transport_read_rsp(length, data)
     }
 
     /// Handles ISDU write responses from the application layer.
@@ -279,7 +292,7 @@ impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
     /// - `Err(IoLinkError)` if an error occurred
     fn dl_isdu_transport_write_rsp(&mut self) -> IoLinkResult<()> {
         self.isdu_handler
-            .dl_isdu_transport_write_rsp(&mut self.message_handler)
+            .dl_isdu_transport_write_rsp()
     }
 
     /// Handles ISDU read error responses from the application layer.
@@ -304,7 +317,6 @@ impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
         self.isdu_handler.dl_isdu_transport_read_error_rsp(
             error,
             additional_error,
-            &mut self.message_handler,
         )
     }
 
@@ -330,7 +342,6 @@ impl isdu_handler::DlIsduTransportRsp for DataLinkLayer {
         self.isdu_handler.dl_isdu_transport_write_error_rsp(
             error,
             additional_error,
-            &mut self.message_handler,
         )
     }
 }
@@ -392,6 +403,13 @@ impl pd_handler::DlPDInputUpdate for DataLinkLayer {
     }
 }
 
+impl DlModeInd for DataLinkLayer {
+    fn dl_mode_ind(&mut self, mode: types::DlMode) -> IoLinkResult<()> {
+        let _ = self.message_handler.dl_mode_ind(mode);
+        Ok(())
+    }
+}
+
 impl Default for DataLinkLayer {
     /// Creates a new Data Link Layer with default configuration.
     ///
@@ -437,7 +455,11 @@ impl pl::physical_layer::PhysicalLayerInd for DataLinkLayer {
     ///
     /// - `Ok(())` if data transfer was processed successfully
     /// - `Err(IoLinkError)` if an error occurred
-    fn pl_transfer_ind(&mut self, rx_buffer: &mut [u8]) -> IoLinkResult<()> {
-        self.message_handler.pl_transfer_ind(rx_buffer)
+    fn pl_transfer_ind<T: pl::physical_layer::PhysicalLayerReq>(
+        &mut self,
+        physical_layer: &mut T,
+        rx_byte: u8,
+    ) -> IoLinkResult<()> {
+        self.message_handler.pl_transfer_ind(physical_layer, rx_byte)
     }
 }

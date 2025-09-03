@@ -20,10 +20,14 @@
 //! - Annex B: Parameter Definitions and Access
 
 use iolinke_macros::{direct_parameter_address, master_command};
-use modular_bitfield::prelude::*;
 
 use crate::{
-    al, dl::DlInd, pl, types::{self, IoLinkError, IoLinkResult}, IoLinkDevice, IoLinkMode
+    al, dl::{DlModeInd, DlReadWriteInd, DlWriteParamInd}, log_state_transition, log_state_transition_error, pl, types::{self, IoLinkError, IoLinkResult}, utils::{
+        frame_fromat::com_timing::TransmissionRate,
+        page_params::page1::{
+            CycleTime, DeviceIdent, MsequenceCapability, ProcessDataIn, ProcessDataOut, RevisionId,
+        },
+    }, IoLinkMode
 };
 
 /// System Management error types.
@@ -67,258 +71,6 @@ impl Default for SioMode {
         Self::Inactive
     }
 }
-
-/// Transmission rate configuration for IO-Link communication.
-///
-/// The transmission rate determines the baud rate used for
-/// master-device communication.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Section 5.2.2: Communication Modes
-/// - Table 5.1: Communication mode characteristics
-#[derive(Clone, Debug)]
-pub enum TransmissionRate {
-    /// COM1 mode - 1200 baud effective rate
-    Com1,
-    /// COM2 mode - 2400 baud effective rate
-    Com2,
-    /// COM3 mode - 4800 baud effective rate
-    Com3,
-}
-
-impl Default for TransmissionRate {
-    /// Default transmission rate is COM1 (1200 baud).
-    fn default() -> Self {
-        Self::Com1
-    }
-}
-
-/// Minimum cycle time configuration as per Annex B.1.
-///
-/// This bitfield configures the minimum cycle time that the device
-/// supports, which is used by the master for timing coordination.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Annex B.1: Direct Parameter Page 1
-/// - Table B.3: MinCycleTime parameter restrictions
-#[bitfield]
-#[derive(Clone, Debug)]
-pub struct MinCycleTime {
-    /// Bits 6 to 7: Time Base
-    /// 
-    /// These bits specify the time base for the calculation of MasterCycleTime
-    /// and MinCycleTime. In the following cases, when:
-    /// * the Device provides no MinCycleTime, which is indicated by a MinCycleTime
-    ///   equal zero (binary code 0x00),
-    /// * or the MinCycleTime is shorter than the calculated M-sequence time with
-    ///   the M-sequence type used by the Device, with (t1, t2, tidle) equal zero
-    ///   and tA equal one bit time (see A.3.4 to A.3.6)
-    pub time_base: B2,
-    
-    /// Bits 0 to 5: Multiplier
-    /// 
-    /// These bits contain a 6-bit multiplier for the calculation of
-    /// MasterCycleTime and MinCycleTime. Permissible values for the multiplier
-    /// are 0 to 63, further restrictions see Table B.3.
-    pub multiplier: B6,
-}
-
-impl Default for MinCycleTime {
-    /// Default minimum cycle time is 0 (no minimum specified).
-    fn default() -> Self {
-        Self::new().with_time_base(0).with_multiplier(0)
-    }
-}
-
-/// M-sequence capability configuration as per Annex B.1.
-///
-/// This bitfield indicates the M-sequence types and ISDU support
-/// capabilities of the device.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Annex B.1: Direct Parameter Page 1
-/// - Table A.8: PREOPERATE M-sequence type codes
-/// - Table A.9: OPERATE M-sequence type codes (legacy devices)
-/// - Table A.10: OPERATE M-sequence type codes (current standard)
-#[bitfield]
-#[derive(Clone, Debug)]
-pub struct MsequenceCapability {
-    /// Bit 0: ISDU Support
-    /// 
-    /// This bit indicates whether or not the ISDU communication channel
-    /// is supported.
-    /// 
-    /// Permissible values:
-    /// * 0 = ISDU not supported
-    /// * 1 = ISDU supported
-    pub isdu: B1,
-
-    /// Bits 1 to 3: OPERATE M-sequence Type Code
-    /// 
-    /// This parameter indicates the available M-sequence type during
-    /// the OPERATE state. Permissible codes for the OPERATE M-sequence
-    /// type are listed in Table A.9 (legacy Devices) and Table A.10
-    /// (Devices according to this standard).
-    pub op_m_seq_code: B3,
-
-    /// Bits 4 to 5: PREOPERATE M-sequence Type Code
-    /// 
-    /// This parameter indicates the available M-sequence type during
-    /// the PREOPERATE state. Permissible codes for the PREOPERATE
-    /// M-sequence type are listed in Table A.8.
-    pub pre_op_m_seq_code: B2,
-
-    /// Bits 6 to 7: Reserved
-    /// 
-    /// These bits are reserved and shall be set to zero in this
-    /// version of the specification.
-    #[skip] // Always set to 0, not exposed to user
-    pub __: B2,
-}
-
-impl Default for MsequenceCapability {
-    /// Default M-sequence capability is minimal (no ISDU, basic M-sequences).
-    fn default() -> Self {
-        Self::new()
-            .with_isdu(0)
-            .with_op_m_seq_code(0)
-            .with_pre_op_m_seq_code(0)
-    }
-}
-
-/// Protocol revision identifier as per Annex B.1.
-///
-/// This bitfield contains the major and minor revision numbers
-/// of the IO-Link protocol version implemented by the device.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Annex B.1: Direct Parameter Page 1
-/// - Section B.1.4: RevisionID parameter
-#[bitfield]
-#[derive(Clone, Copy, Debug, Specifier)]
-pub struct RevisionId {
-    /// Bits 0 to 3: Minor Revision
-    /// 
-    /// These bits contain the minor digit of the version number,
-    /// for example 0 for the protocol version 1.0. Permissible
-    /// values for MinorRev are 0x0 to 0xF.
-    minor_rev: B4,
-    
-    /// Bits 4 to 7: Major Revision
-    /// 
-    /// These bits contain the major digit of the version number,
-    /// for example 1 for the protocol version 1.0. Permissible
-    /// values for MajorRev are 0x0 to 0xF.
-    major_rev: B4,
-}
-
-impl Default for RevisionId {
-    /// Default revision ID is 0.0 (no revision specified).
-    fn default() -> Self {
-        Self::new().with_minor_rev(0).with_major_rev(0)
-    }
-}
-
-/// Process data input configuration as per Annex B.1.
-///
-/// This bitfield configures the process data input characteristics
-/// including length, SIO support, and data format.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Annex B.1: Direct Parameter Page 1
-/// - Table B.6: Process data length codes
-#[bitfield]
-#[derive(Clone, Debug)]
-pub struct ProcessDataIn {
-    /// Bits 0 to 4: Length
-    /// 
-    /// These bits contain the length of the input data (Process Data
-    /// from Device to Master) in the length unit designated in the
-    /// BYTE parameter bit. Permissible codes for Length are specified
-    /// in Table B.6.
-    #[bits = 5]
-    pub length: B5,
-
-    /// Bit 5: Reserved
-    /// 
-    /// This bit is reserved and shall be set to zero in this version
-    /// of the specification.
-    #[skip] // Always set to 0, not exposed to user
-    __: B1,
-
-    /// Bit 6: SIO Support
-    /// 
-    /// This bit indicates whether the Device provides a switching
-    /// signal in SIO mode.
-    /// 
-    /// Permissible values:
-    /// * 0 = SIO mode not supported
-    /// * 1 = SIO mode supported
-    pub sio: B1,
-
-    /// Bit 7: Length Unit
-    /// 
-    /// This bit indicates the length unit for the Length parameter.
-    /// * 0 = Length is in bits
-    /// * 1 = Length is in octets (bytes)
-    pub byte: B1,
-}
-
-impl Default for ProcessDataIn {
-    /// Default process data input is 0 length, no SIO support, bit-based.
-    fn default() -> Self {
-        Self::new().with_length(0).with_sio(0).with_byte(0)
-    }
-}
-
-/// Process data output configuration as per Annex B.1.
-///
-/// This bitfield configures the process data output characteristics
-/// including length and data format.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Annex B.1: Direct Parameter Page 1
-/// - Table B.6: Process data length codes
-#[bitfield]
-#[derive(Clone, Debug)]
-pub struct ProcessDataOut {
-    /// Bits 0 to 4: Length
-    /// 
-    /// These bits contain the length of the output data (Process Data
-    /// from Master to Device) in the length unit designated in the
-    /// BYTE parameter bit. Permissible codes for Length are specified
-    /// in Table B.6.
-    #[bits = 5]
-    pub length: B5,
-
-    /// Bits 5 to 6: Reserved
-    /// 
-    /// These bits are reserved and shall be set to zero in this
-    /// version of the specification.
-    #[skip] // Always set to 0, not exposed to user
-    __: B2,
-
-    /// Bit 7: Length Unit
-    /// 
-    /// This bit indicates the length unit for the Length parameter.
-    /// * 0 = Length is in bits
-    /// * 1 = Length is in octets (bytes)
-    pub byte: B1,
-}
-
-impl Default for ProcessDataOut {
-    /// Default process data output is 0 length, byte-based.
-    fn default() -> Self {
-        Self::new().with_length(0).with_byte(0)
-    }
-}
-
 /// Device operating mode as per Section 6.3.
 ///
 /// The device mode represents the current state of the IO-Link
@@ -377,7 +129,7 @@ pub struct DeviceCom {
     /// Transmission rate for IO-Link communication
     pub transmission_rate: TransmissionRate,
     /// Minimum cycle time configuration
-    pub min_cycle_time: MinCycleTime,
+    pub min_cycle_time: CycleTime,
     /// M-sequence capability configuration
     pub msequence_capability: MsequenceCapability,
     /// Protocol revision identifier
@@ -394,41 +146,11 @@ impl Default for DeviceCom {
         Self {
             suppported_sio_mode: SioMode::default(),
             transmission_rate: TransmissionRate::default(),
-            min_cycle_time: MinCycleTime::default(),
+            min_cycle_time: CycleTime::default(),
             msequence_capability: MsequenceCapability::default(),
             revision_id: RevisionId::default(),
             process_data_in: ProcessDataIn::default(),
             process_data_out: ProcessDataOut::default(),
-        }
-    }
-}
-
-/// Device identification parameters.
-///
-/// This struct contains the device identification information
-/// including vendor ID, device ID, and function ID.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Section 7.3.4.1: Device Identification
-/// - Annex B.1: Direct Parameter Page 1 (VendorID1, VendorID2, DeviceID1-3)
-#[derive(Clone, Debug)]
-pub struct DeviceIdent {
-    /// Vendor ID (VID) - 16-bit vendor identification
-    pub vendor_id: [u8; 2],
-    /// Device ID (DID) - 24-bit device identification
-    pub device_id: [u8; 3],
-    /// Function ID (FID) - 16-bit function identification (reserved)
-    pub function_id: [u8; 2],
-}
-
-impl Default for DeviceIdent {
-    /// Default device identification with all zeros.
-    fn default() -> Self {
-        Self {
-            vendor_id: [0, 0],
-            device_id: [0, 0, 0],
-            function_id: [0, 0],
         }
     }
 }
@@ -501,7 +223,8 @@ pub trait SystemManagementReq {
     ///
     /// - `Ok(())` if request was successful
     /// - `Err(SmError)` if an error occurred
-    fn sm_get_device_ident_req(&mut self, application_layer: &al::ApplicationLayer) -> SmResult<()>;
+    fn sm_get_device_ident_req(&mut self, application_layer: &al::ApplicationLayer)
+    -> SmResult<()>;
 
     /// Sets the device operating mode.
     ///
@@ -645,129 +368,129 @@ enum Transition {
     Tn,
 
     /// T1: Source:0 Target:1 - Switch to SIO mode.
-    /// 
+    ///
     /// The Device is switched to the configured SIO mode by receiving
     /// the trigger SM_SetDeviceMode.req(SIO).
-    /// 
+    ///
     /// Actions:
     /// - Invoke PL_SetMode(DI|DO|INACTIVE)
     /// - Invoke SM_DeviceMode(SIO)
     T1,
 
     /// T2: Source:1 Target:2 - Switch to communication mode.
-    /// 
+    ///
     /// The Device is switched to the communication mode by receiving
     /// the trigger DL_Mode.ind(ESTABCOM).
-    /// 
+    ///
     /// Actions:
     /// - Invoke PL_SetMode(COMx)
     /// - Invoke SM_DeviceMode(ESTABCOM)
     T2,
 
     /// T3: Source:2,3,4,5,6,7,8 Target:0 - Switch to idle mode.
-    /// 
+    ///
     /// The Device is switched to SM_Idle mode by receiving the trigger
     /// DL_Mode.ind(INACTIVE).
-    /// 
+    ///
     /// Actions:
     /// - Invoke PL_SetMode(INACTIVE)
     /// - Invoke SM_DeviceMode(IDLE)
     T3,
 
     /// T4: Source:2 Target:3 - Communication established.
-    /// 
+    ///
     /// The Device application receives an indication on the baudrate
     /// with which the communication has been established in the DL
     /// triggered by DL_Mode.ind(COMx).
-    /// 
+    ///
     /// Actions:
     /// - Invoke SM_DeviceMode(COMx)
     T4(types::DeviceMode),
 
     /// T5: Source:3 Target:4 - Enter identification startup.
-    /// 
+    ///
     /// The Device identification phase is entered by receiving the
     /// trigger DL_Write.ind(MCmd_MASTERIDENT).
-    /// 
+    ///
     /// Actions:
     /// - Invoke SM_DeviceMode(IDENTSTARTUP)
     T5,
 
     /// T6: Source:4 Target:5 - Enter identity check.
-    /// 
+    ///
     /// The Device identity check phase is entered by receiving the
     /// trigger DL_Write.ind(MCmd_DEVICEIDENT).
-    /// 
+    ///
     /// Actions:
     /// - Invoke SM_DeviceMode(IDENTCHANGE)
     T6,
 
     /// T7: Source:5 Target:6 - Enter compatibility startup.
-    /// 
+    ///
     /// The Device compatibility startup phase is entered by receiving
     /// the trigger DL_Read.ind(Direct Parameter page 1, address 0x02 = "MinCycleTime").
     T7,
 
     /// T8: Source:6 Target:7 - Enter preoperate mode.
-    /// 
+    ///
     /// The Device's preoperate phase is entered by receiving the
     /// trigger DL_Mode.ind(PREOPERATE).
-    /// 
+    ///
     /// Actions:
     /// - Invoke SM_DeviceMode(PREOPERATE)
     T8,
 
     /// T9: Source:7 Target:8 - Enter operate mode.
-    /// 
+    ///
     /// The Device's operate phase is entered by receiving the
     /// trigger DL_Mode.ind(OPERATE).
-    /// 
+    ///
     /// Actions:
     /// - Invoke SM_DeviceMode(OPERATE)
     T9,
 
     /// T10: Source:4 Target:7 - Enter preoperate mode from identification.
-    /// 
+    ///
     /// The Device's preoperate phase is entered by receiving the
     /// trigger DL_Mode.ind(PREOPERATE).
-    /// 
+    ///
     /// Actions:
     /// - Invoke SM_DeviceMode(PREOPERATE)
     T10,
 
     /// T11: Source:3 Target:8 - Enter operate mode from startup.
-    /// 
+    ///
     /// The Device's operate phase is entered by receiving the
     /// trigger DL_Mode.ind(OPERATE).
-    /// 
+    ///
     /// Actions:
     /// - Invoke SM_DeviceMode(OPERATE)
     T11,
 
     /// T12: Source:7 Target:3 - Return to startup from preoperate.
-    /// 
+    ///
     /// The Device's communication startup phase is entered by receiving
     /// the trigger DL_Mode.ind(STARTUP).
-    /// 
+    ///
     /// Actions:
     /// - Invoke SM_DeviceMode(STARTUP)
     T12,
 
     /// T13: Source:8 Target:3 - Return to startup from operate.
-    /// 
+    ///
     /// The Device's communication startup phase is entered by receiving
     /// the trigger DL_Mode.ind(STARTUP).
-    /// 
+    ///
     /// Actions:
     /// - Invoke SM_DeviceMode(STARTUP)
     T13,
 
     /// T14: Source:5 Target:2 - Transmission rate change required.
-    /// 
+    ///
     /// The requested Device identification requires a change of the
     /// transmission rate. Stop communication by changing the current
     /// transmission rate.
-    /// 
+    ///
     /// Actions:
     /// - Invoke PL_SetMode(COMx)
     /// - Invoke SM_DeviceMode(ESTABCOM)
@@ -786,11 +509,11 @@ enum Transition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemManagementState {
     /// SM_Idle_0: Waiting for configuration.
-    /// 
+    ///
     /// In SM_Idle the SM is waiting for configuration by the Device
     /// application and to be set to SIO mode. The state is left on
     /// receiving a SM_SetDeviceMode(SIO) request from the Device application.
-    /// 
+    ///
     /// The following sequence of services shall be executed between
     /// Device application and SM:
     /// - Invoke SM_SetDeviceCom(initial parameter list)
@@ -798,7 +521,7 @@ pub enum SystemManagementState {
     Idle,
 
     /// SM_SIO_1: SIO mode active.
-    /// 
+    ///
     /// In SM_SIO the SM Line Handler is remaining in the default SIO mode.
     /// The Physical Layer is set to the SIO mode characteristics defined
     /// by the Device application via the SetDeviceMode service. The state
@@ -806,7 +529,7 @@ pub enum SystemManagementState {
     Sio,
 
     /// SM_ComEstablish_2: Establishing communication.
-    /// 
+    ///
     /// In SM_ComEstablish the SM is waiting for the communication to be
     /// established in the Data Link Layer. The state is left on receiving
     /// a DL_Mode(INACTIVE) or a DL_Mode(COMx) indication, where COMx may
@@ -814,7 +537,7 @@ pub enum SystemManagementState {
     ComEstablish,
 
     /// SM_ComStartup_3: Communication startup phase.
-    /// 
+    ///
     /// In SM_ComStartup the communication parameter (Direct Parameter page 1,
     /// addresses 0x02 to 0x06) are read by the Master SM via DL_Read requests.
     /// The state is left upon reception of a DL_Mode(INACTIVE), a
@@ -823,7 +546,7 @@ pub enum SystemManagementState {
     ComStartup,
 
     /// SM_IdentStartup_4: Identification startup phase.
-    /// 
+    ///
     /// In SM_IdentStartup the identification data (VID, DID, FID) are read
     /// and verified by the Master. In case of incompatibilities the Master SM
     /// writes the supported SDCI Revision (RID) and configured DeviceID (DID)
@@ -833,13 +556,13 @@ pub enum SystemManagementState {
     IdentStartup,
 
     /// SM_IdentCheck_5: Identity check phase.
-    /// 
+    ///
     /// In SM_IdentCheck the SM waits for new initialization of communication
     /// and identification parameters. The state is left on receiving a
     /// DL_Mode(INACTIVE) indication, a DL_Read(Direct Parameter page 1,
     /// addresses 0x02 = "MinCycleTime") request, or the SM requires a switch
     /// of the transmission rate.
-    /// 
+    ///
     /// Within this state the Device application shall check the RID and DID
     /// parameters from the SM and set these data to the supported values.
     /// Therefore the following sequence of services shall be executed between
@@ -852,14 +575,14 @@ pub enum SystemManagementState {
     IdentCheck,
 
     /// SM_CompStartup_6: Compatibility startup phase.
-    /// 
+    ///
     /// In SM_CompatStartup the communication and identification data are
     /// reread and verified by the Master SM. The state is left on receiving
     /// a DL_Mode(INACTIVE) or a DL_Mode(PREOPERATE) indication.
     CompStartup,
 
     /// SM_Preoperate_7: Preoperate mode.
-    /// 
+    ///
     /// During SM_Preoperate the SerialNumber can be read and verified by
     /// the Master SM, as well as Data Storage and Device parameterization
     /// may be executed. The state is left on receiving a DL_Mode(INACTIVE),
@@ -867,7 +590,7 @@ pub enum SystemManagementState {
     Preoperate,
 
     /// SM_Operate_8: Operate mode.
-    /// 
+    ///
     /// During SM_Operate the cyclic Process Data exchange and acyclic
     /// On-request Data transfer are active. The state is left on receiving
     /// a DL_Mode(INACTIVE) or a DL_Mode(STARTUP) indication.
@@ -1021,15 +744,9 @@ impl SystemManagement {
     fn process_event(&mut self, event: SystemManagementEvent) -> IoLinkResult<()> {
         use SystemManagementEvent as Event;
         use SystemManagementState as State;
-        let new_state = match (self.state, event) {
-            (State::Idle, Event::SmDeviceModeSio) => {
-                self.exec_transition = Transition::T1;
-                State::Sio
-            }
-            (State::Sio, Event::DlModeEstabcom) => {
-                self.exec_transition = Transition::T2;
-                State::ComEstablish
-            }
+        let (new_transition, new_state) = match (self.state, event) {
+            (State::Idle, Event::SmDeviceModeSio) => (Transition::T1, State::Sio),
+            (State::Sio, Event::DlModeEstabcom) => (Transition::T2, State::ComEstablish),
             (
                 State::ComEstablish
                 | State::ComStartup
@@ -1039,40 +756,34 @@ impl SystemManagement {
                 | State::Preoperate
                 | State::Operate,
                 Event::DlModeInactive,
-            ) => {
-                self.exec_transition = Transition::T3;
-                State::Idle
-            }
+            ) => (Transition::T3, State::Idle),
             (State::ComEstablish, Event::DlModeComx(mode)) => {
-                self.exec_transition = Transition::T4(mode);
-                State::ComStartup
+                (Transition::T4(mode), State::ComStartup)
             }
             (State::ComStartup, Event::DlWriteMCmdMasterident(addr, value)) => {
-                self.exec_transition = Transition::T5;
-                State::IdentStartup
+                (Transition::T5, State::IdentStartup)
             }
             (State::IdentStartup, Event::DlWriteMCmdDeviceident(addr, value)) => {
-                self.exec_transition = Transition::T6;
-                State::IdentCheck
+                (Transition::T6, State::IdentCheck)
             }
-            (State::IdentCheck, Event::DlReadMincycletime) => {
-                self.exec_transition = Transition::T7;
-                State::CompStartup
-            }
-            (State::CompStartup, Event::DlModePreoperate) => {
-                self.exec_transition = Transition::T8;
-                State::Preoperate
-            }
-            (State::Preoperate, Event::DlModeOperate) => {
-                self.exec_transition = Transition::T14;
-                State::Operate
-            }
+            (State::IdentCheck, Event::DlReadMincycletime) => (Transition::T7, State::CompStartup),
+            (State::CompStartup, Event::DlModePreoperate) => (Transition::T8, State::Preoperate),
+            (State::Preoperate, Event::DlModeOperate) => (Transition::T14, State::Operate),
             _ => {
+                log_state_transition_error!(module_path!(), "process_event", self.state, event);
                 return Err(IoLinkError::InvalidEvent);
             }
         };
 
+        log_state_transition!(
+            module_path!(),
+            "process_event",
+            self.state,
+            new_state,
+            event
+        );
         self.state = new_state;
+        self.exec_transition = new_transition;
         Ok(())
     }
 
@@ -1111,18 +822,18 @@ impl SystemManagement {
     ///     }
     /// }
     /// ```
-    pub fn poll(
+    pub fn poll<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
         application_layer: &mut al::ApplicationLayer,
-        physical_layer: &mut pl::physical_layer::PhysicalLayer,
+        physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         if self.reconfig.revision_id.is_some()
             && self.reconfig.device_id1.is_some()
             && self.reconfig.device_id2.is_some()
             && self.reconfig.device_id3.is_some()
-            {
-                let _ = self.poll_active_state(application_layer);
-            }
+        {
+            let _ = self.poll_active_state(application_layer);
+        }
         match self.exec_transition {
             Transition::Tn => {
                 // No transition to execute
@@ -1216,7 +927,10 @@ impl SystemManagement {
         Ok(())
     }
 
-    fn poll_active_state(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn poll_active_state(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer,
+    ) -> IoLinkResult<()> {
         use SystemManagementState as State;
         match self.state {
             State::IdentCheck => {
@@ -1242,10 +956,10 @@ impl SystemManagement {
     }
 
     /// Execute T1 transition: Switch to SIO mode
-    fn execute_t1(
+    fn execute_t1<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
         application_layer: &mut al::ApplicationLayer,
-        physical_layer: &mut pl::physical_layer::PhysicalLayer,
+        physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         // Invoke PL_SetMode(DI|DO|INACTIVE)
         let sio_mode = match self.device_com.suppported_sio_mode {
@@ -1253,17 +967,17 @@ impl SystemManagement {
             SioMode::Di => IoLinkMode::Di,
             SioMode::Do => IoLinkMode::Do,
         };
-        physical_layer.pl_set_mode(sio_mode)?;
+        physical_layer.pl_set_mode_req(sio_mode)?;
         // Invoke SM_DeviceMode(SIO)
         let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Sio);
         Ok(())
     }
 
     /// Execute T2 transition: Switch to communication mode
-    fn execute_t2(
+    fn execute_t2<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
         application_layer: &mut al::ApplicationLayer,
-        physical_layer: &mut pl::physical_layer::PhysicalLayer,
+        physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         let com_mode = match self.device_com.transmission_rate {
             TransmissionRate::Com1 => IoLinkMode::Com1,
@@ -1271,21 +985,21 @@ impl SystemManagement {
             TransmissionRate::Com3 => IoLinkMode::Com3,
         };
         // Invoke PL_SetMode(COMx)
-        physical_layer.pl_set_mode(com_mode)?;
+        let _ = physical_layer.pl_set_mode_req(com_mode);
         // Invoke SM_DeviceMode(ESTABCOM)
         let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Estabcom);
         Ok(())
     }
 
     /// Execute T3 transition: Switch to SM_Idle mode
-    fn execute_t3(
+    fn execute_t3<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
         application_layer: &mut al::ApplicationLayer,
-        physical_layer: &mut pl::physical_layer::PhysicalLayer,
+        physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         // TODO: Cleanup any active communication sessions and reset state
         // Invoke PL_SetMode(INACTIVE)
-        physical_layer.pl_set_mode(IoLinkMode::Inactive)?;
+        let _ = physical_layer.pl_set_mode_req(IoLinkMode::Inactive);
         // Invoke SM_DeviceMode(IDLE)
         let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Idle);
         Ok(())
@@ -1376,15 +1090,20 @@ impl SystemManagement {
     }
 
     /// Execute T14 transition: Change transmission rate and establish communication
-    fn execute_t14(
+    fn execute_t14<T: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
         application_layer: &mut al::ApplicationLayer,
-        physical_layer: &mut pl::physical_layer::PhysicalLayer,
+        physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         // TODO: Implement transmission rate change logic based on device identification requirements
         // Invoke PL_SetMode(COMx)
         // TODO: Change the COM1 to actual communication mode from the application
-        physical_layer.pl_set_mode(IoLinkMode::Com1)?;
+        let mode = match self.device_com.transmission_rate {
+            TransmissionRate::Com1 => IoLinkMode::Com1,
+            TransmissionRate::Com2 => IoLinkMode::Com2,
+            TransmissionRate::Com3 => IoLinkMode::Com3,
+        };
+        let _ = physical_layer.pl_set_mode_req(mode);
         // Invoke SM_DeviceMode(ESTABCOM)
         let _ = application_layer.sm_device_mode_ind(types::DeviceMode::Estabcom);
         Ok(())
@@ -1408,7 +1127,7 @@ impl Default for SystemManagement {
     }
 }
 
-impl DlInd for SystemManagement {
+impl DlModeInd for SystemManagement {
     fn dl_mode_ind(&mut self, mode: types::DlMode) -> IoLinkResult<()> {
         use types::DlMode;
         match mode {
@@ -1424,12 +1143,14 @@ impl DlInd for SystemManagement {
             }
             DlMode::Estabcom => self.process_event(SystemManagementEvent::DlModeEstabcom),
             DlMode::Startup => self.process_event(SystemManagementEvent::DlModeStartup),
-            DlMode::Preoperate => self.process_event(SystemManagementEvent::DlModePreoperate),
+            DlMode::PreOperate => self.process_event(SystemManagementEvent::DlModePreoperate),
             DlMode::Operate => self.process_event(SystemManagementEvent::DlModeOperate),
             _ => Err(IoLinkError::InvalidEvent),
         }
     }
+}
 
+impl DlReadWriteInd for SystemManagement {
     fn dl_write_ind(&mut self, address: u8, value: u8) -> IoLinkResult<()> {
         match (address, value) {
             (direct_parameter_address!(MasterCommand), master_command!(MasterIdent)) => {
@@ -1443,7 +1164,7 @@ impl DlInd for SystemManagement {
                 ))?;
             }
             (direct_parameter_address!(RevisionID), value) => {
-                self.reconfig.revision_id = Some(RevisionId::from_bytes([value]));
+                self.reconfig.revision_id = Some(RevisionId::from_bits(value));
             }
             (direct_parameter_address!(DeviceID1), value) => {
                 self.reconfig.device_id1 = Some(value);
@@ -1490,7 +1211,10 @@ impl SystemManagementReq for SystemManagement {
         Ok(())
     }
 
-    fn sm_get_device_ident_req(&mut self, application_layer: &al::ApplicationLayer) -> SmResult<()> {
+    fn sm_get_device_ident_req(
+        &mut self,
+        application_layer: &al::ApplicationLayer,
+    ) -> SmResult<()> {
         // Return the current device identification parameters
         let device_ident = Ok(&self.device_ident);
         application_layer.sm_get_device_ident_cnf(device_ident)?;
@@ -1500,6 +1224,9 @@ impl SystemManagementReq for SystemManagement {
     fn sm_set_device_mode_req(&mut self, mode: DeviceMode) -> SmResult<()> {
         // Set the device mode
         self.device_mode = mode;
+        if mode == DeviceMode::Sio {
+            let _ = self.process_event(SystemManagementEvent::SmDeviceModeSio);
+        }
         Ok(())
     }
 }

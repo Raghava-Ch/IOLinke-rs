@@ -4,10 +4,10 @@
 //! for different target platforms. Based on IO-Link Specification v1.1.4 Section 5.2.
 
 use crate::types::IoLinkResult;
-use crate::pl::physical_layer::{PhysicalLayerInd, IoLinkGpio, IoLinkTimer, IoLinkUart};
+use crate::pl::physical_layer::{PhysicalLayerInd, IoLinkTimer, IoLinkUart};
 
 /// Complete HAL implementation combining all required traits
-pub trait IoLinkHal: PhysicalLayerInd + IoLinkGpio + IoLinkTimer + IoLinkUart {
+pub trait IoLinkHal: PhysicalLayerInd + IoLinkTimer + IoLinkUart {
     /// Initialize the hardware
     fn init(&mut self) -> IoLinkResult<()>;
 

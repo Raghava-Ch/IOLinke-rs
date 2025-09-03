@@ -1,96 +1,6 @@
-use modular_bitfield::prelude::*;
-
-use crate::{IoLinkError, IoLinkResult};
+use crate::{utils::event_type::{EventQualifier, StatusCodeType1, StatusCodeType2}, IoLinkError, IoLinkResult};
 
 const MAX_EVENT_MEMORY_SIZE: usize = 19;
-
-/// See A.6.2 StatusCode type 1 (no details)
-/// Figure A.21 shows the structure of this StatusCode.
-#[bitfield]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct StatusCodeType1 {
-    event_details: B1,
-    pd_valid: B1,
-    reserved: B1,
-    event_code: B5,
-}
-
-/// A.6.3 StatusCode type 2 (with details)
-/// Figure A.22 shows the structure of the StatusCode type 2.
-#[bitfield]
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct StatusCodeType2 {
-    event_details: B1,
-    reserved: B1,
-    activated_event_slot1: B1,
-    activated_event_slot2: B1,
-    activated_event_slot3: B1,
-    activated_event_slot4: B1,
-    activated_event_slot5: B1,
-    activated_event_slot6: B1,
-}
-
-/// See A.6.4 EventQualifier
-/// The structure of the EventQualifier is shown in Figure A.24.
-#[bitfield]
-#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EventQualifier {
-    #[bits = 2]
-    pub eq_mode: EventMode,
-    #[bits = 2]
-    pub eq_type: EventType,
-    #[bits = 1]
-    pub eq_source: EventSource,
-    #[bits = 3]
-    pub eq_instance: EventInstance,
-}
-
-
-/// EventQualifier INSTANCE field (Bits 0..=2)
-/// See Table A.17 – Values of INSTANCE
-#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
-#[bits = 3]
-pub enum EventInstance {
-    Unknown = 0,
-    // Reserved = 1..=3,
-    Application = 4,
-    System = 5,
-    // Reserved = 6..=7,
-}
-
-/// EventQualifier SOURCE field (Bits 3)
-/// See Table A.18 – Values of SOURCE
-#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
-#[bits = 1]
-pub enum EventSource {
-    /// Device (remote)
-    Device = 0,
-    /// Master/Port
-    Master = 1,
-}
-
-/// EventQualifier TYPE field (Bits 4..=5)
-/// See Table A.19 – Values of TYPE
-#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
-#[bits = 2]
-pub enum EventType {
-    // Reserved = 0
-    Notification = 1,
-    Warning = 2,
-    Error = 3,
-}
-
-/// EventQualifier MODE field (Bits 6..=7)
-/// See Table A.20 – Values of MODE
-#[derive(Specifier, Debug, Clone, Copy, PartialEq, Eq)]
-#[bits = 2]
-pub enum EventMode {
-    // Reserved = 0,
-    SingleShot = 1,
-    Disappears = 2,
-    Appears = 3,
-}
-
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,7 +20,7 @@ impl EventEntry {
     /// Convert EventEntry to bytes representation
     pub fn to_bytes(&self) -> [u8; 3] {
         let mut bytes = [0u8; 3];
-        bytes[0] = (self.event_qualifier.into_bytes())[0];
+        bytes[0] = self.event_qualifier.into_bits();
         bytes[1] = (self.event_code & 0xFF) as u8;
         bytes[2] = ((self.event_code >> 8) & 0xFF) as u8;
         bytes

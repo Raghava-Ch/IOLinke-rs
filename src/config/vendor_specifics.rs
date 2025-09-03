@@ -1,3 +1,5 @@
+use crate::RevisionId;
+
 pub const MAX_WRITE_BUFFER_SIZE: usize = 65535;
 pub const MAX_PARAM_ENTRIES: usize = 100;
 
@@ -84,7 +86,7 @@ pub const fn minor_revision_id() -> u8 {
     0x4u8
 }
 
-pub const fn revision_id() -> u8 {
+pub const fn revision_id_parameter() -> RevisionId {
     const MAJOR_REVISION_ID: u8 = major_revision_id();
     const MINOR_REVISION_ID: u8 = minor_revision_id();
 
@@ -94,7 +96,10 @@ pub const fn revision_id() -> u8 {
     if MINOR_REVISION_ID > 0b1111 {
         panic!("Invalid minor revision id provided is not in the range 0-15");
     }
-    MAJOR_REVISION_ID << 4 | MINOR_REVISION_ID
+    let mut revision_id = RevisionId::new();
+    revision_id.set_major_rev(MAJOR_REVISION_ID);
+    revision_id.set_minor_rev(MINOR_REVISION_ID);
+    revision_id
 }
 
 pub const fn vendor_id_1() -> u8 {
@@ -125,16 +130,16 @@ pub const fn function_id_2() -> u8 {
     0x01u8
 }
 
-pub const fn vendor_name() -> &'static [u8] {
-    b"IOLinke"
+pub const fn vendor_name() -> &'static str {
+    "IOLinke"
 }
 
 pub const fn vendor_name_length() -> u8 {
     vendor_name().len() as u8
 }
 
-pub const fn product_name() -> &'static [u8] {
-    b"IOLinke"
+pub const fn product_name() -> &'static str {
+    "IOLinke"
 }
 
 pub const fn product_name_length() -> u8 {
@@ -554,7 +559,7 @@ pub mod storage_config {
 
         /// Returns the vendor name as a byte slice.
         #[inline(always)]
-        pub const fn vendor_name() -> &'static [u8] {
+        pub const fn vendor_name() -> &'static str {
             config::vendor_specifics::vendor_name()
         }
         /// Returns the length of the vendor name.
@@ -564,7 +569,7 @@ pub mod storage_config {
         }
         /// Returns the product name as a byte slice.
         #[inline(always)]
-        pub const fn product_name() -> &'static [u8] {
+        pub const fn product_name() -> &'static str {
             config::vendor_specifics::product_name()
         }
         /// Returns the length of the product name.
@@ -581,27 +586,27 @@ pub mod storage_config {
         /// Returns the minimum cycle time configuration value.
         #[inline(always)]
         pub const fn min_cycle_time() -> u8 {
-            config::timings::min_cycle_time()
+            config::timings::min_cycle_time::min_cycle_time_parameter().into_bits()
         }
         /// Returns the M-Sequence capability configuration value.
         #[inline(always)]
         pub const fn m_sequence_capability() -> u8 {
-            config::m_seq_capability::config_m_sequence_capability()
+            config::m_seq_capability::m_sequence_capability_parameter().into_bits()
         }
         /// Returns the revision ID configuration value.
         #[inline(always)]
         pub const fn revision_id() -> u8 {
-            config::vendor_specifics::revision_id()
+            config::vendor_specifics::revision_id_parameter().into_bits()
         }
         /// Returns the process data in configuration value.
         #[inline(always)]
         pub const fn process_data_in() -> u8 {
-            config::process_data::pd_in::pd_in()
+            config::process_data::pd_in::pd_in_parameter().into_bits()
         }
         /// Returns the process data out configuration value.
         #[inline(always)]
         pub const fn process_data_out() -> u8 {
-            config::process_data::pd_out::pd_out()
+            config::process_data::pd_out::pd_out_parameter().into_bits()
         }
         /// Returns the vendor ID 1 configuration value.
         #[inline(always)]
@@ -676,10 +681,10 @@ pub mod storage_config {
 
     // --- Vendor/Product Name (0x0010, 0x0012) ---
     const _VENDOR_NAME_INDEX: u16 = param_indices::vendor_name();
-    const VENDOR_NAME: &[u8] = vendor_product_info::vendor_name();
+    const VENDOR_NAME: &'static str = vendor_product_info::vendor_name();
     const _VENDOR_NAME_LENGTH: u8 = vendor_product_info::vendor_name_length();
     const _PRODUCT_NAME_INDEX: u16 = param_indices::product_name();
-    const PRODUCT_NAME: &[u8] = vendor_product_info::product_name();
+    const PRODUCT_NAME: &'static str = vendor_product_info::product_name();
     const _PRODUCT_NAME_LENGTH: u8 = vendor_product_info::product_name_length();
 
     // --- Configuration Values ---
@@ -726,8 +731,8 @@ pub mod storage_config {
         (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,        /* STATE_PROPERTY_SUBINDEX */ 0x02,             /* Default */  1,       0..0, ReadWrite,   u8, &[0]),
         (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,     /* DATA_STORAGE_SIZE_SUBINDEX */ 0x03,             /* Default */  1,       0..0, ReadWrite,   u8, &[0]),
         (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,    /* PARAMETER_CHECKSUM_SUBINDEX */ 0x04,             /* Default */  1,       0..0, ReadWrite,   u8, &[0]),
-        (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,            /* INDEX_LIST_SUBINDEX */ 0x05,   /* INDEX_LIST_LENGTH */ 30,      0..29, ReadWrite,   u8, &[0]),
-        (       /* VENDOR_NAME_INDEX */ 0x0010,           /* VENDOR_NAME_SUBINDEX */ 0x00,  /* VENDOR_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, VENDOR_NAME),
-        (      /* PRODUCT_NAME_INDEX */ 0x0012,          /* PRODUCT_NAME_SUBINDEX */ 0x00, /* PRODUCT_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, PRODUCT_NAME),
+        (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,            /* INDEX_LIST_SUBINDEX */ 0x05,   /* INDEX_LIST_LENGTH */ 30,      0..29, ReadWrite,   u8, &[0; 30]),
+        (       /* VENDOR_NAME_INDEX */ 0x0010,           /* VENDOR_NAME_SUBINDEX */ 0x00,  /* VENDOR_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, VENDOR_NAME.as_bytes()),
+        (      /* PRODUCT_NAME_INDEX */ 0x0012,          /* PRODUCT_NAME_SUBINDEX */ 0x00, /* PRODUCT_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, PRODUCT_NAME.as_bytes()),
     }
 }

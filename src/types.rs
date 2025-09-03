@@ -22,6 +22,8 @@
 //! - Annex B: Parameter Definitions
 
 use heapless::Vec;
+use bitfields::bitfield;
+use iolinke_macros::bitfield_support;
 
 /// Maximum length of IO-Link message data in bytes.
 ///
@@ -73,13 +75,28 @@ pub enum IoLinkMode {
 ///
 /// This enum specifies whether a parameter operation is a read or write
 /// request from the master to the device.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[bitfield_support]
 #[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RwDirection {
-    /// Read operation - Master requests parameter value from device
-    Read,
     /// Write operation - Master sends parameter value to device
     Write,
+    /// Read operation - Master requests parameter value from device
+    Read,
+}
+
+impl RwDirection {
+    /// Create a new RwDirection enum variant
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// let direction = RwDirection::new();
+    /// assert_eq!(direction, RwDirection::Write);
+    /// ```
+    pub const fn new() -> Self {
+        Self::Write
+    }
 }
 
 impl TryFrom<u8> for RwDirection {
@@ -87,8 +104,8 @@ impl TryFrom<u8> for RwDirection {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(RwDirection::Read),
-            1 => Ok(RwDirection::Write),
+            0 => Ok(RwDirection::Write),
+            1 => Ok(RwDirection::Read),
             _ => Err(IoLinkError::InvalidParameter),
         }
     }
@@ -103,7 +120,9 @@ impl TryFrom<u8> for RwDirection {
 ///
 /// - IO-Link v1.1.4 Annex A.1.2: M-sequence control (MC)
 /// - Table A.1: Values of communication channel
+#[bitfield_support]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum ComChannel {
     /// Process data channel - Real-time process data exchange
     Process = 0,
@@ -113,6 +132,12 @@ pub enum ComChannel {
     Diagnosis = 2,
     /// ISDU channel - Index-based service data unit communication
     Isdu = 3,
+}
+
+impl ComChannel {
+    pub const fn new() -> Self {
+        Self::Process
+    }
 }
 
 impl TryFrom<u8> for ComChannel {
@@ -138,7 +163,9 @@ impl TryFrom<u8> for ComChannel {
 ///
 /// - IO-Link v1.1.4 Annex A.1.3: Checksum / M-sequence type (CKT)
 /// - Table A.2: M-sequence type definitions
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[bitfield_support]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MsequenceBaseType {
     /// Type 0 - Standard M-sequence with basic timing
     Type0 = 0,
@@ -148,6 +175,20 @@ pub enum MsequenceBaseType {
     Type2 = 2,
     /// Reserved for future use
     Reserved = 3,
+}
+
+impl MsequenceBaseType {
+    /// Create a new MsequenceBaseType enum variant
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// let base_type = MsequenceBaseType::new();
+    /// assert_eq!(base_type, MsequenceBaseType::Type0);
+    /// ```
+    pub const fn new() -> Self {
+        Self::Type0
+    }
 }
 
 /// Event instance identifier as per Annex A.6.4.
@@ -291,7 +332,7 @@ pub enum DlMode {
     /// Handler changed to the STARTUP state
     Startup,
     /// Handler changed to the PREOPERATE state
-    Preoperate,
+    PreOperate,
     /// Handler changed to the OPERATE state
     Operate,
 }
@@ -437,81 +478,28 @@ pub enum DlControlCode {
 }
 
 /// See 7.2.2.5 PDInStatus
+#[bitfield_support]
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PdStatus {
     /// (Input Process Data valid based on PD status flag (see A.1.5); see 7.2.1.18)
-    VALID,
+    VALID = 0,
     /// (Input Process Data invalid)
-    INVALID,
+    INVALID = 1,
 }
 
-/// Message types for IO-Link communication
-/// See IO-Link v1.1.4 Section 6.1
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum MessageType {
-    /// Type 0: Process Data
-    ProcessData = 0,
-    /// Type 1: Device command
-    DeviceCommand = 1,
-    /// Type 2: Parameter command
-    ParameterCommand = 2,
-}
-
-impl TryFrom<u8> for MessageType {
-    type Error = IoLinkError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(MessageType::ProcessData),
-            1 => Ok(MessageType::DeviceCommand),
-            2 => Ok(MessageType::ParameterCommand),
-            _ => Err(IoLinkError::InvalidParameter),
-        }
+impl PdStatus {
+    /// Create a new PdStatus enum variant
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// let status = PdStatus::new();
+    /// assert_eq!(status, PdStatus::INVALID);
+    /// ```
+    pub const fn new() -> Self {
+        Self::INVALID
     }
-}
-
-impl Into<u8> for MessageType {
-    fn into(self) -> u8 {
-        match self {
-            MessageType::ProcessData => 0,
-            MessageType::DeviceCommand => 1,
-            MessageType::ParameterCommand => 2,
-        }
-    }
-}
-
-/// Event types for IO-Link devices
-/// See IO-Link v1.1.4 Section 8.4.4
-// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-// #[repr(u16)]
-// pub enum EventType {
-//     /// No event
-//     None = 0x0000,
-//     /// Device appears
-//     DeviceAppears = 0x1000,
-//     /// Device disappears
-//     DeviceDisappears = 0x1001,
-//     /// Communication lost
-//     CommunicationLost = 0x1002,
-//     /// Device fault
-//     DeviceFault = 0x2000,
-//     /// Parameter change
-//     ParameterChange = 0x3000,
-// }
-
-/// Event structure
-/// See IO-Link v1.1.4 Section 8.4.4
-#[derive(Debug, Clone)]
-pub struct Event {
-    /// Event type
-    pub event_type: EventType,
-    /// Event qualifier
-    pub qualifier: u8,
-    /// Event mode
-    pub mode: u8,
-    /// Event data
-    pub data: Vec<u8, 8>,
 }
 
 /// Error types for the IO-Link stack
@@ -567,6 +555,10 @@ pub enum IoLinkError {
     FailedToSetParameter,
     /// Function not available, This is a custom error type for parameter manager
     FuncNotAvailable,
+    /// Invalid index, This is a custom error type for parameter manager
+    InvalidIndex,
+    /// Memory error, This is a custom error type for memory handling
+    MemoryError,
 }
 
 /// Result type for IO-Link operations

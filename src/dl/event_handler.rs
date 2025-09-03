@@ -4,9 +4,7 @@
 //! IO-Link Specification v1.1.4 Section 8.4.4
 
 use crate::{
-    dl::{self},
-    storage,
-    types::{self, IoLinkError, IoLinkResult},
+    dl::{self}, log_state_transition, log_state_transition_error, storage, types::{self, IoLinkError, IoLinkResult}
 };
 
 pub trait DlEventTriggerConf {
@@ -127,8 +125,23 @@ impl EventHandler {
             }
             (State::Idle, Event::EhConfInactive) => (Transition::T7, State::Inactive),
             (State::FreezeEventMemory, Event::EhConfInactive) => (Transition::T8, State::Inactive),
-            _ => return Err(IoLinkError::InvalidEvent),
+            _ => {
+                log_state_transition_error!(
+                    module_path!(),
+                    "process_event",
+                    self.state,
+                    event
+                );
+                (Transition::Tn, self.state)
+            }
         };
+        log_state_transition!(
+            module_path!(),
+            "process_event",
+            self.state,
+            new_state,
+            event
+        );
         // Update the state and transition
         self.state = new_state;
         self.exec_transition = new_transition;
@@ -316,7 +329,7 @@ impl dl::od_handler::OdInd for EventHandler {
         let event = if od_ind_data.rw_direction == types::RwDirection::Read
             && od_ind_data.com_channel == types::ComChannel::Diagnosis
         {
-            EventHandlerEvent::EventRead(od_ind_data.address_ctrl, od_ind_data.length)
+            EventHandlerEvent::EventRead(od_ind_data.address_ctrl, od_ind_data.req_length)
         } else if od_ind_data.rw_direction == types::RwDirection::Write
             && od_ind_data.com_channel == types::ComChannel::Diagnosis
             && od_ind_data.address_ctrl == 0x00

@@ -4,12 +4,16 @@
 //! IO-Link Specification v1.1.4 Section 7.3.5.3
 
 use heapless::Vec;
+use iolinke_macros::direct_parameter_address;
 
 use crate::{
-    al, config, dl::{self, DlInd}, system_management, types::{self, IoLinkError, IoLinkResult}
+    al, config,
+    dl::{self, DlReadWriteInd},
+    log_state_transition, log_state_transition_error, system_management,
+    types::{self, IoLinkError, IoLinkResult},
 };
 
-pub const OD_LENGTH: usize = config::m_seq_capability::max_od_length() as usize;
+pub const OD_LENGTH: usize = config::on_req_data::max_possible_od_length() as usize;
 
 pub trait OdInd {
     /// Invoke OD.ind service with the provided data
@@ -30,7 +34,7 @@ pub trait DlWriteParamInd {
 
 pub trait DlParamRsp {
     /// See 7.2.1.4 DL_ReadParam.rsp
-    fn dl_read_param_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()>;
+    fn dl_read_param_rsp(&mut self, length: u8, data: u8) -> IoLinkResult<()>;
     fn dl_write_param_rsp(&mut self) -> IoLinkResult<()>;
 }
 
@@ -46,7 +50,7 @@ pub struct OdIndData {
     pub rw_direction: types::RwDirection,
     pub com_channel: types::ComChannel,
     pub address_ctrl: u8,
-    pub length: u8,
+    pub req_length: u8,
     pub data: Vec<u8, OD_LENGTH>,
 }
 
@@ -56,7 +60,7 @@ impl OdIndData {
             rw_direction: types::RwDirection::Read,
             com_channel: types::ComChannel::Page,
             address_ctrl: 0,
-            length: 0,
+            req_length: 0,
             data: Vec::new(),
         }
     }
@@ -140,22 +144,24 @@ impl OnRequestDataHandler {
         use OnRequestHandlerState as State;
 
         let (new_transition, new_state) = match (self.state, event) {
-            (State::Inactive, Event::OhConfInactive) => (Transition::T1, State::Idle),
-            (State::Idle, Event::OdIndParam) => {
-                (Transition::T2, State::Idle)
-            }
-            (State::Idle, Event::OdIndCommand) => {
-                (Transition::T3, State::Idle)
-            }
-            (State::Idle, Event::OdIndIsdu) => {
-                (Transition::T4, State::Idle)
-            }
-            (State::Idle, Event::OdIndEvent) => {
-                (Transition::T5, State::Idle)
-            }
+            (State::Inactive, Event::OhConfActive) => (Transition::T1, State::Idle),
+            (State::Idle, Event::OdIndParam) => (Transition::T2, State::Idle),
+            (State::Idle, Event::OdIndCommand) => (Transition::T3, State::Idle),
+            (State::Idle, Event::OdIndIsdu) => (Transition::T4, State::Idle),
+            (State::Idle, Event::OdIndEvent) => (Transition::T5, State::Idle),
             (State::Idle, Event::OhConfInactive) => (Transition::T6, State::Inactive),
-            _ => return Err(IoLinkError::InvalidEvent),
+            _ => {
+                log_state_transition_error!(module_path!(), "process_event", self.state, event);
+                (Transition::Tn, self.state)
+            }
         };
+        log_state_transition!(
+            module_path!(),
+            "process_event",
+            self.state,
+            new_state,
+            event
+        );
         self.exec_transition = new_transition;
         self.state = new_state;
 
@@ -168,6 +174,7 @@ impl OnRequestDataHandler {
         &mut self,
         command_handler: &mut dl::command_handler::CommandHandler,
         isdu_handler: &mut dl::isdu_handler::IsduHandler,
+        message_handler: &mut dl::message_handler::MessageHandler,
         event_handler: &mut dl::event_handler::EventHandler,
         application_layer: &mut al::ApplicationLayer,
         system_management: &mut system_management::SystemManagement,
@@ -186,13 +193,23 @@ impl OnRequestDataHandler {
                 self.exec_transition = Transition::Tn;
                 // Provide data content of requested parameter or perform appropriate write action
                 let od_ind_data = &(self.od_ind_data);
-                self.execute_t2(&od_ind_data, command_handler, application_layer, system_management)?;
+                self.execute_t2(
+                    &od_ind_data,
+                    command_handler,
+                    application_layer,
+                    system_management,
+                )?;
             }
             Transition::T3 => {
                 self.exec_transition = Transition::Tn;
                 // Redirect to command handler
                 let od_ind_data = &self.od_ind_data;
-                self.execute_t3(od_ind_data, command_handler, system_management)?;
+                self.execute_t3(
+                    od_ind_data,
+                    command_handler,
+                    application_layer,
+                    system_management,
+                )?;
             }
             Transition::T4 => {
                 self.exec_transition = Transition::Tn;
@@ -217,7 +234,7 @@ impl OnRequestDataHandler {
 
     /// Handle transition T1: Inactive (0) -> Idle (1)
     /// Action: -
-    fn execute_t1(&mut self) -> IoLinkResult<()> {
+    fn execute_t1(&self) -> IoLinkResult<()> {
         Ok(())
     }
 
@@ -238,12 +255,15 @@ impl OnRequestDataHandler {
                 let _ = system_management.dl_read_ind(od_ind_data.address_ctrl);
             } else if od_ind_data.rw_direction == types::RwDirection::Write {
                 // Perform appropriate write action
-                application_layer.dl_write_param_ind(od_ind_data.address_ctrl, od_ind_data.data[0])?;
+                application_layer
+                    .dl_write_param_ind(od_ind_data.address_ctrl, od_ind_data.data[0])?;
+                if od_ind_data.address_ctrl == direct_parameter_address!(MasterCommand) {
+                    command_handler.od_ind(&od_ind_data)?;
+                }
             }
         } else {
             return Err(IoLinkError::InvalidEvent);
         }
-        command_handler.od_ind(&od_ind_data)?;
         Ok(())
     }
 
@@ -253,11 +273,13 @@ impl OnRequestDataHandler {
         &self,
         od_ind_data: &OdIndData,
         command_handler: &mut dl::command_handler::CommandHandler,
+        application_layer: &mut al::ApplicationLayer,
         system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
-        command_handler.od_ind(od_ind_data)?;
         let address = od_ind_data.address_ctrl;
         let value = od_ind_data.data[0];
+        let _ = application_layer.dl_write_param_ind(address, value);
+        let _ = command_handler.od_ind(od_ind_data);
         let _ = system_management.dl_write_ind(address, value);
         Ok(())
     }
@@ -286,7 +308,7 @@ impl OnRequestDataHandler {
 
     /// Handle transition T6: Idle (1) -> Inactive (0)
     /// Action: -
-    fn execute_t6(&mut self) -> IoLinkResult<()> {
+    fn execute_t6(&self) -> IoLinkResult<()> {
         Ok(())
     }
 
@@ -314,10 +336,18 @@ impl OnRequestDataHandler {
     pub fn dl_read_param_rsp(
         &self,
         length: u8,
-        data: &[u8],
+        data: u8,
         message_handler: &mut dl::message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
-        let _ = self.od_rsp(length, data, message_handler);
+        let _ = self.od_rsp(length, &[data], message_handler);
+        Ok(())
+    }
+
+    pub fn dl_write_param_rsp(
+        &self,
+        message_handler: &mut dl::message_handler::MessageHandler,
+    ) -> IoLinkResult<()> {
+        let _ = self.od_rsp(0, &[], message_handler);
         Ok(())
     }
 }
