@@ -1,0 +1,21 @@
+//! Hardware Abstraction Layer (HAL) traits
+//!
+//! This module defines the hardware abstraction traits that must be implemented
+//! for different target platforms. Based on IO-Link Specification v1.1.4 Section 5.2.
+use crate::pl::physical_layer::{_IoLinkUart, IoLinkTimer, PhysicalLayerInd};
+use iolinke_types::custom::IoLinkResult;
+
+/// Complete HAL implementation combining all required traits
+pub trait IoLinkHal: PhysicalLayerInd + IoLinkTimer + _IoLinkUart {
+    /// Initialize the hardware
+    fn init(&mut self) -> IoLinkResult<()>;
+
+    /// Perform a hardware reset
+    fn reset(&mut self) -> IoLinkResult<()>;
+
+    /// Enter low power mode
+    fn enter_low_power(&mut self) -> IoLinkResult<()>;
+
+    /// Exit low power mode
+    fn exit_low_power(&mut self) -> IoLinkResult<()>;
+}

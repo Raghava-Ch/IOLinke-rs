@@ -1,51 +1,43 @@
-[package]
-name = "iolinke-device"
+[workspace]
+members = [
+    "IOLinke-DEVICE",
+    "IOLinke-macros",
+    "IOLinke-types",
+    "IOLinke-util",
+    "IOLinke-Test-utils",
+    "IOLinke-Derived-config",
+    "IOLinke-Dev-config",
+    "IOLinke-Examples",
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 authors = ["Raghava Ch"]
-description = "IO-Link Device stack implementation compliant with IO-Link Specification v1.1.4"
 license = "GPL-3"
 repository = "https://github.com/Raghava-Ch/IOLinke-Device"
 readme = "README.md"
 keywords = ["iolink", "embedded", "no-std", "device"]
 categories = ["embedded", "no-std"]
+description = "Complete IO-Link Master and Device Stack implementation in Rust, Compliant with IO-Link Specification v1.1.4"
 
-[dependencies]
-# Workspace dependencies
-heapless = { version = "0.8", default-features = false }
-# embedded-hal = "1.0"
-# panic-halt = { version = "1.0.0" }
-# cortex-m = { version = "0.7" }
+[workspace.dependencies]
+# Shared dependencies across workspace
+iolinke-types = { path = "IOLinke-types" }
+iolinke-macros = { path = "IOLinke-macros" }
+iolinke-dev-config = { path = "IOLinke-Dev-config" }
+iolinke-derived-config = { path = "IOLinke-Derived-config" }
+iolinke-util = { path = "IOLinke-util" }
+iolinke-test-utils = { path = "IOLinke-Test-utils" }
 
-# Project-specific dependencies
-iolinke-macros = { path = "../IOLinke-macros" }
-cstr_core = "0.2"
-log = "0.4"
-bitfields = "1.0.0"
+heapless = { version = "0.8.0" }
+bitfields = { version = "1.0.0" }
 
-[features]
-default = ["std", "log"]
-std = []
-log = []
-# clang = []
-# rustlang = []
-# cortex-m = []
-# panic-halt = []
-# block_parameterization = []
+# Macro dependencies
+proc-macro2 = { version = "1.0" }
+quote = { version = "1.0" }
+syn = { version = "2.0", features = ["full", "extra-traits"] }
 
-[build-dependencies]
-# cbindgen = "0.27"
-
-[dev-dependencies]
-lazy_static = "1.4"
-
-[[example]]
-name = "basic"
-# required-features = ["default", "std"]
-
-[profile.release]
-opt-level = "s"
-lto = true
-codegen-units = 1
-panic = "abort"
-
+[workspace.metadata]
+description = "Complete IO-Link Device Stack implementation in Rust"
