@@ -164,10 +164,10 @@ pub fn flow_ctrl(input: TokenStream) -> TokenStream {
     let flow_ident = parse_macro_input!(input as syn::Ident);
 
     let hex_value = match flow_ident.to_string().as_str() {
-        "START" => 0x10u8,
-        "IDLE_1" => 0x11u8,
-        "IDLE_2" => 0x12u8,
-        "ABORT" => 0x1Fu8,
+        "START" => 0x10u8, // 0b10000
+        "IDLE_1" => 0x11u8, // 0b10001
+        "IDLE_2" => 0x12u8, // 0b10010
+        "ABORT" => 0x1Fu8, // 0b11111
         _ => panic!(
             "Unknown flow control value: {}. Valid values are: START, IDLE_1, IDLE_2, ABORT",
             flow_ident
@@ -675,6 +675,7 @@ pub fn device_parameter_index(input: TokenStream) -> TokenStream {
             DpPage1(DirectParameterPage1SubIndex),
             DpPage2(DirectParameterPage2SubIndex),
             DataStorageIndex(DataStorageIndexSubIndex),
+            VendorName,
         }
         impl #name {
             /// Creates a DeviceParameterIndex from a raw index value
@@ -847,6 +848,8 @@ pub fn device_parameter_index(input: TokenStream) -> TokenStream {
                     (Self::DataStorageIndex, SubIndex::DataStorageIndex(DataStorageIndexSubIndex::DataStorageSize)) => 0x03u8,
                     (Self::DataStorageIndex, SubIndex::DataStorageIndex(DataStorageIndexSubIndex::ParameterChecksum)) => 0x04u8,
                     (Self::DataStorageIndex, SubIndex::DataStorageIndex(DataStorageIndexSubIndex::IndexList)) => 0x05u8,
+
+                    (Self::VendorName, SubIndex::VendorName) => 0x00u8,
 
                     _ => panic!("Invalid subindex for parameter"),
                 }
@@ -1622,13 +1625,13 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
 
         // Generate storage field
         storage_fields.push(quote! {
-            #[doc = concat!("Parameter storage for index 0x", stringify!(#index), " subindex ", stringify!(#subindex))]
-            pub #field_ident: crate::heapless::Vec<u8, { #length_val as usize }>,
+            #[doc = "Parameter storage field"]
+            pub #field_ident: heapless::Vec<u8, { #length_val as usize }>,
         });
 
         // Generate default value for new()
         new_fields.push(quote! {
-            #field_ident: crate::heapless::Vec::<u8, { #length_val as usize }>::from_slice(#default_value).unwrap(),
+            #field_ident: heapless::Vec::<u8, { #length_val as usize }>::from_slice(#default_value).unwrap(),
         });
 
         // Generate parameter map entry
@@ -1653,7 +1656,7 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
         // Generate get match arm
         get_match_arms.push(quote! {
             (#index, #subindex) => {
-                self.#field_ident.as_slice()
+                (self.#field_ident.len() as u8, self.#field_ident.as_slice())
             },
         });
 
@@ -1681,8 +1684,11 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
         /// - `ReadWrite`: The parameter can be both read and written.
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum AccessRight {
+            /// The parameter can only be read.
             ReadOnly,
+            /// The parameter can only be written.
             WriteOnly,
+            /// The parameter can be both read and written.
             ReadWrite,
         }
 
@@ -1694,21 +1700,37 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
         /// protocol-specific service errors.
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum ParameterError {
+            /// The specified index is not available in the parameter storage.
             IndexNotAvailable,
+            /// The specified subindex is not available for the given index.
             SubindexNotAvailable,
+            /// The requested service is not available.
             ServiceNotAvailable,
+            /// The requested service is not available due to local control restrictions.
             ServiceNotAvailableLocalControl,
+            /// The requested service is not available due to device control restrictions.
             ServiceNotAvailableDeviceControl,
+            /// Access to the parameter is denied due to insufficient permissions.
             AccessDenied,
+            /// The parameter value is out of the allowed range.
             ValueOutOfRange,
+            /// The parameter value exceeds the upper limit.
             ValueAboveLimit,
+            /// The parameter value is below the lower limit.
             ValueBelowLimit,
+            /// The provided data length exceeds the parameter's capacity.
             LengthOverrun,
+            /// The provided data length is insufficient for the parameter.
             LengthUnderrun,
+            /// The requested function is not available.
             FunctionNotAvailable,
+            /// The requested function is temporarily unavailable.
             FunctionTemporarilyUnavailable,
+            /// The parameter set is invalid.
             InvalidParameterSet,
+            /// The parameter set is inconsistent.
             InconsistentParameterSet,
+            /// The application is not ready to process the request.
             ApplicationNotReady,
         }
 
@@ -1722,11 +1744,17 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
         /// - `data_type`: The name of the parameter's data type.
         #[derive(Debug, Clone)]
         pub struct ParameterInfo {
+            /// The parameter's index address.
             pub index: u16,
+            /// The parameter's subindex address.
             pub subindex: u8,
+            /// The length in bytes of the parameter value.
             pub length: usize,
+            /// An optional valid value range for the parameter.
             pub range: Option<core::ops::Range<u8>>,
+            /// The access rights for the parameter.
             pub access: AccessRight,
+            /// The name of the parameter's data type.
             pub data_type: &'static str,
         }
 
@@ -1734,6 +1762,7 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
         ///
         /// This struct contains a field for each parameter, as generated by the macro.
         /// Each field holds the value of a parameter, typically as a fixed-size buffer.
+        #[allow(missing_docs)]
         pub struct ParameterStorage {
             #(#storage_fields)*
         }
@@ -1772,7 +1801,7 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
             ///
             /// Returns a reference to the parameter's value if it exists and is readable,
             /// or an appropriate `ParameterError`.
-            pub fn get_parameter<'a>(&'a self, index: u16, subindex: u8) -> Result<&'a [u8], ParameterError> {
+            pub fn get_parameter<'a>(&'a self, index: u16, subindex: u8) -> Result<(u8, &'a [u8]), ParameterError> {
                 let info = self.get_parameter_info(index, subindex)?;
 
                 if !matches!(info.access, AccessRight::ReadOnly | AccessRight::ReadWrite) {
@@ -1780,13 +1809,12 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
                 }
 
                 // Get the data based on index and subindex
-                let field_data: &[u8] = match (index, subindex) {
+                let (length, field_data): (u8, &[u8]) = match (index, subindex) {
                     #(#get_match_arms)*
                     _ => return Err(ParameterError::IndexNotAvailable),
                 };
-
                 // Return the field data as bytes
-                Ok(field_data)
+                Ok((length, field_data))
             }
 
             /// Writes a value to a parameter.
@@ -1817,8 +1845,8 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
             ///
             /// Returns a buffer containing the values of all readable subindexes,
             /// or an appropriate `ParameterError`.
-            pub fn read_index_memory(&self, index: u16) -> Result<crate::heapless::Vec<u8, #max_parameter_length>, ParameterError> {
-                let mut memory = crate::heapless::Vec::new();
+            pub fn read_index_memory(&self, index: u16) -> Result<heapless::Vec<u8, #max_parameter_length>, ParameterError> {
+                let mut memory = heapless::Vec::new();
 
                 // Find all subindexes for this index
                 let param_infos = [
@@ -1834,7 +1862,7 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
                         }
 
                         // Get the parameter data
-                        let data = self.get_parameter(index, info.subindex)?;
+                        let (_, data) = self.get_parameter(index, info.subindex)?;
                         memory.extend_from_slice(&data).map_err(|_| ParameterError::LengthOverrun)?;
                     }
                 }
@@ -1919,7 +1947,7 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
             }
 
             // Get parameters by index
-            // pub fn get_parameters_by_index(&self, index: u16) -> crate::heapless::Vec<&ParameterInfo> {
+            // pub fn get_parameters_by_index(&self, index: u16) -> heapless::Vec<&ParameterInfo> {
             //     let param_infos = self.get_all_parameters();
 
             //     param_infos.iter()
