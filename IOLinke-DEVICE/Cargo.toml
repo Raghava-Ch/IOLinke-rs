@@ -1,0 +1,40 @@
+[package]
+name = "iolinke-device"
+description = "IO-Link Device stack implementation compliant with IO-Link Specification v1.1.4"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+
+[dependencies]
+# Workspace dependencies
+iolinke-types = { workspace = true }
+iolinke-util = { workspace = true }
+iolinke-derived-config = { workspace = true }
+
+heapless = { workspace = true }
+bitfields = { workspace = true }
+
+# Project-specific dependencies
+iolinke-macros = { path = "../IOLinke-macros" }
+
+[features]
+default = ["std", "log"]
+std = []
+log = []
+block_parameterization = []
+# clang = []
+# rustlang = []
+# cortex-m = []
+# panic-halt = []
+
+[build-dependencies]
+# cbindgen = "0.27"
+
+[dev-dependencies]

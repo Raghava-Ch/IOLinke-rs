@@ -1,0 +1,26 @@
+[package]
+name = "iolinke-test-utils"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description.workspace = true
+
+[lib]
+
+[dependencies]
+iolinke-device = { path = "../IOLinke-DEVICE" }
+iolinke-util = { workspace = true }
+iolinke-types = { workspace = true }
+iolinke-derived-config = { workspace = true }
+
+heapless = { workspace = true }
+bitfields = { workspace = true }
+
+[features]
+default = ["std"]
+std = []
