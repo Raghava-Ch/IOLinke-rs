@@ -18,7 +18,7 @@ use iolinke_types::{
 };
 use iolinke_util::{
     frame_fromat::message::{
-        DeviceOperationMode, HEADER_SIZE_IN_FRAME, IoLinkMessage, MAX_RX_FRAME_SIZE,
+        DeviceOperationMode, HEADER_SIZE_IN_FRAME, PD_OUT_LENGTH, PD_IN_LENGTH, IoLinkMessage, MAX_RX_FRAME_SIZE,
         MAX_TX_FRAME_SIZE, compile_iolink_operate_frame, compile_iolink_preoperate_frame,
         compile_iolink_startup_frame, extract_mc_ckt_bytes, get_m_sequence_base_type,
         parse_iolink_operate_frame, parse_iolink_pre_operate_frame, parse_iolink_startup_frame,
@@ -502,9 +502,9 @@ impl MessageHandler {
                 use derived_config::on_req_data::operate;
                 if ckt.m_seq_type() == operate_m_sequence::m_sequence_base_type() {
                     if mc.read_write() == RwDirection::Read {
-                        HEADER_SIZE_IN_FRAME as u8
+                        HEADER_SIZE_IN_FRAME + PD_OUT_LENGTH
                     } else {
-                        HEADER_SIZE_IN_FRAME as u8 + operate::od_length() as u8
+                        HEADER_SIZE_IN_FRAME + PD_OUT_LENGTH + operate::od_length()
                     }
                 } else {
                     0 // Invalid M-sequence type
@@ -664,17 +664,17 @@ impl MessageHandler {
                 parse_iolink_startup_frame(rx_buffer)
             }
             DeviceOperationMode::PreOperate => {
-                let m_seq_base_type: MsequenceBaseType =
+                const M_SEQ_BASE_TYPE: MsequenceBaseType =
                     get_m_sequence_base_type(pre_operate_m_sequence::m_sequence_type());
-                if m_seq_base_type != ckt.m_seq_type() {
+                if M_SEQ_BASE_TYPE != ckt.m_seq_type() {
                     return Err(IoLinkError::InvalidMseqType);
                 }
                 parse_iolink_pre_operate_frame(rx_buffer)
             }
             DeviceOperationMode::Operate => {
-                let m_seq_base_type: MsequenceBaseType =
+                const M_SEQ_BASE_TYPE: MsequenceBaseType =
                     get_m_sequence_base_type(operate_m_sequence::m_sequence_type());
-                if m_seq_base_type != ckt.m_seq_type() {
+                if M_SEQ_BASE_TYPE != ckt.m_seq_type() {
                     return Err(IoLinkError::InvalidMseqType);
                 }
                 parse_iolink_operate_frame(rx_buffer)
