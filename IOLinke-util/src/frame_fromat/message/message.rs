@@ -15,8 +15,8 @@ pub const HEADER_SIZE_IN_FRAME: u8 = 2; // Header size is 2 bytes (MC and length
 pub const MAX_POSSIBLE_OD_LEN_IN_FRAME: u8 = derived_config::on_req_data::max_possible_od_length();
 /// Maximum message buffer size for PD
 /// This is the maximum size of the message buffer used for PD messages.
-const PD_IN_LENGTH: u8 = derived_config::process_data::pd_in::config_length_in_bytes();
-const PD_OUT_LENGTH: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
+pub const PD_IN_LENGTH: u8 = derived_config::process_data::pd_in::config_length_in_bytes();
+pub const PD_OUT_LENGTH: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
 /// Maximum frame size for IO-Link messages
 pub const MAX_RX_FRAME_SIZE: usize =
     (MAX_POSSIBLE_OD_LEN_IN_FRAME + PD_IN_LENGTH + HEADER_SIZE_IN_FRAME) as usize;
@@ -327,34 +327,37 @@ pub fn parse_iolink_operate_frame(
 ) -> IoLinkResult<IoLinkMessage> {
     const OD_LENGTH_OCTETS: u8 = derived_config::on_req_data::operate::od_length();
     const PD_LENGTH: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
-    const M_SEQ_TYPE: MsequenceBaseType =
-        derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
+    const FRAME_PD_START: usize = HEADER_SIZE_IN_FRAME as usize;
+    const FRAME_PD_END: usize = FRAME_PD_START + PD_LENGTH as usize;
+    const FRAME_OD_START: usize = FRAME_PD_END;
+    const FRAME_OD_END: usize = FRAME_OD_START + OD_LENGTH_OCTETS as usize;
+
+    let od: Option<Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }>>;
+    let pd: Option<Vec<u8, { PD_LENGTH as usize }>>;
 
     // Extracting `MC` byte properties
     // Extracting `CKT` byte properties
     let (mc, ckt) = extract_mc_ckt_bytes(input)?;
-
-    if input.len() != (HEADER_SIZE_IN_FRAME + OD_LENGTH_OCTETS + PD_LENGTH) as usize {
-        return Err(IoLinkError::InvalidData);
-    }
-    let mut od: Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }> = Vec::new();
-    let mut pd: Vec<u8, { PD_OUT_LENGTH as usize }> = Vec::new();
-
-    for i in 2..(2 + OD_LENGTH_OCTETS as usize) {
-        if i < input.len() {
-            od.push(input[i]).map_err(|_| IoLinkError::InvalidData)?;
-        } else {
-            break; // Avoid out of bounds access
+    if mc.read_write() == RwDirection::Read {
+        if input.len() < FRAME_PD_END {
+            return Err(IoLinkError::InvalidData);
         }
-    }
-
-    for i in (2 + OD_LENGTH_OCTETS as usize)..(2 + OD_LENGTH_OCTETS as usize + PD_LENGTH as usize) {
-        if i < input.len() {
-            pd.push(input[i]).map_err(|_| IoLinkError::InvalidData)?;
-        } else {
-            break; // Avoid out of bounds access
+        od = None
+    } else {
+        if input.len() < FRAME_OD_END {
+            return Err(IoLinkError::InvalidData);
         }
+        let od_vec = match input.get(FRAME_OD_START..FRAME_OD_END) {
+            Some(val) => val,
+            None => return Err(IoLinkError::InvalidData),
+        };
+        od = Some(Vec::from_slice(od_vec).map_err(|_| IoLinkError::InvalidLength)?);
     }
+    let pd_vec = match input.get(FRAME_PD_START..FRAME_PD_END) {
+        Some(val) => val,
+        None => return Err(IoLinkError::InvalidData),
+    };
+    pd = Some(Vec::from_slice(pd_vec).map_err(|_| IoLinkError::InvalidLength)?);
 
     Ok(IoLinkMessage {
         frame_type: DeviceOperationMode::Operate,
@@ -363,8 +366,8 @@ pub fn parse_iolink_operate_frame(
         com_channel: Some(mc.comm_channel()),
         address_fctrl: Some(mc.address_fctrl()),
         event_flag: false, // Event flag is not set in pre-operate frame
-        od: Some(od),
-        pd: Some(pd),
+        od: od,
+        pd: pd,
         pd_status: None, // No PD status in pre-operate frame
     })
 }

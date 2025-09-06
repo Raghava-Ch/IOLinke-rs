@@ -327,6 +327,7 @@ pub fn create_preop_write_isdu_complete_request() -> Vec<u8> {
 pub fn create_op_read_request(address: u8) -> Vec<u8> {
     const BASE_TYPE: MsequenceBaseType =
         derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
+    const PD_OUT_LENGTH: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
     let mc = MsequenceControlBuilder::new()
         .with_read_write(RwDirection::Read)
         .with_comm_channel(ComChannel::Page)
@@ -344,6 +345,9 @@ pub fn create_op_read_request(address: u8) -> Vec<u8> {
     let mut rx_buffer = Vec::new();
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
+    for _ in 0..PD_OUT_LENGTH as usize {
+        rx_buffer.push(0);
+    }
     let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
     ckt.set_checksum(checksum);
 

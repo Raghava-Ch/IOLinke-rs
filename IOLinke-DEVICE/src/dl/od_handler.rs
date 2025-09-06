@@ -302,22 +302,21 @@ impl handlers::od::OdInd for OnRequestDataHandler {
         use frame::msequence::{ComChannel, RwDirection};
 
         self.od_ind_data = od_ind_data.clone();
-        let event = match od_ind_data.com_channel {
+        match od_ind_data.com_channel {
             ComChannel::Page => {
                 if od_ind_data.address_ctrl == 0 && od_ind_data.rw_direction == RwDirection::Write {
-                    OnRequestHandlerEvent::OdIndCommand
+                    self.process_event(OnRequestHandlerEvent::OdIndCommand)?;
                 } else if (1..=31).contains(&od_ind_data.address_ctrl) {
-                    OnRequestHandlerEvent::OdIndParam
+                    self.process_event(OnRequestHandlerEvent::OdIndParam)?;
                 } else {
                     return Err(IoLinkError::InvalidEvent);
                 }
             }
-            ComChannel::Isdu => OnRequestHandlerEvent::OdIndIsdu,
-            ComChannel::Diagnosis => OnRequestHandlerEvent::OdIndEvent,
+            ComChannel::Isdu => self.process_event(OnRequestHandlerEvent::OdIndIsdu)?,
+            ComChannel::Diagnosis => self.process_event(OnRequestHandlerEvent::OdIndEvent)?,
             _ => return Err(IoLinkError::InvalidEvent),
-        };
+        }
 
-        self.process_event(event)?;
         Ok(())
     }
 }
