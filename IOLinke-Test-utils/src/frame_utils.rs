@@ -43,7 +43,7 @@ pub fn validate_device_frame_checksum(data: &mut Vec<u8>) -> bool {
     let data_last_index = data.get_mut(data_len - 1).unwrap();
     let cleared_checksum_cks_bits = cleared_checksum_cks.into_bits();
     *data_last_index = cleared_checksum_cks_bits;
-    let cks_calculated_checksum = calculate_checksum_for_testing(data_len as u8, data);
+    let cks_calculated_checksum = calculate_checksum_for_testing(data_len, data);
     let rec_cks = cks.checksum();
     cks_calculated_checksum == rec_cks
 }
@@ -126,7 +126,7 @@ pub fn create_startup_read_request(address: u8) -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -157,7 +157,7 @@ pub fn create_preop_read_request(address: u8) -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -189,7 +189,7 @@ pub fn create_preop_write_isdu_request(flow_control: u8, buffer: &[u8]) -> Vec<u
     rx_buffer.push(ckt_bits);
     rx_buffer.extend_from_slice(buffer);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -219,7 +219,7 @@ pub fn create_preop_read_start_isdu_request() -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -250,7 +250,7 @@ pub fn create_preop_read_isdu_segment(flow_control: u8) -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -281,7 +281,7 @@ pub fn create_preop_isdu_idle_request() -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -314,7 +314,7 @@ pub fn create_preop_write_isdu_complete_request() -> Vec<u8> {
     rx_buffer.push(ckt_bits);
     rx_buffer.extend_from_slice(buffer);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -348,7 +348,7 @@ pub fn create_op_read_request(address: u8) -> Vec<u8> {
     for _ in 0..PD_OUT_LENGTH as usize {
         rx_buffer.push(0);
     }
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -378,7 +378,7 @@ pub fn create_startup_write_request(address: u8, data: u8) -> Vec<u8> {
     rx_buffer.push(ckt_bits);
     rx_buffer.push(data); // Add the data to write
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -417,7 +417,7 @@ pub fn create_preop_write_request(address: u8, data: &[u8]) -> Vec<u8> {
         }
     }
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();

@@ -444,7 +444,7 @@ impl dl::DlPDOutputTransportInd for ApplicationLayer {
         &mut self,
         _pd_out: &Vec<u8, { dl::PD_OUTPUT_LENGTH }>,
     ) -> IoLinkResult<()> {
-        todo!()
+        Err(iolinke_types::custom::IoLinkError::NoImplFound)
     }
 
     fn dl_pd_cycle_ind(&mut self) -> IoLinkResult<()> {

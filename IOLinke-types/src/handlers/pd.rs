@@ -24,13 +24,11 @@ pub trait DlPDOutputTransportInd {
 #[derive(Debug, Default, Clone)]
 pub struct ProcessData {
     /// Input data from device
-    pub _input: Vec<u8, PD_INPUT_LENGTH>,
-    pub _input_length: u8,
+    pub input: Vec<u8, PD_INPUT_LENGTH>,
     /// Output data to device
-    pub _output: Vec<u8, PD_OUTPUT_LENGTH>,
-    pub _output_length: u8,
+    pub output: Vec<u8, PD_OUTPUT_LENGTH>,
     /// Data validity flag
-    pub _valid: bool,
+    pub valid: bool,
 }
 
 /// All the Process Data Handler configuration states used

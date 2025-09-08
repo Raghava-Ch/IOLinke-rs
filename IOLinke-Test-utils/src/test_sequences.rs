@@ -26,7 +26,6 @@ pub fn util_test_startup_sequence(
         CONFIG_MIN_CYCLE_TIME.multiplier() == min_cycle_time.multiplier(),
         "Min cycle time multiplier not matching"
     );
-
     // Read m-sequence capability
     let m_sequence_capability = page_params::read_m_sequence_capability(
         &poll_tx,

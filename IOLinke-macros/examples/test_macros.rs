@@ -32,15 +32,15 @@ fn main() {
     // This macro resolves parameter names to their standardized addresses
     let vendor_id1_addr = direct_parameter_address!(VendorID1);
     println!("VendorID1 address: 0x{:02X}", vendor_id1_addr);
-    
+
     let device_id1_addr = direct_parameter_address!(DeviceID1);
     println!("DeviceID1 address: 0x{:02X}", device_id1_addr);
-    
+
     // Test master_command macro
     // This macro resolves command names to their standardized values
     let fallback_cmd = master_command!(Fallback);
     println!("Fallback command: 0x{:02X}", fallback_cmd);
-    
+
     let device_ident_cmd = master_command!(DeviceIdent);
     println!("DeviceIdent command: 0x{:02X}", device_ident_cmd);
 }

@@ -3,6 +3,8 @@
 //! This module implements the Process Data Handler state machine as defined in
 //! IO-Link Specification v1.1.4 Section 7.2
 use heapless::Vec;
+use iolinke_derived_config as derived_config;
+use iolinke_types::frame::msequence::PdStatus;
 use iolinke_types::handlers::pd::DlPDOutputTransportInd;
 use iolinke_types::{
     custom::IoLinkResult,
@@ -38,7 +40,7 @@ enum Transition {
     T3,
     /// T4: State: PDActive (1) -> HandlePD (2)
     /// Action: Message handler demands input PD via a PD.ind service and delivers output PD or segment of output PD. Invoke PD.rsp with input Process Data when in non-interleave mode (see 7.2.2.3).
-    T4,
+    T4(u8), // (pd_in demand length)
     /// T5: State: HandlePD (2) -> PDActive (1)
     /// Action: -
     T5,
@@ -56,7 +58,7 @@ enum Transition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProcessDataHandlerEvent {
     /// {PD_ind}
-    PDInd,
+    PDInd(u8), // (pd_in demand length)
     /// {PD_Conf_ACTIVE}
     PDConfActive,
     /// {DL_PDInputUpdate}
@@ -64,11 +66,11 @@ enum ProcessDataHandlerEvent {
     /// {PD_Conf_INACTIVE}
     PDConfInactive,
     /// {[PD incomplete]}
-    PDIncomplete,
+    _PDIncomplete,
     /// {[PD complete]}
     PDComplete,
     /// {[Cycle complete]}
-    CycleComplete,
+    _CycleComplete,
 }
 
 /// Process Data Handler implementation
@@ -76,7 +78,6 @@ pub struct ProcessDataHandler {
     state: ProcessDataHandlerState,
     exec_transition: Transition,
     process_data: ProcessData,
-    cycle_time: u16,
 }
 
 impl ProcessDataHandler {
@@ -86,7 +87,6 @@ impl ProcessDataHandler {
             state: ProcessDataHandlerState::Inactive,
             exec_transition: Transition::Tn,
             process_data: ProcessData::default(),
-            cycle_time: 100, // 10ms default
         }
     }
 
@@ -96,14 +96,16 @@ impl ProcessDataHandler {
         use ProcessDataHandlerState as State;
 
         let (new_transition, new_state) = match (self.state, event) {
-            (State::Inactive, Event::PDInd) => (Transition::T1, State::Inactive),
+            (State::Inactive, Event::PDInd(_pd_in_length)) => (Transition::T1, State::Inactive),
             (State::Inactive, Event::PDConfActive) => (Transition::T2, State::PDActive),
             (State::PDActive, Event::DlPDInputUpdate) => (Transition::T3, State::PDActive),
-            (State::PDActive, Event::PDInd) => (Transition::T4, State::HandlePD),
+            (State::PDActive, Event::PDInd(pd_in_length)) => {
+                (Transition::T4(pd_in_length), State::HandlePD)
+            }
             (State::PDActive, Event::PDConfInactive) => (Transition::T8, State::Inactive),
-            (State::HandlePD, Event::PDIncomplete) => (Transition::T5, State::PDActive),
+            (State::HandlePD, Event::_PDIncomplete) => (Transition::T5, State::PDActive),
             (State::HandlePD, Event::PDComplete) => (Transition::T6, State::PDActive),
-            (State::HandlePD, Event::CycleComplete) => (Transition::T7, State::PDActive),
+            (State::HandlePD, Event::_CycleComplete) => (Transition::T7, State::PDActive),
             _ => {
                 log_state_transition_error!(module_path!(), "process_event", self.state, event);
                 (Transition::Tn, self.state)
@@ -150,10 +152,10 @@ impl ProcessDataHandler {
                 // Action: Prepare input Process Data for PD.rsp for next message handler demand
                 self.execute_t3()?;
             }
-            Transition::T4 => {
+            Transition::T4(pd_in_length) => {
                 // State: PDActive (1) -> HandlePD (2)
                 self.exec_transition = Transition::Tn;
-                self.execute_t4(message_handler)?;
+                self.execute_t4(pd_in_length, message_handler)?;
             }
             Transition::T5 => {
                 // State: HandlePD (2) -> PDActive (1)
@@ -201,11 +203,20 @@ impl ProcessDataHandler {
 
     fn execute_t4(
         &mut self,
+        pd_in_length: u8,
         message_handler: &mut message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
+        let pd_data = if pd_in_length != self.process_data.input.len() as u8 {
+            let _ = message_handler.pd_in_status_req(PdStatus::INVALID);
+            self.process_data.input.fill(0);
+            &self.process_data.input
+        } else {
+            let _ = message_handler.pd_in_status_req(PdStatus::VALID);
+            &self.process_data.input
+        };
         // State: PDActive (1) -> HandlePD (2)
         // Action: Message handler demands input PD via a PD.ind service and delivers output PD or segment of output PD. Invoke PD.rsp with input Process Data when in non-interleave mode (see 7.2.2.3).
-        let _ = message_handler.pd_rsp(self.process_data._input_length, &self.process_data._input);
+        let _ = message_handler.pd_rsp(pd_data.len(), pd_data);
         let _ = self.process_event(ProcessDataHandlerEvent::PDComplete);
         Ok(())
     }
@@ -218,7 +229,7 @@ impl ProcessDataHandler {
     fn execute_t6(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         // State: HandlePD (2) -> PDActive (1)
         // Action: Invoke DL_PDOutputTransport.ind
-        let _ = application_layer.dl_pd_output_transport_ind(&self.process_data._output);
+        let _ = application_layer.dl_pd_output_transport_ind(&self.process_data.output);
         Ok(())
     }
 
@@ -253,14 +264,15 @@ impl ProcessDataHandler {
     pub fn pd_ind(
         &mut self,
         _pd_in_address: u8,  // Not required, because of legacy specification
-        _pd_in_length: u8,   // Not required, because of legacy specification
+        pd_in_length: u8,    // pd_in demands length
         _pd_out_address: u8, // Not required, because of legacy specification
-        pd_out_length: u8,
         pd_out: &Vec<u8, PD_OUTPUT_LENGTH>,
     ) -> IoLinkResult<()> {
-        self.process_data._output = pd_out.clone();
-        self.process_data._output_length = pd_out_length;
-        self.process_event(ProcessDataHandlerEvent::PDInd)?;
+        if pd_in_length > derived_config::device::process_data::max_pd_len() {
+            return Err(iolinke_types::custom::IoLinkError::InvalidParameter);
+        }
+        self.process_data.output = pd_out.clone();
+        self.process_event(ProcessDataHandlerEvent::PDInd(pd_in_length))?;
 
         Ok(())
     }
@@ -270,11 +282,10 @@ impl ProcessDataHandler {
     /// (Process Data from Device to Master) on the data link layer. The parameters of the service
     /// primitives are listed in Table 25.
     pub fn dl_pd_input_update_req(&mut self, length: u8, input_data: &[u8]) -> IoLinkResult<()> {
-        self.process_data._input.fill(0);
-        self.process_data._input_length = length;
+        self.process_data.input.fill(0);
         for (i, &byte) in input_data.iter().enumerate() {
             if i < length as usize {
-                self.process_data._input[i] = byte;
+                self.process_data.input[i] = byte;
             } else {
                 break; // Avoid out of bounds access
             }

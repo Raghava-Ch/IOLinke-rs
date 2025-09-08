@@ -164,10 +164,10 @@ pub fn flow_ctrl(input: TokenStream) -> TokenStream {
     let flow_ident = parse_macro_input!(input as syn::Ident);
 
     let hex_value = match flow_ident.to_string().as_str() {
-        "START" => 0x10u8, // 0b10000
+        "START" => 0x10u8,  // 0b10000
         "IDLE_1" => 0x11u8, // 0b10001
         "IDLE_2" => 0x12u8, // 0b10010
-        "ABORT" => 0x1Fu8, // 0b11111
+        "ABORT" => 0x1Fu8,  // 0b11111
         _ => panic!(
             "Unknown flow control value: {}. Valid values are: START, IDLE_1, IDLE_2, ABORT",
             flow_ident

@@ -5,7 +5,7 @@ use iolinke_types::{
     custom::{IoLinkError, IoLinkResult},
     frame::msequence::{
         ChecksumMsequenceType, ChecksumStatus, ComChannel, MsequenceBaseType, MsequenceControl,
-        MsequenceType, PdStatus, RwDirection,
+        PdStatus, RwDirection, TransmissionRate,
     },
 };
 
@@ -51,7 +51,7 @@ pub struct IoLinkMessage {
     /// Process Data (PD) response data
     pub pd: Option<Vec<u8, { PD_OUT_LENGTH as usize }>>,
     /// Process Data input status
-    pub pd_status: Option<PdStatus>,
+    pub pd_status: PdStatus,
 }
 
 impl IoLinkMessage {
@@ -65,39 +65,603 @@ impl IoLinkMessage {
             event_flag: false,
             od: None,
             pd: None,
-            pd_status: None,
+            pd_status: PdStatus::INVALID,
         }
     }
 }
 
-/// Represents the M-sequence type used in IO-Link communication, based on bits 6 and 7 of the
-/// Checksum / M-sequence Type (CKT) field. These bits define how the Master structures messages
-/// within an M-sequence, as specified in Table A.3 of the IO-Link specification (see Section A.1.3).
-///
-/// This macro depends on the `operate_m_sequence` or `operate_m_sequence_legacy` macros. The selected
-/// M-sequence type in `operate_m_sequence` or `operate_m_sequence_legacy` determines the value of the
-/// `operate_m_sequence_base_type` macro.
-///
-/// The mapping is as follows:
-/// - `TYPE_0`   → `0`
-/// - `TYPE_1_x` → `1`
-/// - `TYPE_2_x` → `2`
-/// - `3` is reserved and should not be used
-///
-/// Ensure consistency with the selected M-sequence type when defining dependent macros.
-pub const fn get_m_sequence_base_type(m_sequence_type: MsequenceType) -> MsequenceBaseType {
-    match m_sequence_type {
-        MsequenceType::Type0 => MsequenceBaseType::Type0,
-        MsequenceType::Type11 => MsequenceBaseType::Type1,
-        MsequenceType::Type12 => MsequenceBaseType::Type1,
-        MsequenceType::Type1V => MsequenceBaseType::Type2,
-        MsequenceType::Type21 => MsequenceBaseType::Type2,
-        MsequenceType::Type22 => MsequenceBaseType::Type2,
-        MsequenceType::Type23 => MsequenceBaseType::Type2,
-        MsequenceType::Type24 => MsequenceBaseType::Type2,
-        MsequenceType::Type25 => MsequenceBaseType::Type2,
-        MsequenceType::Type2V => MsequenceBaseType::Type2,
+pub enum MessageBufferError {
+    NotEnoughMemory,
+    InvalidIndex,
+    InvalidLength,
+    OdNotAvailable,
+    PdNotAvailable,
+    OdNotSet,
+    PdNotSet,
+    InvalidData,
+    InvalidChecksum,
+    InvalidMseqType,
+    InvalidRwDirection,
+    NotReady,
+    InvalidDeviceOperationMode,
+}
+
+pub type MessageBufferResult<T> = Result<T, MessageBufferError>;
+pub trait StartupTxMessageBuffer {
+    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()>;
+    fn compile_read_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]>;
+    fn compile_write_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]>;
+}
+
+trait PreOperateTxMessageBuffer {
+    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()>;
+    fn compile_read_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]>;
+    fn compile_write_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]>;
+}
+
+trait OperateTxMessageBuffer {
+    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()>;
+    fn insert_pd(&mut self, pd: &[u8]) -> MessageBufferResult<()>;
+    fn compile_read_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]>;
+    fn compile_write_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]>;
+}
+
+trait StartupRxMessageBuffer {
+    fn valid_req(&mut self) -> MessageBufferResult<RwDirection>;
+    fn extract_od_from_write_req(&self) -> MessageBufferResult<&[u8]>;
+    fn expected_bytes(&self) -> MessageBufferResult<u8>;
+}
+
+trait PreOperateRxMessageBuffer {
+    fn valid_req(&mut self) -> MessageBufferResult<RwDirection>;
+    fn extract_od_from_write_req(&self) -> MessageBufferResult<&[u8]>;
+    fn expected_bytes(&self) -> MessageBufferResult<u8>;
+}
+
+trait OperateRxMessageBuffer {
+    fn valid_req(&mut self) -> MessageBufferResult<RwDirection>;
+    fn extract_od_from_write_req(&self) -> MessageBufferResult<&[u8]>;
+    fn extract_pd(&mut self) -> MessageBufferResult<&[u8]>;
+    fn expected_bytes(&self) -> MessageBufferResult<u8>;
+}
+
+#[derive(Debug, Clone)]
+pub struct TxMessageBuffer<const BUFF_LEN: usize> {
+    buffer: Vec<u8, BUFF_LEN>,
+    length: usize,
+    od_ready: bool,
+    pd_ready: bool,
+    tx_ready: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RxMessageBuffer<const BUFF_LEN: usize> {
+    buffer: Vec<u8, BUFF_LEN>,
+    length: usize,
+}
+
+impl<const BUFF_LEN: usize> TxMessageBuffer<BUFF_LEN> {
+    pub fn new() -> Self {
+        let mut buffer: Vec<u8, BUFF_LEN> = Vec::new();
+        let _ = buffer
+            .extend_from_slice(&[0; BUFF_LEN])
+            .map_err(|_| IoLinkError::NotEnoughMemory);
+        Self {
+            buffer: buffer,
+            length: 0,
+            od_ready: false,
+            pd_ready: false,
+            tx_ready: false,
+        }
     }
+
+    pub fn clear(&mut self) {
+        self.length = 0;
+        self.buffer.clear();
+        let _ = self.buffer.extend_from_slice(&[0; BUFF_LEN]);
+    }
+
+    pub fn len(&self) -> usize {
+        self.length
+    }
+
+    pub fn get_as_slice(&self) -> &[u8] {
+        &self.buffer[0..self.length]
+    }
+
+    pub fn insert_od(
+        &mut self,
+        od: &[u8],
+        device_mode: DeviceOperationMode,
+    ) -> MessageBufferResult<()> {
+        match device_mode {
+            DeviceOperationMode::Startup => <Self as StartupTxMessageBuffer>::insert_od(self, od),
+            DeviceOperationMode::PreOperate => {
+                <Self as PreOperateTxMessageBuffer>::insert_od(self, od)
+            }
+            DeviceOperationMode::Operate => <Self as OperateTxMessageBuffer>::insert_od(self, od),
+        }
+    }
+
+    pub fn insert_pd(
+        &mut self,
+        pd: &[u8],
+        device_mode: DeviceOperationMode,
+    ) -> MessageBufferResult<()> {
+        match device_mode {
+            DeviceOperationMode::Operate => <Self as OperateTxMessageBuffer>::insert_pd(self, pd),
+            _ => Err(MessageBufferError::InvalidDeviceOperationMode),
+        }
+    }
+
+    pub fn is_ready(&self, device_mode: DeviceOperationMode) -> bool {
+        match device_mode {
+            DeviceOperationMode::Startup => self.od_ready,
+            DeviceOperationMode::PreOperate => self.od_ready,
+            DeviceOperationMode::Operate => self.od_ready && self.pd_ready,
+        }
+    }
+
+    /// Compile IO-Link message from buffer
+    /// See IO-Link v1.1.4 `Annex A` (normative)
+    /// Codings, timing constraints, and errors
+    /// A.1 General structure and encoding of M-sequences
+    pub fn compile_message_rsp(
+        &mut self,
+        operation_mode: DeviceOperationMode,
+        rw_req_dir: RwDirection,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> IoLinkResult<()> {
+        let _length = match (operation_mode, rw_req_dir) {
+            (DeviceOperationMode::Startup, RwDirection::Read) => {
+                <Self as StartupTxMessageBuffer>::compile_read_rsp(self, event_flag, pd_status)
+                    .map_err(|_| IoLinkError::InvalidParameter)?
+            }
+            (DeviceOperationMode::PreOperate, RwDirection::Read) => {
+                <Self as PreOperateTxMessageBuffer>::compile_read_rsp(self, event_flag, pd_status)
+                    .map_err(|_| IoLinkError::InvalidParameter)?
+            }
+            (DeviceOperationMode::Operate, RwDirection::Read) => {
+                <Self as OperateTxMessageBuffer>::compile_read_rsp(self, event_flag, pd_status)
+                    .map_err(|_| IoLinkError::InvalidParameter)?
+            }
+            (DeviceOperationMode::Startup, RwDirection::Write) => {
+                <Self as StartupTxMessageBuffer>::compile_write_rsp(self, event_flag, pd_status)
+                    .map_err(|_| IoLinkError::InvalidParameter)?
+            }
+            (DeviceOperationMode::PreOperate, RwDirection::Write) => {
+                <Self as PreOperateTxMessageBuffer>::compile_write_rsp(self, event_flag, pd_status)
+                    .map_err(|_| IoLinkError::InvalidParameter)?
+            }
+            (DeviceOperationMode::Operate, RwDirection::Write) => {
+                <Self as OperateTxMessageBuffer>::compile_write_rsp(self, event_flag, pd_status)
+                    .map_err(|_| IoLinkError::InvalidParameter)?
+            }
+        };
+        Ok(())
+    }
+}
+
+impl<const BUFF_LEN: usize> RxMessageBuffer<BUFF_LEN> {
+    pub fn new() -> Self {
+        let mut buffer: Vec<u8, BUFF_LEN> = Vec::new();
+        let _ = buffer
+            .extend_from_slice(&[0; BUFF_LEN])
+            .map_err(|_| IoLinkError::NotEnoughMemory);
+        Self {
+            buffer: buffer,
+            length: 0,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.length = 0;
+        self.buffer.clear();
+        let _ = self.buffer.extend_from_slice(&[0; BUFF_LEN]);
+    }
+
+    pub fn len(&self) -> usize {
+        self.length
+    }
+
+    pub fn push(&mut self, data: u8) -> MessageBufferResult<()> {
+        if self.length + 1 > BUFF_LEN {
+            return Err(MessageBufferError::InvalidLength);
+        }
+        self.buffer[self.length] = data;
+        self.length += 1;
+        Ok(())
+    }
+
+    pub fn extract_mc(&self) -> MessageBufferResult<MsequenceControl> {
+        let mc = MsequenceControl::from(self.buffer[0]);
+        Ok(mc)
+    }
+
+    pub fn valid_req(&mut self, device_mode: DeviceOperationMode) -> MessageBufferResult<RwDirection> {
+        match device_mode {
+            DeviceOperationMode::Startup => <Self as StartupRxMessageBuffer>::valid_req(self),
+            DeviceOperationMode::PreOperate => <Self as PreOperateRxMessageBuffer>::valid_req(self),
+            DeviceOperationMode::Operate => <Self as OperateRxMessageBuffer>::valid_req(self),
+        }
+    }
+
+    pub fn extract_od_from_write_req(&mut self, device_mode: DeviceOperationMode) -> MessageBufferResult<&[u8]> {
+        match device_mode {
+            DeviceOperationMode::Startup => <Self as StartupRxMessageBuffer>::extract_od_from_write_req(self),
+            DeviceOperationMode::PreOperate => <Self as PreOperateRxMessageBuffer>::extract_od_from_write_req(self),
+            DeviceOperationMode::Operate => <Self as OperateRxMessageBuffer>::extract_od_from_write_req(self),
+        }
+    }
+
+    pub fn extract_pd(&mut self) -> MessageBufferResult<&[u8]> {
+        <Self as OperateRxMessageBuffer>::extract_pd(self)
+    }
+
+    pub fn calculate_expected_rx_bytes(&self, device_mode: DeviceOperationMode) -> u8 {
+        match device_mode {
+            DeviceOperationMode::Startup => {
+                match <Self as StartupRxMessageBuffer>::expected_bytes(self) {
+                    Ok(bytes) => bytes,
+                    Err(_) => HEADER_SIZE_IN_FRAME,
+                }
+            }
+            DeviceOperationMode::PreOperate => {
+                match <Self as PreOperateRxMessageBuffer>::expected_bytes(self) {
+                    Ok(bytes) => bytes,
+                    Err(_) => HEADER_SIZE_IN_FRAME,
+                }
+            }
+            DeviceOperationMode::Operate => {
+                match <Self as OperateRxMessageBuffer>::expected_bytes(self) {
+                    Ok(bytes) => bytes,
+                    Err(_) => HEADER_SIZE_IN_FRAME,
+                }
+            }
+        }
+    }
+
+    pub fn get_as_slice(&self) -> &[u8] {
+        &self.buffer[0..self.length]
+    }
+}
+
+impl<const BUFF_LEN: usize> StartupTxMessageBuffer for TxMessageBuffer<BUFF_LEN> {
+    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()> {
+        if self.length + od.len() > BUFF_LEN {
+            return Err(MessageBufferError::InvalidLength);
+        }
+        if 1 != od.len() {
+            // For startup mode, only one OD byte is used
+            return Err(MessageBufferError::InvalidData);
+        }
+        const OD_START: usize = 0;
+        const OD_END: usize = 1;
+        self.buffer[OD_START..OD_END].copy_from_slice(od);
+        self.length += 1;
+        self.od_ready = true;
+
+        Ok(())
+    }
+
+    fn compile_read_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]> {
+        if !self.od_ready {
+            return Err(MessageBufferError::OdNotSet);
+        }
+        const CKS_INDEX: usize = 1;
+        let mut cks = ChecksumStatus::new();
+        cks.set_event_flag(event_flag);
+        cks.set_pd_status(pd_status);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.length += 1;
+        let checksum = calculate_checksum(self.length, &self.buffer);
+        cks.set_checksum(checksum);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.tx_ready = true;
+        Ok(&self.buffer[0..self.length])
+    }
+
+    fn compile_write_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]> {
+        if !self.od_ready {
+            return Err(MessageBufferError::OdNotSet);
+        }
+        const CKS_INDEX: usize = 0;
+        let mut cks = ChecksumStatus::new();
+        cks.set_event_flag(event_flag);
+        cks.set_pd_status(pd_status);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.length += 1;
+        let checksum = calculate_checksum(self.length, &self.buffer);
+        cks.set_checksum(checksum);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.tx_ready = true;
+        Ok(&self.buffer[0..self.length])
+    }
+}
+
+impl<const BUFF_LEN: usize> PreOperateTxMessageBuffer for TxMessageBuffer<BUFF_LEN> {
+    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()> {
+        if self.length + od.len() > BUFF_LEN {
+            return Err(MessageBufferError::InvalidLength);
+        }
+        const OD_LENGTH: usize = derived_config::on_req_data::pre_operate::od_length() as usize;
+        if OD_LENGTH != od.len() {
+            return Err(MessageBufferError::InvalidData);
+        }
+        const OD_START: usize = 0;
+        const OD_END: usize = OD_LENGTH;
+        self.buffer[OD_START..OD_END].copy_from_slice(od);
+        self.length += OD_LENGTH;
+        self.od_ready = true;
+        Ok(())
+    }
+
+    fn compile_read_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]> {
+        if !self.od_ready {
+            return Err(MessageBufferError::OdNotSet);
+        }
+        const OD_LENGTH: usize = derived_config::on_req_data::pre_operate::od_length() as usize;
+        const CKS_INDEX: usize = OD_LENGTH;
+        let mut cks = ChecksumStatus::new();
+        cks.set_event_flag(event_flag);
+        cks.set_pd_status(pd_status);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.length += 1;
+        let checksum = calculate_checksum(self.length, &self.buffer);
+        cks.set_checksum(checksum);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.tx_ready = true;
+        Ok(&self.buffer[0..self.length])
+    }
+
+    fn compile_write_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]> {
+        <Self as StartupTxMessageBuffer>::compile_write_rsp(self, event_flag, pd_status)
+    }
+}
+
+impl<const BUFF_LEN: usize> OperateTxMessageBuffer for TxMessageBuffer<BUFF_LEN> {
+    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()> {
+        if self.length + od.len() > BUFF_LEN {
+            return Err(MessageBufferError::InvalidLength);
+        }
+        const OD_LENGTH: usize = derived_config::on_req_data::operate::od_length() as usize;
+        if OD_LENGTH != od.len() {
+            return Err(MessageBufferError::InvalidData);
+        }
+        const OD_START: usize = 0;
+        const OD_END: usize = OD_LENGTH;
+        self.buffer[OD_START..OD_END].copy_from_slice(od);
+        self.length += OD_LENGTH;
+        self.od_ready = true;
+        Ok(())
+    }
+
+    fn insert_pd(&mut self, pd: &[u8]) -> MessageBufferResult<()> {
+        if self.length + pd.len() > BUFF_LEN {
+            return Err(MessageBufferError::InvalidLength);
+        }
+        const PD_LENGTH: usize =
+            derived_config::process_data::pd_out::config_length_in_bytes() as usize;
+        const OD_LENGTH: usize = derived_config::on_req_data::operate::od_length() as usize;
+        if PD_LENGTH != pd.len() {
+            return Err(MessageBufferError::InvalidData);
+        }
+        const PD_START: usize = OD_LENGTH;
+        const PD_END: usize = OD_LENGTH + PD_LENGTH;
+        self.buffer[PD_START..PD_END].copy_from_slice(pd);
+        self.length += PD_LENGTH;
+        self.pd_ready = true;
+        Ok(())
+    }
+
+    fn compile_read_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]> {
+        if !self.od_ready {
+            return Err(MessageBufferError::OdNotSet);
+        }
+        if !self.pd_ready {
+            return Err(MessageBufferError::PdNotSet);
+        }
+        const OD_LENGTH: usize = derived_config::on_req_data::operate::od_length() as usize;
+        const PD_LENGTH: usize =
+            derived_config::process_data::pd_out::config_length_in_bytes() as usize;
+        const CKS_INDEX: usize = OD_LENGTH + PD_LENGTH;
+        let mut cks = ChecksumStatus::new();
+        cks.set_event_flag(event_flag);
+        cks.set_pd_status(pd_status);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.length += 1;
+        let checksum = calculate_checksum(self.length, &self.buffer);
+        cks.set_checksum(checksum);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.tx_ready = true;
+        Ok(&self.buffer[0..self.length])
+    }
+
+    fn compile_write_rsp(
+        &mut self,
+        event_flag: bool,
+        pd_status: PdStatus,
+    ) -> MessageBufferResult<&[u8]> {
+        if !self.pd_ready {
+            return Err(MessageBufferError::PdNotSet);
+        }
+        const OD_LENGTH: usize = derived_config::on_req_data::operate::od_length() as usize;
+        const PD_LENGTH: usize =
+            derived_config::process_data::pd_out::config_length_in_bytes() as usize;
+        const CKS_INDEX: usize = OD_LENGTH + PD_LENGTH;
+        let mut cks = ChecksumStatus::new();
+        cks.set_event_flag(event_flag);
+        cks.set_pd_status(pd_status);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.length += 1;
+        let checksum = calculate_checksum(self.length, &self.buffer);
+        cks.set_checksum(checksum);
+        self.buffer[CKS_INDEX] = cks.into_bits();
+        self.tx_ready = true;
+        Ok(&self.buffer[0..self.length])
+    }
+}
+
+impl<const BUFF_LEN: usize> StartupRxMessageBuffer for RxMessageBuffer<BUFF_LEN> {
+    fn valid_req(&mut self) -> MessageBufferResult<RwDirection> {
+        if validate_master_frame_checksum(self.length, self.buffer.as_mut_slice()) {
+            let (mc, ckt) = extract_mc_ckt_bytes(self.buffer.as_slice())
+                .map_err(|_| MessageBufferError::InvalidChecksum)?;
+            if ckt.m_seq_type() != MsequenceBaseType::Type0 {
+                return Err(MessageBufferError::InvalidMseqType);
+            }
+            Ok(mc.read_write())
+        } else {
+            Err(MessageBufferError::InvalidChecksum)
+        }
+    }
+    fn extract_od_from_write_req(&self) -> MessageBufferResult<&[u8]> {
+        let mc = Self::extract_mc(self).map_err(|_| MessageBufferError::InvalidMseqType)?;
+        if mc.read_write() == RwDirection::Read {
+            return Err(MessageBufferError::InvalidRwDirection);
+        }
+        const OD_LENGTH: usize = 1;
+
+        const OD_START: usize = HEADER_SIZE_IN_FRAME as usize;
+        const OD_END: usize = OD_START + OD_LENGTH;
+        let od = &self.buffer[OD_START..OD_END];
+        Ok(od)
+    }
+    fn expected_bytes(&self) -> MessageBufferResult<u8> {
+        if self.length < HEADER_SIZE_IN_FRAME as usize {
+            return Err(MessageBufferError::NotReady);
+        }
+        let mc = Self::extract_mc(self).map_err(|_| MessageBufferError::NotReady)?;
+        if mc.read_write() == RwDirection::Read {
+            return Ok(HEADER_SIZE_IN_FRAME);
+        }
+        const EXPECTED_BYTES: u8 = HEADER_SIZE_IN_FRAME + 1;
+        Ok(EXPECTED_BYTES)
+    }
+}
+
+impl<const BUFF_LEN: usize> PreOperateRxMessageBuffer for RxMessageBuffer<BUFF_LEN> {
+    fn valid_req(&mut self) -> MessageBufferResult<RwDirection> {
+        <Self as StartupRxMessageBuffer>::valid_req(self)
+    }
+    fn extract_od_from_write_req(&self) -> MessageBufferResult<&[u8]> {
+        let mc = Self::extract_mc(self).map_err(|_| MessageBufferError::InvalidMseqType)?;
+        if mc.read_write() == RwDirection::Read {
+            return Err(MessageBufferError::InvalidRwDirection);
+        }
+        const OD_LENGTH: usize = derived_config::on_req_data::pre_operate::od_length() as usize;
+
+        const OD_START: usize = HEADER_SIZE_IN_FRAME as usize;
+        const OD_END: usize = OD_START + OD_LENGTH;
+        let od = &self.buffer[OD_START..OD_END];
+        Ok(od)
+    }
+    fn expected_bytes(&self) -> MessageBufferResult<u8> {
+        if self.length < HEADER_SIZE_IN_FRAME as usize {
+            return Err(MessageBufferError::NotReady);
+        }
+        let mc = Self::extract_mc(self).map_err(|_| MessageBufferError::NotReady)?;
+        if mc.read_write() == RwDirection::Read {
+            return Ok(HEADER_SIZE_IN_FRAME);
+        }
+        const EXPECTED_BYTES: u8 =
+            HEADER_SIZE_IN_FRAME + derived_config::on_req_data::pre_operate::od_length();
+        Ok(EXPECTED_BYTES)
+    }
+}
+
+impl<const BUFF_LEN: usize> OperateRxMessageBuffer for RxMessageBuffer<BUFF_LEN> {
+    fn valid_req(&mut self) -> MessageBufferResult<RwDirection> {
+        <Self as StartupRxMessageBuffer>::valid_req(self)
+    }
+    fn extract_od_from_write_req(&self) -> MessageBufferResult<&[u8]> {
+        let mc = Self::extract_mc(self).map_err(|_| MessageBufferError::InvalidMseqType)?;
+        if mc.read_write() == RwDirection::Read {
+            return Err(MessageBufferError::InvalidRwDirection);
+        }
+        const OD_LENGTH: usize = derived_config::on_req_data::operate::od_length() as usize;
+        const PD_LENGTH: usize =
+            derived_config::process_data::pd_out::config_length_in_bytes() as usize;
+
+        const OD_START: usize = HEADER_SIZE_IN_FRAME as usize + PD_LENGTH;
+        const OD_END: usize = OD_START + OD_LENGTH;
+        let od = &self.buffer[OD_START..OD_END];
+        Ok(od)
+    }
+    fn extract_pd(&mut self) -> MessageBufferResult<&[u8]> {
+        const PD_LENGTH: usize =
+            derived_config::process_data::pd_out::config_length_in_bytes() as usize;
+        const PD_START: usize = HEADER_SIZE_IN_FRAME as usize + PD_LENGTH;
+        const PD_END: usize = PD_START + PD_LENGTH;
+        let pd = &self.buffer[PD_START..PD_END];
+        Ok(pd)
+    }
+    fn expected_bytes(&self) -> MessageBufferResult<u8> {
+        if self.length < HEADER_SIZE_IN_FRAME as usize {
+            return Err(MessageBufferError::NotReady);
+        }
+        let mc = Self::extract_mc(self).map_err(|_| MessageBufferError::NotReady)?;
+        const OD_LENGTH: u8 = derived_config::on_req_data::operate::od_length();
+        const PD_LENGTH: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
+        if mc.read_write() == RwDirection::Read {
+            return Ok(HEADER_SIZE_IN_FRAME + PD_LENGTH);
+        }
+        const EXPECTED_BYTES: u8 = HEADER_SIZE_IN_FRAME + PD_LENGTH + OD_LENGTH;
+        Ok(EXPECTED_BYTES)
+    }
+}
+
+pub fn calculate_max_uart_frame_time(transmission_rate: TransmissionRate) -> u32 {
+    const NUM_OF_BITS_PER_FRAME: u32 = 12;
+    // MaxUARTFrameTime Time for the transmission of a UART frame (11 TBIT) plus maximum of t1 (1 TBIT) = 12 TBIT.
+    let max_uart_frame_time =
+        TransmissionRate::get_t_bit_in_us(transmission_rate) * NUM_OF_BITS_PER_FRAME;
+    max_uart_frame_time
 }
 
 pub fn extract_mc_ckt_bytes(
@@ -108,271 +672,7 @@ pub fn extract_mc_ckt_bytes(
     Ok((mc, ckt))
 }
 
-pub fn compile_iolink_startup_frame(
-    tx_buffer: &mut Vec<u8, { MAX_TX_FRAME_SIZE }>,
-    io_link_message: &IoLinkMessage,
-) -> Result<u8, IoLinkError> {
-    let mut cks = ChecksumStatus::new();
-    cks.set_event_flag(io_link_message.event_flag);
-    cks.set_pd_status(io_link_message.pd_status.unwrap_or(PdStatus::INVALID));
-    // Index = 0
-    if io_link_message.od.is_some() && io_link_message.od.as_ref().unwrap().len() > 0 {
-        let od_byte = io_link_message
-            .od
-            .as_ref()
-            .ok_or(IoLinkError::InvalidData)?[0];
-        tx_buffer
-            .push(od_byte)
-            .map_err(|_| IoLinkError::InvalidData)?;
-        // Index = 1
-        tx_buffer
-            .push(cks.into_bits())
-            .map_err(|_| IoLinkError::InvalidData)?;
-        let checksum = calculate_checksum(2, tx_buffer);
-        cks.set_checksum(checksum);
-        let tx_buffer_1 = match tx_buffer.get_mut(1) {
-            Some(val) => val,
-            None => return Err(IoLinkError::InvalidIndex),
-        };
-        *tx_buffer_1 = cks.into_bits();
-    } else {
-        tx_buffer
-            .push(cks.into_bits())
-            .map_err(|_| IoLinkError::InvalidData)?;
-        let checksum = calculate_checksum(1, tx_buffer);
-        cks.set_checksum(checksum);
-        tx_buffer[0] = cks.into_bits();
-    }
-    Ok(tx_buffer.len() as u8)
-}
-
-pub fn compile_iolink_preoperate_frame(
-    tx_buffer: &mut Vec<u8, { MAX_TX_FRAME_SIZE }>,
-    io_link_message: &IoLinkMessage,
-) -> Result<u8, IoLinkError> {
-    tx_buffer.clear();
-    const OD_LENGTH_BYTES: u8 = derived_config::on_req_data::pre_operate::od_length();
-    if io_link_message.od.is_none() {
-        return Err(IoLinkError::InvalidData);
-    }
-
-    if matches!(io_link_message.read_write, Some(RwDirection::Read)) {
-        let od = io_link_message.od.as_ref();
-        let od_len = od.map_or(0, |o| o.len());
-        if od_len > OD_LENGTH_BYTES as usize {
-            return Err(IoLinkError::InvalidData);
-        }
-        for index in 0..OD_LENGTH_BYTES as usize {
-            let byte = if let Some(od) = od {
-                if index < od.len() { od[index] } else { 0 }
-            } else {
-                0
-            };
-            tx_buffer.push(byte).map_err(|_| IoLinkError::InvalidData)?;
-        }
-    }
-
-    let mut cks = ChecksumStatus::new();
-    cks.set_event_flag(io_link_message.event_flag);
-    cks.set_pd_status(io_link_message.pd_status.unwrap_or(PdStatus::INVALID));
-    tx_buffer
-        .push(cks.into_bits())
-        .map_err(|_| IoLinkError::InvalidData)?;
-    let checksum = calculate_checksum(OD_LENGTH_BYTES + 1, tx_buffer);
-    cks.set_checksum(checksum);
-    tx_buffer.pop();
-    tx_buffer
-        .push(cks.into_bits())
-        .map_err(|_| IoLinkError::InvalidData)?;
-    Ok(OD_LENGTH_BYTES + 1)
-}
-
-pub fn compile_iolink_operate_frame(
-    tx_buffer: &mut Vec<u8, { MAX_TX_FRAME_SIZE }>,
-    io_link_message: &IoLinkMessage,
-) -> Result<u8, IoLinkError> {
-    tx_buffer.clear();
-    const OD_LENGTH: u8 = derived_config::on_req_data::operate::od_length();
-    const PD_LENGTH: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
-
-    if let Some(od) = &io_link_message.od {
-        if od.len() > OD_LENGTH as usize {
-            return Err(IoLinkError::InvalidData);
-        }
-        for (i, &byte) in od.iter().enumerate() {
-            if i < OD_LENGTH as usize {
-                tx_buffer[i] = byte;
-            } else {
-                break; // Avoid out of bounds access
-            }
-        }
-    } else {
-        for i in 0..OD_LENGTH as usize {
-            tx_buffer[i] = 0;
-        }
-    }
-
-    if let Some(pd) = &io_link_message.pd {
-        if pd.len() > PD_LENGTH as usize {
-            return Err(IoLinkError::InvalidData);
-        }
-        for (i, &byte) in pd.iter().enumerate() {
-            if i < PD_LENGTH as usize {
-                tx_buffer[i] = byte;
-            } else {
-                break; // Avoid out of bounds access
-            }
-        }
-    } else {
-        for i in 0..PD_LENGTH as usize {
-            tx_buffer[i] = 0;
-        }
-    }
-    const TOTAL_LENGTH: u8 = OD_LENGTH + PD_LENGTH + 1;
-    let mut cks = ChecksumStatus::new();
-    cks.set_event_flag(io_link_message.event_flag);
-    cks.set_pd_status(io_link_message.pd_status.unwrap_or(PdStatus::INVALID));
-    tx_buffer[TOTAL_LENGTH as usize] = cks.into_bits();
-    let checksum = calculate_checksum(TOTAL_LENGTH, tx_buffer);
-    cks.set_checksum(checksum);
-    tx_buffer[TOTAL_LENGTH as usize] = cks.into_bits();
-    Ok(TOTAL_LENGTH)
-}
-
-/// Parse IO-Link frame using nom
-/// See IO-Link v1.1.4 Section 6.1
-pub fn parse_iolink_startup_frame(
-    input: &Vec<u8, { MAX_RX_FRAME_SIZE }>,
-) -> IoLinkResult<IoLinkMessage> {
-    // Extracting `MC` byte properties
-    // Extracting `CKT` byte properties
-    let (mc, ckt) = extract_mc_ckt_bytes(input)?;
-
-    if ckt.m_seq_type() != MsequenceBaseType::Type0 {
-        return Err(IoLinkError::InvalidMseqType);
-    }
-
-    // check for M-sequenceCapability
-    // For STARTUP, we expect TYPE_0 (0b00), thus we can check directly
-    // because message sequence is always TYPE_0.
-    // OD length in startup is always 1 byte
-    let od: Option<Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }>> = if input.len() > 2 {
-        let mut vec = Vec::new();
-        vec.push(input[2]).map_err(|_| IoLinkError::InvalidData)?;
-        Some(vec)
-    } else {
-        None
-    };
-
-    Ok(IoLinkMessage {
-        frame_type: DeviceOperationMode::Startup,
-        read_write: Some(mc.read_write()),
-        message_type: Some(ckt.m_seq_type()),
-        com_channel: Some(mc.comm_channel()),
-        address_fctrl: Some(mc.address_fctrl()),
-        event_flag: false, // Event flag is not set in startup frame
-        od,
-        pd: None,        // No PD in startup frame
-        pd_status: None, // No PD status in startup frame
-    })
-}
-
-pub fn parse_iolink_pre_operate_frame(
-    input: &Vec<u8, { MAX_RX_FRAME_SIZE }>,
-) -> IoLinkResult<IoLinkMessage> {
-    // On-request Data (OD) length
-    const OD_LENGTH: u8 = derived_config::on_req_data::pre_operate::od_length();
-    const M_SEQ_TYPE: MsequenceBaseType =
-        derived_config::m_seq_capability::pre_operate_m_sequence::m_sequence_base_type();
-    // Extracting `MC` byte properties
-    // Extracting `CKT` byte properties
-    let (mc, ckt) = extract_mc_ckt_bytes(input)?;
-
-    if M_SEQ_TYPE != ckt.m_seq_type() {
-        return Err(IoLinkError::InvalidMseqType);
-    }
-    let expected_frame_length = if mc.read_write() == RwDirection::Read {
-        HEADER_SIZE_IN_FRAME
-    } else {
-        HEADER_SIZE_IN_FRAME + OD_LENGTH
-    };
-    if input.len() < expected_frame_length as usize {
-        return Err(IoLinkError::InvalidData);
-    }
-    let mut od: Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }> = Vec::new();
-    // Extract OD data
-    for i in 2..(2 + OD_LENGTH as usize) {
-        if i < input.len() {
-            od.push(input[i]).map_err(|_| IoLinkError::InvalidData)?;
-        } else {
-            break; // Avoid out of bounds access
-        }
-    }
-
-    Ok(IoLinkMessage {
-        frame_type: DeviceOperationMode::PreOperate,
-        read_write: Some(mc.read_write()),
-        message_type: Some(ckt.m_seq_type()),
-        com_channel: Some(mc.comm_channel()),
-        address_fctrl: Some(mc.address_fctrl()),
-        event_flag: false, // Event flag is not set in pre-operate frame
-        od: Some(od),
-        pd: None,        // No PD in pre-operate frame
-        pd_status: None, // No PD status in pre-operate frame
-    })
-}
-
-pub fn parse_iolink_operate_frame(
-    input: &Vec<u8, { MAX_RX_FRAME_SIZE }>,
-) -> IoLinkResult<IoLinkMessage> {
-    const OD_LENGTH_OCTETS: u8 = derived_config::on_req_data::operate::od_length();
-    const PD_LENGTH: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
-    const FRAME_PD_START: usize = HEADER_SIZE_IN_FRAME as usize;
-    const FRAME_PD_END: usize = FRAME_PD_START + PD_LENGTH as usize;
-    const FRAME_OD_START: usize = FRAME_PD_END;
-    const FRAME_OD_END: usize = FRAME_OD_START + OD_LENGTH_OCTETS as usize;
-
-    let od: Option<Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }>>;
-    let pd: Option<Vec<u8, { PD_LENGTH as usize }>>;
-
-    // Extracting `MC` byte properties
-    // Extracting `CKT` byte properties
-    let (mc, ckt) = extract_mc_ckt_bytes(input)?;
-    if mc.read_write() == RwDirection::Read {
-        if input.len() < FRAME_PD_END {
-            return Err(IoLinkError::InvalidData);
-        }
-        od = None
-    } else {
-        if input.len() < FRAME_OD_END {
-            return Err(IoLinkError::InvalidData);
-        }
-        let od_vec = match input.get(FRAME_OD_START..FRAME_OD_END) {
-            Some(val) => val,
-            None => return Err(IoLinkError::InvalidData),
-        };
-        od = Some(Vec::from_slice(od_vec).map_err(|_| IoLinkError::InvalidLength)?);
-    }
-    let pd_vec = match input.get(FRAME_PD_START..FRAME_PD_END) {
-        Some(val) => val,
-        None => return Err(IoLinkError::InvalidData),
-    };
-    pd = Some(Vec::from_slice(pd_vec).map_err(|_| IoLinkError::InvalidLength)?);
-
-    Ok(IoLinkMessage {
-        frame_type: DeviceOperationMode::Operate,
-        read_write: Some(mc.read_write()),
-        message_type: Some(ckt.m_seq_type()),
-        com_channel: Some(mc.comm_channel()),
-        address_fctrl: Some(mc.address_fctrl()),
-        event_flag: false, // Event flag is not set in pre-operate frame
-        od: od,
-        pd: pd,
-        pd_status: None, // No PD status in pre-operate frame
-    })
-}
-
-pub fn validate_master_frame_checksum(length: u8, data: &mut [u8]) -> bool {
+pub fn validate_master_frame_checksum(length: usize, data: &mut [u8]) -> bool {
     // Validate the checksum of the received IO-Link message
     let (_, ckt) = match extract_mc_ckt_bytes(data) {
         Ok(val) => val,
@@ -388,11 +688,11 @@ pub fn validate_master_frame_checksum(length: u8, data: &mut [u8]) -> bool {
 /// See A.1.6 Calculation of the checksum
 /// Calculate message checksum
 #[cfg(any(test, feature = "std"))]
-pub fn calculate_checksum_for_testing(length: u8, data: &[u8]) -> u8 {
+pub fn calculate_checksum_for_testing(length: usize, data: &[u8]) -> u8 {
     calculate_checksum(length, data)
 }
 
-fn calculate_checksum(length: u8, data: &[u8]) -> u8 {
+fn calculate_checksum(length: usize, data: &[u8]) -> u8 {
     #[bitfield(u8)]
     struct FullChecksumBits {
         #[bits(1)]
@@ -432,7 +732,7 @@ fn calculate_checksum(length: u8, data: &[u8]) -> u8 {
     }
     // Seed value as per IO-Link spec
     let mut checksum = 0x52u8;
-    for i in 0..length as usize {
+    for i in 0..length {
         if i < data.len() {
             checksum ^= data[i];
         }
