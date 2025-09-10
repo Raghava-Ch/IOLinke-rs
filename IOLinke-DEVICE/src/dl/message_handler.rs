@@ -412,6 +412,7 @@ impl MessageHandler {
     ) -> IoLinkResult<()> {
         // Compiled and send response via PL_Transfer.rsp (handled externally)
         physical_layer.pl_transfer_req(self.buffers.tx_buffer.get_as_slice())?;
+        self.buffers.tx_buffer.clear();
 
         Ok(())
     }
@@ -518,7 +519,7 @@ impl MessageHandler {
     pub fn od_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
         self.buffers
             .tx_buffer
-            .insert_od(&data[..length as usize], self.rx_frame_operation_state)
+            .insert_od(length as usize, &data[..length as usize], self.rx_frame_operation_state)
             .map_err(|_| IoLinkError::InvalidParameter)?;
         Ok(())
     }

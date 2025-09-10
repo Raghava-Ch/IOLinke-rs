@@ -78,7 +78,7 @@ pub fn read_m_sequence_capability(
     } else {
         let rx_buffer =
             frame_utils::create_op_read_request(direct_parameter_address!(MSequenceCapability));
-        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length() + 1 /* CKS Byte */;
+        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length() + derived_config::process_data::pd_in::config_length_in_bytes() + 1 /* CKS Byte */;
         (rx_buffer, EXPECTED_BYTES)
     };
 

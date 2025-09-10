@@ -30,46 +30,6 @@ pub enum DeviceOperationMode {
     Operate,
 }
 
-/// IO-Link message structure
-/// See IO-Link v1.1.4 Section 6.1
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IoLinkMessage {
-    /// Will be used decide the frame type to be compiled
-    pub frame_type: DeviceOperationMode,
-    /// Read/Write direction
-    pub read_write: Option<RwDirection>,
-    /// Message type
-    pub message_type: Option<MsequenceBaseType>,
-    /// Communication channel
-    pub com_channel: Option<ComChannel>,
-    /// Contains the address or flow control value (see A.1.2).
-    pub address_fctrl: Option<u8>,
-    /// Event flag
-    pub event_flag: bool,
-    /// On Request Data (OD) response data
-    pub od: Option<Vec<u8, { MAX_POSSIBLE_OD_LEN_IN_FRAME as usize }>>,
-    /// Process Data (PD) response data
-    pub pd: Option<Vec<u8, { PD_OUT_LENGTH as usize }>>,
-    /// Process Data input status
-    pub pd_status: PdStatus,
-}
-
-impl IoLinkMessage {
-    pub fn new(device_mode: DeviceOperationMode, read_write: Option<RwDirection>) -> Self {
-        Self {
-            frame_type: device_mode,
-            read_write: read_write,
-            message_type: None,
-            com_channel: None,
-            address_fctrl: None,
-            event_flag: false,
-            od: None,
-            pd: None,
-            pd_status: PdStatus::INVALID,
-        }
-    }
-}
-
 pub enum MessageBufferError {
     NotEnoughMemory,
     InvalidIndex,
@@ -88,7 +48,7 @@ pub enum MessageBufferError {
 
 pub type MessageBufferResult<T> = Result<T, MessageBufferError>;
 pub trait StartupTxMessageBuffer {
-    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()>;
+    fn insert_od(&mut self, od_length: usize, od: &[u8]) -> MessageBufferResult<()>;
     fn compile_read_rsp(
         &mut self,
         event_flag: bool,
@@ -102,7 +62,7 @@ pub trait StartupTxMessageBuffer {
 }
 
 trait PreOperateTxMessageBuffer {
-    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()>;
+    fn insert_od(&mut self, od_length: usize, od: &[u8]) -> MessageBufferResult<()>;
     fn compile_read_rsp(
         &mut self,
         event_flag: bool,
@@ -116,7 +76,7 @@ trait PreOperateTxMessageBuffer {
 }
 
 trait OperateTxMessageBuffer {
-    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()>;
+    fn insert_od(&mut self, od_length: usize, od: &[u8]) -> MessageBufferResult<()>;
     fn insert_pd(&mut self, pd: &[u8]) -> MessageBufferResult<()>;
     fn compile_read_rsp(
         &mut self,
@@ -181,6 +141,9 @@ impl<const BUFF_LEN: usize> TxMessageBuffer<BUFF_LEN> {
 
     pub fn clear(&mut self) {
         self.length = 0;
+        self.od_ready = false;
+        self.pd_ready = false;
+        self.tx_ready = false;
         self.buffer.clear();
         let _ = self.buffer.extend_from_slice(&[0; BUFF_LEN]);
     }
@@ -195,15 +158,16 @@ impl<const BUFF_LEN: usize> TxMessageBuffer<BUFF_LEN> {
 
     pub fn insert_od(
         &mut self,
+        od_length: usize,
         od: &[u8],
         device_mode: DeviceOperationMode,
     ) -> MessageBufferResult<()> {
         match device_mode {
-            DeviceOperationMode::Startup => <Self as StartupTxMessageBuffer>::insert_od(self, od),
+            DeviceOperationMode::Startup => <Self as StartupTxMessageBuffer>::insert_od(self, od_length, od),
             DeviceOperationMode::PreOperate => {
-                <Self as PreOperateTxMessageBuffer>::insert_od(self, od)
+                <Self as PreOperateTxMessageBuffer>::insert_od(self, od_length, od)
             }
-            DeviceOperationMode::Operate => <Self as OperateTxMessageBuffer>::insert_od(self, od),
+            DeviceOperationMode::Operate => <Self as OperateTxMessageBuffer>::insert_od(self, od_length, od),
         }
     }
 
@@ -352,18 +316,19 @@ impl<const BUFF_LEN: usize> RxMessageBuffer<BUFF_LEN> {
 }
 
 impl<const BUFF_LEN: usize> StartupTxMessageBuffer for TxMessageBuffer<BUFF_LEN> {
-    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()> {
+    fn insert_od(&mut self, od_length: usize, od: &[u8]) -> MessageBufferResult<()> {
         if self.length + od.len() > BUFF_LEN {
             return Err(MessageBufferError::InvalidLength);
         }
-        if 1 != od.len() {
-            // For startup mode, only one OD byte is used
-            return Err(MessageBufferError::InvalidData);
+        if od_length > 1 {
+            return Err(MessageBufferError::InvalidLength);
         }
-        const OD_START: usize = 0;
-        const OD_END: usize = 1;
-        self.buffer[OD_START..OD_END].copy_from_slice(od);
-        self.length += 1;
+        if od_length > 0 {
+            const OD_START: usize = 0;
+            const OD_END: usize = 1;
+            self.buffer[OD_START..OD_END].copy_from_slice(od);
+            self.length += 1;
+        }
         self.od_ready = true;
 
         Ok(())
@@ -413,18 +378,23 @@ impl<const BUFF_LEN: usize> StartupTxMessageBuffer for TxMessageBuffer<BUFF_LEN>
 }
 
 impl<const BUFF_LEN: usize> PreOperateTxMessageBuffer for TxMessageBuffer<BUFF_LEN> {
-    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()> {
+    fn insert_od(&mut self, od_length: usize, od: &[u8]) -> MessageBufferResult<()> {
         if self.length + od.len() > BUFF_LEN {
             return Err(MessageBufferError::InvalidLength);
         }
         const OD_LENGTH: usize = derived_config::on_req_data::pre_operate::od_length() as usize;
-        if OD_LENGTH != od.len() {
-            return Err(MessageBufferError::InvalidData);
+        if od_length > 0 {
+            const OD_START: usize = 0;
+            const OD_END: usize = OD_LENGTH;
+            for index in OD_START..OD_END {
+                if index >= od.len() {
+                    self.buffer[index] = 0;
+                    continue;
+                }
+                self.buffer[index] = od[index];
+            }
+            self.length += OD_LENGTH;
         }
-        const OD_START: usize = 0;
-        const OD_END: usize = OD_LENGTH;
-        self.buffer[OD_START..OD_END].copy_from_slice(od);
-        self.length += OD_LENGTH;
         self.od_ready = true;
         Ok(())
     }
@@ -461,18 +431,23 @@ impl<const BUFF_LEN: usize> PreOperateTxMessageBuffer for TxMessageBuffer<BUFF_L
 }
 
 impl<const BUFF_LEN: usize> OperateTxMessageBuffer for TxMessageBuffer<BUFF_LEN> {
-    fn insert_od(&mut self, od: &[u8]) -> MessageBufferResult<()> {
+    fn insert_od(&mut self, od_length: usize, od: &[u8]) -> MessageBufferResult<()> {
         if self.length + od.len() > BUFF_LEN {
             return Err(MessageBufferError::InvalidLength);
         }
         const OD_LENGTH: usize = derived_config::on_req_data::operate::od_length() as usize;
-        if OD_LENGTH != od.len() {
-            return Err(MessageBufferError::InvalidData);
+        if od_length > 0 {
+            const OD_START: usize = 0;
+            const OD_END: usize = OD_LENGTH;
+            for index in OD_START..OD_END {
+                if index >= od.len() {
+                    self.buffer[index] = 0;
+                    continue;
+                }
+                self.buffer[index] = od[index];
+            }
+            self.length += OD_LENGTH;
         }
-        const OD_START: usize = 0;
-        const OD_END: usize = OD_LENGTH;
-        self.buffer[OD_START..OD_END].copy_from_slice(od);
-        self.length += OD_LENGTH;
         self.od_ready = true;
         Ok(())
     }
@@ -482,7 +457,7 @@ impl<const BUFF_LEN: usize> OperateTxMessageBuffer for TxMessageBuffer<BUFF_LEN>
             return Err(MessageBufferError::InvalidLength);
         }
         const PD_LENGTH: usize =
-            derived_config::process_data::pd_out::config_length_in_bytes() as usize;
+            derived_config::process_data::pd_in::config_length_in_bytes() as usize;
         const OD_LENGTH: usize = derived_config::on_req_data::operate::od_length() as usize;
         if PD_LENGTH != pd.len() {
             return Err(MessageBufferError::InvalidData);
@@ -509,7 +484,7 @@ impl<const BUFF_LEN: usize> OperateTxMessageBuffer for TxMessageBuffer<BUFF_LEN>
         const OD_LENGTH: usize = derived_config::on_req_data::operate::od_length() as usize;
         const PD_LENGTH: usize =
             derived_config::process_data::pd_out::config_length_in_bytes() as usize;
-        const CKS_INDEX: usize = OD_LENGTH + PD_LENGTH;
+        const CKS_INDEX: usize = OD_LENGTH + PD_LENGTH - 1;
         let mut cks = ChecksumStatus::new();
         cks.set_event_flag(event_flag);
         cks.set_pd_status(pd_status);
@@ -530,10 +505,9 @@ impl<const BUFF_LEN: usize> OperateTxMessageBuffer for TxMessageBuffer<BUFF_LEN>
         if !self.pd_ready {
             return Err(MessageBufferError::PdNotSet);
         }
-        const OD_LENGTH: usize = derived_config::on_req_data::operate::od_length() as usize;
         const PD_LENGTH: usize =
             derived_config::process_data::pd_out::config_length_in_bytes() as usize;
-        const CKS_INDEX: usize = OD_LENGTH + PD_LENGTH;
+        const CKS_INDEX: usize = PD_LENGTH - 1;
         let mut cks = ChecksumStatus::new();
         cks.set_event_flag(event_flag);
         cks.set_pd_status(pd_status);
@@ -587,7 +561,17 @@ impl<const BUFF_LEN: usize> StartupRxMessageBuffer for RxMessageBuffer<BUFF_LEN>
 
 impl<const BUFF_LEN: usize> PreOperateRxMessageBuffer for RxMessageBuffer<BUFF_LEN> {
     fn valid_req(&mut self) -> MessageBufferResult<RwDirection> {
-        <Self as StartupRxMessageBuffer>::valid_req(self)
+        if validate_master_frame_checksum(self.length, self.buffer.as_mut_slice()) {
+            const PRE_OP_MSEQ_BASE_TYPE: MsequenceBaseType = derived_config::m_seq_capability::pre_operate_m_sequence::m_sequence_base_type();
+            let (mc, ckt) = extract_mc_ckt_bytes(self.buffer.as_slice())
+                .map_err(|_| MessageBufferError::InvalidChecksum)?;
+            if ckt.m_seq_type() != PRE_OP_MSEQ_BASE_TYPE {
+                return Err(MessageBufferError::InvalidMseqType);
+            }
+            Ok(mc.read_write())
+        } else {
+            Err(MessageBufferError::InvalidChecksum)
+        }
     }
     fn extract_od_from_write_req(&self) -> MessageBufferResult<&[u8]> {
         let mc = Self::extract_mc(self).map_err(|_| MessageBufferError::InvalidMseqType)?;
@@ -617,7 +601,17 @@ impl<const BUFF_LEN: usize> PreOperateRxMessageBuffer for RxMessageBuffer<BUFF_L
 
 impl<const BUFF_LEN: usize> OperateRxMessageBuffer for RxMessageBuffer<BUFF_LEN> {
     fn valid_req(&mut self) -> MessageBufferResult<RwDirection> {
-        <Self as StartupRxMessageBuffer>::valid_req(self)
+        if validate_master_frame_checksum(self.length, self.buffer.as_mut_slice()) {
+            const OP_MSEQ_BASE_TYPE: MsequenceBaseType = derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
+            let (mc, ckt) = extract_mc_ckt_bytes(self.buffer.as_slice())
+                .map_err(|_| MessageBufferError::InvalidChecksum)?;
+            if ckt.m_seq_type() != OP_MSEQ_BASE_TYPE {
+                return Err(MessageBufferError::InvalidMseqType);
+            }
+            Ok(mc.read_write())
+        } else {
+            Err(MessageBufferError::InvalidChecksum)
+        }
     }
     fn extract_od_from_write_req(&self) -> MessageBufferResult<&[u8]> {
         let mc = Self::extract_mc(self).map_err(|_| MessageBufferError::InvalidMseqType)?;
@@ -636,7 +630,7 @@ impl<const BUFF_LEN: usize> OperateRxMessageBuffer for RxMessageBuffer<BUFF_LEN>
     fn extract_pd(&mut self) -> MessageBufferResult<&[u8]> {
         const PD_LENGTH: usize =
             derived_config::process_data::pd_out::config_length_in_bytes() as usize;
-        const PD_START: usize = HEADER_SIZE_IN_FRAME as usize + PD_LENGTH;
+        const PD_START: usize = HEADER_SIZE_IN_FRAME as usize;
         const PD_END: usize = PD_START + PD_LENGTH;
         let pd = &self.buffer[PD_START..PD_END];
         Ok(pd)

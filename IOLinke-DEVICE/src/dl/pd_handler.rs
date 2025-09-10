@@ -208,7 +208,7 @@ impl ProcessDataHandler {
     ) -> IoLinkResult<()> {
         let pd_data = if pd_in_length != self.process_data.input.len() as u8 {
             let _ = message_handler.pd_in_status_req(PdStatus::INVALID);
-            self.process_data.input.fill(0);
+            let _ = self.process_data.input.resize(self.process_data.input.capacity(), 0);
             &self.process_data.input
         } else {
             let _ = message_handler.pd_in_status_req(PdStatus::VALID);
