@@ -171,7 +171,7 @@ pub fn util_test_preop_sequence(
 /// # Returns
 /// The ISDU service
 ///
-pub fn util_test_isdu_sequence_read(
+pub fn util_pre_op_test_isdu_sequence_read(
     poll_tx: &Sender<ThreadMessage>,
     poll_response_rx: &Receiver<ThreadMessage>,
     index: u16,
@@ -325,7 +325,162 @@ pub fn util_test_isdu_sequence_read(
 /// # Returns
 /// The ISDU service
 ///
-pub fn util_test_isdu_sequence_write(
+pub fn util_op_test_isdu_sequence_read(
+    poll_tx: &Sender<ThreadMessage>,
+    poll_response_rx: &Receiver<ThreadMessage>,
+    index: u16,
+    subindex: Option<u8>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    const OD_LENGTH_PER_FRAME: usize =
+        derived_config::on_req_data::operate::od_length() as usize;
+
+    let isdu_read_request = frame_utils::isdu_frame::create_isdu_read_request(index, subindex);
+    println!("isdu_read_request: {:?}", isdu_read_request);
+
+    // Write ISDU request to device
+    let mut isdu_frames = Vec::new();
+    let mut offset = 0;
+    let mut circular_offset = IsduFlowCtrl::Start;
+    while offset < isdu_read_request.len() {
+        let end = core::cmp::min(offset + OD_LENGTH_PER_FRAME, isdu_read_request.len());
+        let mut chunk_buf = [0u8; OD_LENGTH_PER_FRAME];
+        let chunk_len = end - offset;
+        chunk_buf[..chunk_len].copy_from_slice(&isdu_read_request[offset..end]);
+        let chunk = &chunk_buf[..];
+        let frame =
+            frame_utils::create_op_write_isdu_request(circular_offset.into_bits(), chunk);
+        offset += OD_LENGTH_PER_FRAME;
+        circular_offset = IsduFlowCtrl::Count(circular_offset.into_bits() + 1);
+        if circular_offset.into_bits() > 15 {
+            circular_offset = IsduFlowCtrl::Count(0);
+        }
+        let mut isdu_write_response = match send_test_message_and_wait(
+            &poll_tx,
+            &poll_response_rx,
+            frame,
+            Duration::from_millis(10000),
+        ) {
+            Ok(response) => response,
+            Err(e) => {
+                println!("Error: {}", e);
+                panic!("ISDU transfer failed");
+            }
+        };
+        let is_checksum_valid =
+            frame_utils::validate_device_frame_checksum(&mut isdu_write_response);
+        assert!(is_checksum_valid, "Checksum not matching");
+        isdu_frames.push(isdu_write_response);
+    }
+    // Writing ISDU reading details to device is compeleted
+
+    // Start reading ISDU data from the device for the written request
+    let mut retry_count = 0;
+    let mut isdu_data_start = Vec::new();
+    loop {
+        let isdu_start_frame = frame_utils::create_op_read_start_isdu_request();
+        let mut isdu_read_response = match send_test_message_and_wait(
+            &poll_tx,
+            &poll_response_rx,
+            isdu_start_frame,
+            Duration::from_millis(4000),
+        ) {
+            Ok(response) => response,
+            Err(e) => {
+                println!("Error: {}", e);
+                if retry_count > 4 {
+                    panic!("ISDU transfer failed, Could not get ISDU start frame");
+                }
+                retry_count += 1;
+                continue;
+            }
+        };
+        let is_checksum_valid =
+            frame_utils::validate_device_frame_checksum(&mut isdu_read_response);
+        assert!(is_checksum_valid, "Checksum not matching");
+        println!("isdu_read_response: {:?}", isdu_read_response[0]);
+        if 0x00 == isdu_read_response[0] {
+            panic!("ISDU transfer failed, ISDU Aborted by device");
+        }
+        if retry_count > 4 {
+            panic!("ISDU transfer failed, Could not get ISDU start frame response, out of retries");
+        }
+        if 0x01 != isdu_read_response[0] && 0x00 != isdu_read_response[0] {
+            isdu_data_start.extend_from_slice(&isdu_read_response[0..OD_LENGTH_PER_FRAME]);
+            break;
+        }
+        if 0x01 == isdu_read_response[0] {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            retry_count += 1;
+        }
+    }
+    let mut isdu_data = Vec::new();
+    let isdu_service: IsduService = IsduService::from_bits(isdu_data_start[0]);
+    let od_len;
+    let mut isdu_data_rx_length = isdu_service.length() as f32;
+    isdu_data_rx_length = if isdu_data_rx_length == 1.0 {
+        od_len = isdu_data_start[1] - 3; // i_service(1) + extended length(1) + checksum(1) = 3
+        isdu_data.extend_from_slice(&isdu_data_start[2..OD_LENGTH_PER_FRAME]);
+        isdu_data_start[1] as f32
+    } else {
+        od_len = (isdu_data_rx_length - 2.0) as u8; // i_service(1) + checksum(1) = 2
+        isdu_data.extend_from_slice(&isdu_data_start[1..OD_LENGTH_PER_FRAME]);
+        isdu_data_rx_length
+    };
+    let segments = (isdu_data_rx_length / OD_LENGTH_PER_FRAME as f32).ceil() as usize;
+    for segment in 1..segments {
+        // Revolve segment from 0 to 15, wrapping around if segment > 15
+        let segment_num = (segment % 16) as u8;
+        let frame = frame_utils::create_op_read_isdu_segment(segment_num);
+        let mut isdu_read_response = match send_test_message_and_wait(
+            &poll_tx,
+            &poll_response_rx,
+            frame,
+            Duration::from_millis(4000),
+        ) {
+            Ok(response) => response,
+            Err(e) => {
+                println!("Error: {}", e);
+                panic!("ISDU transfer failed");
+            }
+        };
+        let is_checksum_valid =
+            frame_utils::validate_device_frame_checksum(&mut isdu_read_response);
+        assert!(is_checksum_valid, "Checksum not matching");
+        isdu_data.extend_from_slice(&isdu_read_response[0..(OD_LENGTH_PER_FRAME)]);
+    }
+    let isdu_idle_frame = frame_utils::create_op_isdu_idle_request();
+    let mut isdu_idle_response = match send_test_message_and_wait(
+        &poll_tx,
+        &poll_response_rx,
+        isdu_idle_frame,
+        Duration::from_millis(4000),
+    ) {
+        Ok(response) => response,
+        Err(e) => {
+            println!("Error: {}", e);
+            panic!("ISDU transfer failed");
+        }
+    };
+    let is_checksum_valid = frame_utils::validate_device_frame_checksum(&mut isdu_idle_response);
+    assert!(is_checksum_valid, "Checksum not matching");
+    println!("isdu_idle_response: {:?}", isdu_idle_response[0]);
+    Ok(isdu_data[0..od_len as usize].to_vec())
+}
+
+/// Test ISDU sequence
+///
+/// # Arguments
+/// * `poll_tx` - The sender for the polling thread
+/// * `poll_response_rx` - The receiver for the polling thread
+/// * `index` - The index of the ISDU request
+/// * `subindex` - The subindex of the ISDU request
+/// * `expected_data` - The expected data of the ISDU request
+/// * `expected_length` - The expected length of the ISDU request
+///
+/// # Returns
+/// The ISDU service
+///
+pub fn util_pre_op_test_isdu_sequence_write(
     poll_tx: &Sender<ThreadMessage>,
     poll_response_rx: &Receiver<ThreadMessage>,
     index: u16,
@@ -333,7 +488,7 @@ pub fn util_test_isdu_sequence_write(
     data: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
     const OD_LENGTH_PER_FRAME: usize =
-        derived_config::on_req_data::pre_operate::od_length() as usize;
+        derived_config::on_req_data::operate::od_length() as usize;
 
     let isdu_write_request =
         frame_utils::isdu_frame::create_isdu_write_request(index, subindex, data);
@@ -423,6 +578,135 @@ pub fn util_test_isdu_sequence_write(
 
     // Send ISDU idle request to device to complete the write operation
     let isdu_idle_frame = frame_utils::create_preop_isdu_idle_request();
+    let mut isdu_idle_response = match send_test_message_and_wait(
+        &poll_tx,
+        &poll_response_rx,
+        isdu_idle_frame,
+        Duration::from_millis(4000),
+    ) {
+        Ok(response) => response,
+        Err(e) => {
+            println!("Error: {}", e);
+            panic!("ISDU transfer failed");
+        }
+    };
+    let is_checksum_valid = frame_utils::validate_device_frame_checksum(&mut isdu_idle_response);
+    assert!(is_checksum_valid, "Checksum not matching");
+    println!("isdu_idle_response: {:?}", isdu_idle_response[0]);
+    Ok(())
+}
+
+/// Test ISDU sequence
+///
+/// # Arguments
+/// * `poll_tx` - The sender for the polling thread
+/// * `poll_response_rx` - The receiver for the polling thread
+/// * `index` - The index of the ISDU request
+/// * `subindex` - The subindex of the ISDU request
+/// * `expected_data` - The expected data of the ISDU request
+/// * `expected_length` - The expected length of the ISDU request
+///
+/// # Returns
+/// The ISDU service
+///
+pub fn util_op_test_isdu_sequence_write(
+    poll_tx: &Sender<ThreadMessage>,
+    poll_response_rx: &Receiver<ThreadMessage>,
+    index: u16,
+    subindex: Option<u8>,
+    data: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
+    const OD_LENGTH_PER_FRAME: usize =
+        derived_config::on_req_data::operate::od_length() as usize;
+
+    let isdu_write_request =
+        frame_utils::isdu_frame::create_isdu_write_request(index, subindex, data);
+    println!("isdu_write_request: {:?}", isdu_write_request);
+
+    // Write ISDU request to device
+    let mut isdu_frames = Vec::new();
+    let mut offset = 0;
+    let mut circular_offset = IsduFlowCtrl::Start;
+    while offset < isdu_write_request.len() {
+        let end = core::cmp::min(offset + OD_LENGTH_PER_FRAME, isdu_write_request.len());
+        let mut chunk_buf = [0u8; OD_LENGTH_PER_FRAME];
+        let chunk_len = end - offset;
+        chunk_buf[..chunk_len].copy_from_slice(&isdu_write_request[offset..end]);
+        let chunk = &chunk_buf[..];
+        let frame =
+            frame_utils::create_op_write_isdu_request(circular_offset.into_bits(), chunk);
+        offset += OD_LENGTH_PER_FRAME;
+        // circular_offset wraps around 0..=15
+        circular_offset = IsduFlowCtrl::Count(circular_offset.into_bits() + 1);
+        if circular_offset.into_bits() > 15 {
+            circular_offset = IsduFlowCtrl::Count(0);
+        }
+        let mut isdu_write_response = match send_test_message_and_wait(
+            &poll_tx,
+            &poll_response_rx,
+            frame,
+            Duration::from_millis(1000),
+        ) {
+            Ok(response) => response,
+            Err(e) => {
+                println!("Error: {}", e);
+                panic!("ISDU transfer failed");
+            }
+        };
+        let is_checksum_valid =
+            frame_utils::validate_device_frame_checksum(&mut isdu_write_response);
+        assert!(is_checksum_valid, "Checksum not matching");
+        isdu_frames.push(isdu_write_response);
+    }
+
+    // Start reading ISDU data from the device for the written request
+    let mut retry_count = 0;
+    let mut isdu_data_start = Vec::new();
+    loop {
+        let isdu_start_frame = frame_utils::create_op_read_start_isdu_request();
+        let mut isdu_read_response = match send_test_message_and_wait(
+            &poll_tx,
+            &poll_response_rx,
+            isdu_start_frame,
+            Duration::from_millis(40000),
+        ) {
+            Ok(response) => response,
+            Err(e) => {
+                println!("Error: {}", e);
+                retry_count += 1;
+                if retry_count > 4 {
+                    panic!(
+                        "ISDU transfer failed, Could not get ISDU start frame response, out of retries"
+                    );
+                }
+                continue;
+            }
+        };
+        let is_checksum_valid =
+            frame_utils::validate_device_frame_checksum(&mut isdu_read_response);
+        assert!(is_checksum_valid, "Checksum not matching");
+        println!("isdu_read_response: {:?}", isdu_read_response[0]);
+        if 0x00 == isdu_read_response[0] {
+            panic!("ISDU transfer failed, ISDU Aborted by device");
+        }
+        if 0x01 != isdu_read_response[0] && 0x00 != isdu_read_response[0] {
+            isdu_data_start.extend_from_slice(&isdu_read_response[0..OD_LENGTH_PER_FRAME]);
+            break;
+        }
+        retry_count += 1;
+    }
+    let mut isdu_data = Vec::new();
+    let isdu_service: IsduService = IsduService::from_bits(isdu_data_start[0]);
+    let isdu_data_rx_length = isdu_service.length();
+    isdu_data.extend_from_slice(&isdu_data_start[1..OD_LENGTH_PER_FRAME]);
+    assert!(isdu_data_rx_length == 2, "ISDU data write failed");
+    assert!(
+        isdu_service.i_service() == IsduIServiceCode::WriteSuccess,
+        "ISDU data write failed"
+    );
+
+    // Send ISDU idle request to device to complete the write operation
+    let isdu_idle_frame = frame_utils::create_op_isdu_idle_request();
     let mut isdu_idle_response = match send_test_message_and_wait(
         &poll_tx,
         &poll_response_rx,

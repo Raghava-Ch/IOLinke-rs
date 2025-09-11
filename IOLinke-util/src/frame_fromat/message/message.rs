@@ -19,9 +19,9 @@ pub const PD_IN_LENGTH: u8 = derived_config::process_data::pd_in::config_length_
 pub const PD_OUT_LENGTH: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
 /// Maximum frame size for IO-Link messages
 pub const MAX_RX_FRAME_SIZE: usize =
-    (MAX_POSSIBLE_OD_LEN_IN_FRAME + PD_IN_LENGTH + HEADER_SIZE_IN_FRAME) as usize;
-pub const MAX_TX_FRAME_SIZE: usize =
     (MAX_POSSIBLE_OD_LEN_IN_FRAME + PD_OUT_LENGTH + HEADER_SIZE_IN_FRAME) as usize;
+pub const MAX_TX_FRAME_SIZE: usize =
+    (MAX_POSSIBLE_OD_LEN_IN_FRAME + PD_IN_LENGTH + HEADER_SIZE_IN_FRAME) as usize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceOperationMode {
@@ -668,13 +668,14 @@ pub fn extract_mc_ckt_bytes(
 
 pub fn validate_master_frame_checksum(length: usize, data: &mut [u8]) -> bool {
     // Validate the checksum of the received IO-Link message
-    let (_, ckt) = match extract_mc_ckt_bytes(data) {
+    let (_, mut ckt) = match extract_mc_ckt_bytes(data) {
         Ok(val) => val,
         Err(_) => return false,
     };
     let checksum = ckt.checksum();
     // clear the received checksum bits (0-5), Before calculating the checksum
-    data[1] = crate::clear_checksum_bits_0_to_5!(data[1]);
+    ckt.set_checksum(0);
+    data[1] = ckt.into_bits();
     let calculated_checksum = calculate_checksum(length, &data);
     calculated_checksum == checksum
 }

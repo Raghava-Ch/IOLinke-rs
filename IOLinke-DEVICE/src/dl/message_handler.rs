@@ -318,14 +318,15 @@ impl MessageHandler {
             pl::physical_layer::Timer::MaxUARTframeTime,
             max_uart_frame_time,
         );
+        let rx_buffer_len = self.buffers.rx_buffer.len();
         // Find the number of UART frames to be received using first two bytes of the message
-        if self.buffers.rx_buffer.len() == 2 {
+        if rx_buffer_len == 2 {
             self.expected_rx_bytes = self
                 .buffers
                 .rx_buffer
                 .calculate_expected_rx_bytes(self.device_operate_state);
         }
-        if self.expected_rx_bytes == self.buffers.rx_buffer.len() as u8 {
+        if self.expected_rx_bytes == rx_buffer_len as u8 {
             self.rx_frame_operation_state = self.device_operate_state;
             let _ = self.process_event(MessageHandlerEvent::Completed);
         }

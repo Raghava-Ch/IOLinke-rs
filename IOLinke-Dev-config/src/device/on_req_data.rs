@@ -69,7 +69,7 @@ pub mod operate {
     ///
     /// ⚠️ **NOTE 3**: Interleaved mode (`TYPE_1_1/1_2`) **must not** be implemented in Devices, but should be supported by Masters.
     pub const fn od_length() -> u8 {
-        const OP_OD_LEN: u8 = /*CONFIG:OP_OD_LEN*/ 1 /*ENDCONFIG*/;
+        const OP_OD_LEN: u8 = /*CONFIG:OP_OD_LEN*/ 32 /*ENDCONFIG*/;
         match OP_OD_LEN {
             1 => 1u8,
             2 => 2u8,

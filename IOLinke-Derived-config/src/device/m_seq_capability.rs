@@ -126,16 +126,17 @@ pub mod operate_m_sequence {
     // }
 
     /// M-sequence types for the OPERATE mode (standard protocol) as per IO-Link Specification (Table A.10).
+    #[allow(unreachable_patterns)]
     pub const fn m_sequence_code() -> u8 {
         use dev_config::process_data::ProcessDataLength::{self, *};
         const PD_IN_LEN: ProcessDataLength = dev_config::process_data::config_pd_in_length();
         const PD_OUT_LEN: ProcessDataLength = dev_config::process_data::config_pd_out_length();
         const OD_LEN: u8 = dev_config::on_req_data::operate::od_length();
         match (OD_LEN, PD_IN_LEN, PD_OUT_LEN) {
-            (1, Bit(0), Bit(0)) | (1, Octet(0), Octet(0)) => 00u8,
-            (2, Bit(0), Bit(0)) | (2, Octet(0), Octet(0)) => 01u8,
-            (8, Bit(0), Bit(0)) | (8, Octet(0), Octet(0)) => 06u8,
-            (32, Bit(0), Bit(0)) | (32, Octet(0), Octet(0)) => 07u8,
+            (1, Bit(0) | Octet(0), Bit(0) | Octet(0)) => 00u8,
+            (2, Bit(0) | Octet(0), Bit(0) | Octet(0)) => 01u8,
+            (8, Bit(0) | Octet(0), Bit(0) | Octet(0)) => 06u8,
+            (32, Bit(0) | Octet(0), Bit(0) | Octet(0)) => 07u8,
             (2, Octet(3..=32), Octet(0..=32)) => 00u8,
             (2, Octet(0..=32), Octet(3..=32)) => 00u8,
             (1, Bit(1..8), Bit(0)) => 00u8,
@@ -147,12 +148,12 @@ pub mod operate_m_sequence {
             (1, Bit(1..=16), Bit(9..=16)) => 00u8,
             (1, Octet(0..=32), Octet(3..=32)) => 04u8,
             (1, Octet(3..=32), Octet(0..=32)) => 04u8,
-            (2, Bit(1..=16), Bit(0..=16)) => 05u8,
-            (2, Bit(0..=16), Bit(1..=16)) => 05u8,
-            (8, Bit(1..=16), Bit(0..=16)) => 06u8,
-            (8, Bit(0..=16), Bit(1..=16)) => 06u8,
-            (32, Bit(1..=16), Bit(0..=16)) => 07u8,
-            (32, Bit(0..=16), Bit(1..=16)) => 07u8,
+            (2, Bit(1..=16) | Octet(0..=32), Bit(0..=16) | Octet(0..=32)) => 05u8,
+            (2, Bit(0..=16) | Octet(0..=32), Bit(1..=16) | Octet(0..=32)) => 05u8,
+            (8, Bit(1..=16) | Octet(0..=32), Bit(0..=16) | Octet(0..=32)) => 06u8,
+            (8, Bit(0..=16) | Octet(0..=32), Bit(1..=16) | Octet(0..=32)) => 06u8,
+            (32, Bit(1..=16) | Octet(0..=32), Bit(0..=16) | Octet(0..=32)) => 07u8,
+            (32, Bit(0..=16) | Octet(0..=32), Bit(1..=16) | Octet(0..=32)) => 07u8,
             _ => panic!("Invalid OPERATE M-sequence configuration"),
         }
     }
@@ -194,6 +195,7 @@ pub mod operate_m_sequence {
     /// ⚠️ **NOTE 2**: Former `TYPE_2_6` has been deprecated in favor of `TYPE_2_V` due to inefficiency.
     ///
     /// ⚠️ **NOTE 3**: Interleaved mode (`TYPE_1_1/1_2`) **must not** be implemented in Devices, but should be supported by Masters.
+    #[allow(unreachable_patterns)]
     pub const fn m_sequence_type() -> types::frame::msequence::MsequenceType {
         use dev_config::process_data::ProcessDataLength::{self, *};
         use types::frame::msequence::MsequenceType;
@@ -201,10 +203,10 @@ pub mod operate_m_sequence {
         const PD_OUT_LEN: ProcessDataLength = dev_config::process_data::config_pd_out_length();
         const OD_LEN: u8 = dev_config::on_req_data::operate::od_length();
         match (OD_LEN, PD_IN_LEN, PD_OUT_LEN) {
-            (1, Bit(0), Bit(0)) | (1, Octet(0), Octet(0)) => MsequenceType::Type0, // TYPE_0
-            (2, Bit(0), Bit(0)) | (2, Octet(0), Octet(0)) => MsequenceType::Type12, // TYPE_1_2
-            (8, Bit(0), Bit(0)) | (8, Octet(0), Octet(0)) => MsequenceType::Type1V, // TYPE_1_V
-            (32, Bit(0), Bit(0)) | (32, Octet(0), Octet(0)) => MsequenceType::Type1V, // TYPE_1_V
+            (1, Bit(0) | Octet(0), Bit(0) | Octet(0)) => MsequenceType::Type0, // TYPE_0
+            (2, Bit(0) | Octet(0), Bit(0) | Octet(0)) => MsequenceType::Type12, // TYPE_1_2
+            (8, Bit(0) | Octet(0), Bit(0) | Octet(0)) => MsequenceType::Type1V, // TYPE_1_V
+            (32, Bit(0) | Octet(0), Bit(0) | Octet(0)) => MsequenceType::Type1V, // TYPE_1_V
             (2, Octet(3..=32), Octet(0..=32)) => MsequenceType::Type11, // TYPE_1_1/1_2 interleaved
             (2, Octet(0..=32), Octet(3..=32)) => MsequenceType::Type11, // TYPE_1_1/1_2 interleaved
             (1, Bit(1..8), Bit(0)) => MsequenceType::Type21,            // TYPE_2_1
@@ -216,12 +218,12 @@ pub mod operate_m_sequence {
             (1, Bit(1..=16), Bit(9..=16)) => MsequenceType::Type2V,     // TYPE_2_V
             (1, Octet(0..=32), Octet(3..=32)) => MsequenceType::Type2V, // TYPE_2_V
             (1, Octet(3..=32), Octet(0..=32)) => MsequenceType::Type2V, // TYPE_2_V
-            (2, Bit(1..=16), Bit(0..=16)) => MsequenceType::Type2V,     // TYPE_2_V
-            (2, Bit(0..=16), Bit(1..=16)) => MsequenceType::Type2V,     // TYPE_2_V
-            (8, Bit(1..=16), Bit(0..=16)) => MsequenceType::Type2V,     // TYPE_2_V
-            (8, Bit(0..=16), Bit(1..=16)) => MsequenceType::Type2V,     // TYPE_2_V
-            (32, Bit(1..=16), Bit(0..=16)) => MsequenceType::Type2V,    // TYPE_2_V
-            (32, Bit(0..=16), Bit(1..=16)) => MsequenceType::Type2V,    // TYPE_2_V
+            (2, Bit(1..=16) | Octet(0..=32), Bit(0..=16) | Octet(0..=32)) => MsequenceType::Type2V, // TYPE_2_V
+            (2, Bit(0..=16) | Octet(0..=32), Bit(1..=16) | Octet(0..=32)) => MsequenceType::Type2V, // TYPE_2_V
+            (8, Bit(1..=16) | Octet(0..=32), Bit(0..=16) | Octet(0..=32)) => MsequenceType::Type2V, // TYPE_2_V
+            (8, Bit(0..=16) | Octet(0..=32), Bit(1..=16) | Octet(0..=32)) => MsequenceType::Type2V, // TYPE_2_V
+            (32, Bit(1..=16) | Octet(0..=32), Bit(0..=16) | Octet(0..=32)) => MsequenceType::Type2V, // TYPE_2_V
+            (32, Bit(0..=16) | Octet(0..=32), Bit(1..=16) | Octet(0..=32)) => MsequenceType::Type2V, // TYPE_2_V
             _ => panic!("Invalid OPERATE M-sequence configuration"),
         }
     }

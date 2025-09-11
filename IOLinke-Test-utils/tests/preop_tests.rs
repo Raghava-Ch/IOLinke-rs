@@ -86,7 +86,7 @@ fn read_vendor_name(
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let vendor_name_index = DeviceParametersIndex::VendorName.index();
     let vendor_name_subindex = DeviceParametersIndex::VendorName.subindex(SubIndex::VendorName);
-    let vendor_name = iolinke_test_utils::util_test_isdu_sequence_read(
+    let vendor_name = iolinke_test_utils::util_pre_op_test_isdu_sequence_read(
         poll_tx,
         poll_response_rx,
         vendor_name_index,
@@ -180,7 +180,7 @@ fn loop_test(poll_tx: &std::sync::mpsc::Sender<iolinke_test_utils::ThreadMessage
         0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B,
         0x1C, 0x1D,
     ];
-    let result = iolinke_test_utils::util_test_isdu_sequence_write(
+    let result = iolinke_test_utils::util_pre_op_test_isdu_sequence_write(
         &poll_tx,
         &poll_response_rx,
         data_storage_index_index,
@@ -189,7 +189,7 @@ fn loop_test(poll_tx: &std::sync::mpsc::Sender<iolinke_test_utils::ThreadMessage
     );
     assert!(result.is_ok(), "Test isdu sequence failed");
 
-    let result = iolinke_test_utils::util_test_isdu_sequence_read(
+    let result = iolinke_test_utils::util_pre_op_test_isdu_sequence_read(
         &poll_tx,
         &poll_response_rx,
         data_storage_index_index,

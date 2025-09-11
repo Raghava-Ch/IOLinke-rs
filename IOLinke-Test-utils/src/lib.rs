@@ -30,8 +30,8 @@ pub use test_environment::{
     take_care_of_poll,
 };
 pub use test_sequences::{
-    util_test_change_operation_mode, util_test_isdu_sequence_read, util_test_isdu_sequence_write,
-    util_test_preop_sequence, util_test_startup_sequence,
+    util_test_change_operation_mode, util_pre_op_test_isdu_sequence_read, util_pre_op_test_isdu_sequence_write,
+    util_test_preop_sequence, util_test_startup_sequence, util_op_test_isdu_sequence_read, util_op_test_isdu_sequence_write,
 };
 pub use types::{TestDeviceMode, ThreadMessage};
 
