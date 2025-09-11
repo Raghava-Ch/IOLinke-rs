@@ -43,7 +43,7 @@ pub fn validate_device_frame_checksum(data: &mut Vec<u8>) -> bool {
     let data_last_index = data.get_mut(data_len - 1).unwrap();
     let cleared_checksum_cks_bits = cleared_checksum_cks.into_bits();
     *data_last_index = cleared_checksum_cks_bits;
-    let cks_calculated_checksum = calculate_checksum_for_testing(data_len as u8, data);
+    let cks_calculated_checksum = calculate_checksum_for_testing(data_len, data);
     let rec_cks = cks.checksum();
     cks_calculated_checksum == rec_cks
 }
@@ -126,7 +126,7 @@ pub fn create_startup_read_request(address: u8) -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -157,7 +157,7 @@ pub fn create_preop_read_request(address: u8) -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -189,7 +189,40 @@ pub fn create_preop_write_isdu_request(flow_control: u8, buffer: &[u8]) -> Vec<u
     rx_buffer.push(ckt_bits);
     rx_buffer.extend_from_slice(buffer);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
+    ckt.set_checksum(checksum);
+
+    let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
+    *tx_buffer_1 = ckt.into_bits();
+
+    rx_buffer
+}
+
+/// Creates a read request message for testing
+pub fn create_op_write_isdu_request(flow_control: u8, buffer: &[u8]) -> Vec<u8> {
+    let mc = MsequenceControlBuilder::new()
+        .with_read_write(RwDirection::Write)
+        .with_comm_channel(ComChannel::Isdu)
+        .with_address_fctrl(flow_control)
+        .build();
+
+    const MSEQ_BASE_TYPE: MsequenceBaseType = derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
+    let mut ckt = ChecksumMsequenceTypeBuilder::new()
+        .with_m_seq_type(MSEQ_BASE_TYPE)
+        .with_checksum(0)
+        .build();
+
+    let mc_bits = mc.into_bits();
+    let ckt_bits = ckt.into_bits();
+
+    let mut rx_buffer = Vec::new();
+    rx_buffer.push(mc_bits);
+    rx_buffer.push(ckt_bits);
+    const PD_LENGTH_BYTES: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
+    rx_buffer.extend_from_slice(&vec![99; PD_LENGTH_BYTES as usize]); // Add PD Length Bytes
+    rx_buffer.extend_from_slice(buffer);
+
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -219,7 +252,39 @@ pub fn create_preop_read_start_isdu_request() -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
+    ckt.set_checksum(checksum);
+
+    let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
+    *tx_buffer_1 = ckt.into_bits();
+
+    rx_buffer
+}
+
+pub fn create_op_read_start_isdu_request() -> Vec<u8> {
+    let flow_control = IsduFlowCtrl::Start;
+    let mc = MsequenceControlBuilder::new()
+        .with_read_write(RwDirection::Read)
+        .with_comm_channel(ComChannel::Isdu)
+        .with_address_fctrl(flow_control.into_bits())
+        .build();
+
+    let mut ckt = ChecksumMsequenceType::new();
+    ckt.set_m_seq_type(
+        derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type(),
+    );
+    ckt.set_checksum(0);
+
+    let mc_bits = mc.into_bits();
+    let ckt_bits = ckt.into_bits();
+
+    let mut rx_buffer = Vec::new();
+    rx_buffer.push(mc_bits);
+    rx_buffer.push(ckt_bits);
+    const PD_LENGTH_BYTES: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
+    rx_buffer.extend_from_slice(&vec![99; PD_LENGTH_BYTES as usize]); // Add PD Length Bytes
+
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -250,7 +315,40 @@ pub fn create_preop_read_isdu_segment(flow_control: u8) -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
+    ckt.set_checksum(checksum);
+
+    let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
+    *tx_buffer_1 = ckt.into_bits();
+
+    rx_buffer
+}
+
+/// Creates a read request message for testing
+pub fn create_op_read_isdu_segment(flow_control: u8) -> Vec<u8> {
+    let mc = MsequenceControlBuilder::new()
+        .with_read_write(RwDirection::Read)
+        .with_comm_channel(ComChannel::Isdu)
+        .with_address_fctrl(flow_control)
+        .build();
+
+    let mut ckt = ChecksumMsequenceTypeBuilder::new()
+        .with_m_seq_type(
+            derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type(),
+        )
+        .with_checksum(0)
+        .build();
+
+    let mc_bits = mc.into_bits();
+    let ckt_bits = ckt.into_bits();
+
+    let mut rx_buffer = Vec::new();
+    rx_buffer.push(mc_bits);
+    rx_buffer.push(ckt_bits);
+    const PD_LENGTH_BYTES: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
+    rx_buffer.extend_from_slice(&vec![99; PD_LENGTH_BYTES as usize]); // Add PD Length Bytes
+
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -281,7 +379,40 @@ pub fn create_preop_isdu_idle_request() -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
+    ckt.set_checksum(checksum);
+
+    let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
+    *tx_buffer_1 = ckt.into_bits();
+
+    rx_buffer
+}
+
+/// Creates a read request message for testing
+pub fn create_op_isdu_idle_request() -> Vec<u8> {
+    let flow_control = IsduFlowCtrl::Idle1;
+    let mc = MsequenceControlBuilder::new()
+        .with_read_write(RwDirection::Read)
+        .with_comm_channel(ComChannel::Isdu)
+        .with_address_fctrl(flow_control.into_bits())
+        .build();
+
+    let mut ckt = ChecksumMsequenceType::new();
+    ckt.set_m_seq_type(
+        derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type(),
+    );
+    ckt.set_checksum(0);
+
+    let mc_bits = mc.into_bits();
+    let ckt_bits = ckt.into_bits();
+
+    let mut rx_buffer = Vec::new();
+    rx_buffer.push(mc_bits);
+    rx_buffer.push(ckt_bits);
+    const PD_LENGTH_BYTES: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
+    rx_buffer.extend_from_slice(&vec![99; PD_LENGTH_BYTES as usize]); // Add PD Length Bytes
+
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -314,7 +445,7 @@ pub fn create_preop_write_isdu_complete_request() -> Vec<u8> {
     rx_buffer.push(ckt_bits);
     rx_buffer.extend_from_slice(buffer);
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -348,7 +479,7 @@ pub fn create_op_read_request(address: u8) -> Vec<u8> {
     for _ in 0..PD_OUT_LENGTH as usize {
         rx_buffer.push(0);
     }
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -378,7 +509,7 @@ pub fn create_startup_write_request(address: u8, data: u8) -> Vec<u8> {
     rx_buffer.push(ckt_bits);
     rx_buffer.push(data); // Add the data to write
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -417,7 +548,7 @@ pub fn create_preop_write_request(address: u8, data: &[u8]) -> Vec<u8> {
         }
     }
 
-    let checksum = calculate_checksum_for_testing(rx_buffer.len() as u8, &rx_buffer);
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
     ckt.set_checksum(checksum);
 
     let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
@@ -426,8 +557,48 @@ pub fn create_preop_write_request(address: u8, data: &[u8]) -> Vec<u8> {
     rx_buffer
 }
 
-pub fn create_op_write_request(_address: u8, _data: &[u8]) -> Vec<u8> {
-    todo!()
+pub fn create_op_write_request(address: u8, data: &[u8]) -> Vec<u8> {
+    const OD_LENGTH_BYTES: u8 = derived_config::on_req_data::operate::od_length();
+    const PD_LENGTH_BYTES: u8 = derived_config::process_data::pd_out::config_length_in_bytes();
+    let mc = MsequenceControlBuilder::new()
+        .with_read_write(RwDirection::Write)
+        .with_comm_channel(ComChannel::Page)
+        .with_address_fctrl(address)
+        .build();
+
+    let mut ckt = ChecksumMsequenceTypeBuilder::new()
+        .with_m_seq_type(
+            derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type(),
+        )
+        .with_checksum(0)
+        .build();
+
+    let mc_bits = mc.into_bits();
+    let ckt_bits = ckt.into_bits();
+
+    let mut rx_buffer = Vec::new();
+    rx_buffer.push(mc_bits);
+    rx_buffer.push(ckt_bits);
+
+    for index in 0..PD_LENGTH_BYTES as usize {
+        rx_buffer.push(99); // Add the data to write
+    }
+
+    for index in 0..OD_LENGTH_BYTES as usize {
+        if index < data.len() {
+            rx_buffer.push(data[index]); // Add the data to write
+        } else {
+            rx_buffer.push(0);
+        }
+    }
+
+    let checksum = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
+    ckt.set_checksum(checksum);
+
+    let tx_buffer_1 = rx_buffer.get_mut(1).unwrap();
+    *tx_buffer_1 = ckt.into_bits();
+
+    rx_buffer
 }
 
 /// ISDU frame creation utilities

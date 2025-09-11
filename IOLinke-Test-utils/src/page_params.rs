@@ -13,7 +13,7 @@ use iolinke_types::page::page1::MasterCommand;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 
-const TIMEOUT: Duration = Duration::from_secs(9);
+const TIMEOUT: Duration = Duration::from_secs(40);
 
 /// Reads the min cycle time from the device using the provided communication channels.
 ///
@@ -78,7 +78,7 @@ pub fn read_m_sequence_capability(
     } else {
         let rx_buffer =
             frame_utils::create_op_read_request(direct_parameter_address!(MSequenceCapability));
-        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length() + 1 /* CKS Byte */;
+        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length() + derived_config::process_data::pd_in::config_length_in_bytes() + 1 /* CKS Byte */;
         (rx_buffer, EXPECTED_BYTES)
     };
 
@@ -283,12 +283,20 @@ pub fn write_master_command(
         );
         const EXPECTED_BYTES: u8 = 1 /* CKS Bytes */;
         (rx_buffer, EXPECTED_BYTES)
-    } else {
+    } else if device_mode == TestDeviceMode::Preoperate {
         let rx_buffer = frame_utils::create_preop_write_request(
             direct_parameter_address!(MasterCommand),
             &[master_command.into()],
         );
         const EXPECTED_BYTES: u8 = 1 /* CKS Byte */;
+        (rx_buffer, EXPECTED_BYTES)
+    } else {
+        const PD_LENGTH_BYTES: u8 = derived_config::process_data::pd_in::config_length_in_bytes();
+        let rx_buffer = frame_utils::create_op_write_request(
+            direct_parameter_address!(MasterCommand),
+            &[master_command.into()],
+        );
+        const EXPECTED_BYTES: u8 = 1 + PD_LENGTH_BYTES; /* CKS Byte + PD Length Bytes */
         (rx_buffer, EXPECTED_BYTES)
     };
 

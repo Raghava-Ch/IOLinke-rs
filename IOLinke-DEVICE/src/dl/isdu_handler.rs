@@ -12,7 +12,9 @@ use iolinke_types::{
     custom::{IoLinkError, IoLinkResult},
     handlers,
 };
-use iolinke_util::{frame_fromat, log_state_transition, log_state_transition_error};
+use iolinke_util::frame_fromat::isdu::RxIsduMessageBuffer;
+use iolinke_util::frame_fromat::isdu::TxIsduMessageBuffer;
+use iolinke_util::{log_state_transition, log_state_transition_error};
 
 use crate::{al, dl::message_handler};
 
@@ -112,11 +114,11 @@ enum IsduHandlerEvent {
 }
 
 struct MessageBuffer {
-    tx_buffer: Vec<u8, MAX_ISDU_LENGTH>,
-    tx_buffer_ready: bool,
-    rx_buffer: Vec<u8, MAX_ISDU_LENGTH>,
-    rx_buffer_ready: bool,
+    tx_buffer: TxIsduMessageBuffer,
+    rx_buffer: RxIsduMessageBuffer,
 }
+
+
 
 /// ISDU Handler implementation
 pub struct IsduHandler {
@@ -133,10 +135,8 @@ impl IsduHandler {
             state: IsduHandlerState::Inactive,
             exec_transition: Transition::Tn,
             message_buffer: MessageBuffer {
-                tx_buffer: Vec::new(),
-                tx_buffer_ready: false,
-                rx_buffer: Vec::new(),
-                rx_buffer_ready: false,
+                tx_buffer: TxIsduMessageBuffer::new(),
+                rx_buffer: RxIsduMessageBuffer::new(),
             },
             expected_segment: 0,
         }
@@ -283,7 +283,6 @@ impl IsduHandler {
     /// Action: -
     fn execute_t1(&mut self) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
         self.message_buffer.tx_buffer.clear();
         Ok(())
     }
@@ -295,7 +294,6 @@ impl IsduHandler {
         message_handler: &mut message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
         self.message_buffer.tx_buffer.clear();
         // Hanled in od_ind function
         let _ = message_handler.od_rsp(0, &[]);
@@ -325,14 +323,13 @@ impl IsduHandler {
         use iolinke_types::handlers::isdu::IsduMessage;
 
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
-        self.message_buffer.tx_buffer.clear();
-        let isdu_busy = frame_fromat::isdu::compile_isdu_busy_response();
+        self.message_buffer.tx_buffer.compile_isdu_busy_response();
+        let isdu_busy = self.message_buffer.tx_buffer.get_as_slice();
         let _ = message_handler.od_rsp(isdu_busy.len() as u8, &isdu_busy);
         // self.invoke_dl_isdu_transport_ind(od_ind_data)
-        let (i_service, index, sub_index, range) =
-            match frame_fromat::isdu::parse_isdu_request(&self.message_buffer.rx_buffer) {
-                Ok(result) => result,
+        let (i_service, index, sub_index, isdu_data) =
+            match &self.message_buffer.rx_buffer.extract_isdu_data() {
+                Ok(result) => *result,
                 Err(_) => {
                     self.process_event(IsduHandlerEvent::IsduError)?;
                     return Err(IoLinkError::InvalidData);
@@ -353,15 +350,7 @@ impl IsduHandler {
             self.process_event(IsduHandlerEvent::IsduError)?;
             return Err(IoLinkError::InvalidData);
         };
-        let data: Vec<u8, MAX_ISDU_LENGTH> = if let Some(range) = range {
-            let from = range.0;
-            let to = range.1;
-            Vec::from_slice(&self.message_buffer.rx_buffer[from..to])
-                .map_err(|_| IoLinkError::InvalidLength)?
-        } else {
-            Vec::from_slice(&self.message_buffer.rx_buffer)
-                .map_err(|_| IoLinkError::InvalidLength)?
-        };
+        let data: Vec<u8, MAX_ISDU_LENGTH> = Vec::from_slice(isdu_data.unwrap_or_default()).map_err(|_| IoLinkError::InvalidLength)?;
         application_layer.dl_isdu_transport_ind(IsduMessage {
             index,
             sub_index,
@@ -376,8 +365,8 @@ impl IsduHandler {
         &mut self,
         message_handler: &mut message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
-        let isdu_busy = frame_fromat::isdu::compile_isdu_busy_response();
-        self.message_buffer.rx_buffer_ready = true;
+        self.message_buffer.tx_buffer.compile_isdu_busy_response();
+        let isdu_busy = self.message_buffer.tx_buffer.get_as_slice();
         message_handler.od_rsp(isdu_busy.len() as u8, &isdu_busy)
     }
 
@@ -446,9 +435,8 @@ impl IsduHandler {
         message_handler: &mut message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
-        self.message_buffer.tx_buffer.clear();
-        let isdu_no_service = frame_fromat::isdu::compile_isdu_no_service_response();
+        self.message_buffer.tx_buffer.compile_isdu_no_service_response();
+        let isdu_no_service = self.message_buffer.tx_buffer.get_as_slice();
         message_handler.od_rsp(isdu_no_service.len() as u8, &isdu_no_service)?;
         Ok(())
     }
@@ -457,7 +445,6 @@ impl IsduHandler {
     /// Action: -
     fn execute_t9(&mut self) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
         self.message_buffer.tx_buffer.clear();
         Ok(())
     }
@@ -466,7 +453,6 @@ impl IsduHandler {
     /// Action: Invoke DL_ISDUAbort
     fn execute_t10(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
@@ -475,7 +461,6 @@ impl IsduHandler {
     /// Action: Invoke DL_ISDUAbort
     fn execute_t11(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
@@ -490,7 +475,6 @@ impl IsduHandler {
     /// Action: Invoke DL_ISDUAbort
     fn execute_t13(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
@@ -501,8 +485,8 @@ impl IsduHandler {
         &mut self,
         message_handler: &mut message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
-        let isdu_no_service = frame_fromat::isdu::compile_isdu_no_service_response();
-        self.message_buffer.rx_buffer_ready = true;
+        self.message_buffer.tx_buffer.compile_isdu_no_service_response();
+        let isdu_no_service = self.message_buffer.tx_buffer.get_as_slice();
         message_handler.od_rsp(isdu_no_service.len() as u8, &isdu_no_service)
     }
 
@@ -510,7 +494,6 @@ impl IsduHandler {
     /// Action: Invoke DL_ISDUAbort
     fn execute_t15(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
@@ -519,19 +502,16 @@ impl IsduHandler {
     /// Action: Invoke DL_ISDUAbort
     fn execute_t16(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer_ready = false;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
     }
 
     pub fn dl_isdu_transport_read_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
         self.message_buffer.tx_buffer.clear();
-        let _ = frame_fromat::isdu::compile_isdu_read_success_response(
+        let _ = self.message_buffer.tx_buffer.compile_isdu_read_success_response(
             length,
             data,
-            &mut self.message_buffer.tx_buffer,
         );
-        self.message_buffer.tx_buffer_ready = true;
 
         Ok(())
     }
@@ -540,8 +520,7 @@ impl IsduHandler {
         let _ = self
             .message_buffer
             .tx_buffer
-            .extend_from_slice(&frame_fromat::isdu::compile_isdu_write_success_response());
-        self.message_buffer.tx_buffer_ready = true;
+            .compile_isdu_write_success_response();
         Ok(())
     }
 
@@ -550,12 +529,10 @@ impl IsduHandler {
         error: u8,
         additional_error: u8,
     ) -> IoLinkResult<()> {
-        let _ = frame_fromat::isdu::compile_isdu_read_failure_response(
+        let _ = self.message_buffer.tx_buffer.compile_isdu_read_failure_response(
             error,
             additional_error,
-            &mut self.message_buffer.tx_buffer,
         );
-        self.message_buffer.tx_buffer_ready = true;
         Ok(())
     }
 
@@ -564,12 +541,10 @@ impl IsduHandler {
         error: u8,
         additional_error: u8,
     ) -> IoLinkResult<()> {
-        let _ = frame_fromat::isdu::compile_isdu_write_failure_response(
+        let _ = self.message_buffer.tx_buffer.compile_isdu_write_failure_response(
             error,
             additional_error,
-            &mut self.message_buffer.tx_buffer,
         );
-        self.message_buffer.tx_buffer_ready = true;
         Ok(())
     }
 
@@ -602,7 +577,7 @@ impl handlers::od::OdInd for IsduHandler {
         match (od_ind_data.rw_direction, flow_ctrl) {
             // ISDUWrite: OD.ind(W, ISDU, FlowCtrl, Data)
             (Write, IsduFlowCtrl::Count(0x00..=0x0F)) => {
-                let isdu_data = od_ind_data.data.clone();
+                let isdu_data = &od_ind_data.data;
                 if isdu_data.len() + self.message_buffer.rx_buffer.len() > 238 {
                     return Err(IoLinkError::InvalidLength);
                 }
@@ -629,7 +604,7 @@ impl handlers::od::OdInd for IsduHandler {
                 if self.state == IsduHandlerState::ISDURequest {
                     return self.process_event(IsduHandlerEvent::IsduRecComplete);
                 } else if self.state == IsduHandlerState::ISDUWait {
-                    if self.message_buffer.tx_buffer_ready {
+                    if self.message_buffer.tx_buffer.is_ready() {
                         return self.process_event(IsduHandlerEvent::IsduRespStart(
                             0,
                             od_ind_data.req_length,
@@ -647,7 +622,7 @@ impl handlers::od::OdInd for IsduHandler {
 
             // ISDUStart: OD.ind(W, ISDU, Start, Data)
             (Write, IsduFlowCtrl::Start) => {
-                let isdu_data = od_ind_data.data.clone();
+                let isdu_data = &od_ind_data.data;
                 self.message_buffer.rx_buffer.clear();
                 self.message_buffer.rx_buffer.extend(isdu_data);
                 return self.process_event(IsduHandlerEvent::IsduStart);

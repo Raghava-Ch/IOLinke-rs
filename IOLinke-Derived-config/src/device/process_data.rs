@@ -243,3 +243,7 @@ pub mod pd_out {
         pd_out_page_param
     }
 }
+
+pub const fn max_pd_len() -> u8 {
+    32u8
+}

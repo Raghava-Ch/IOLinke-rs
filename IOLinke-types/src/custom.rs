@@ -55,6 +55,10 @@ pub enum IoLinkError {
     InvalidIndex,
     /// Memory error, This is a custom error type for memory handling
     MemoryError,
+    /// Device not ready, This is a custom error type for device state handling
+    NotReady,
+    /// Not enough memory, This is a custom error type for memory handling
+    NotEnoughMemory,
 }
 
 /// Result type for IO-Link operations

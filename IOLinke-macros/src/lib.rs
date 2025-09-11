@@ -164,10 +164,10 @@ pub fn flow_ctrl(input: TokenStream) -> TokenStream {
     let flow_ident = parse_macro_input!(input as syn::Ident);
 
     let hex_value = match flow_ident.to_string().as_str() {
-        "START" => 0x10u8, // 0b10000
+        "START" => 0x10u8,  // 0b10000
         "IDLE_1" => 0x11u8, // 0b10001
         "IDLE_2" => 0x12u8, // 0b10010
-        "ABORT" => 0x1Fu8, // 0b11111
+        "ABORT" => 0x1Fu8,  // 0b11111
         _ => panic!(
             "Unknown flow control value: {}. Valid values are: START, IDLE_1, IDLE_2, ABORT",
             flow_ident
@@ -1171,46 +1171,46 @@ fn parse_parameter_list(input: TokenStream) -> Vec<ParameterDecl> {
     let input_tokens = proc_macro2::TokenStream::from(input);
     let mut stream = input_tokens.clone().into_iter();
 
-    eprintln!("Input tokens: {:?}", input_tokens);
+    // eprintln!("Input tokens: {:?}", input_tokens);
 
     while let Some(token) = stream.next() {
-        eprintln!("Processing token: {:?}", token);
+        // eprintln!("Processing token: {:?}", token);
 
         if let proc_macro2::TokenTree::Group(group) = token {
-            eprintln!("Found group with delimiter: {:?}", group.delimiter());
+            // eprintln!("Found group with delimiter: {:?}", group.delimiter());
             if group.delimiter() == proc_macro2::Delimiter::Parenthesis {
                 let content = proc_macro2::TokenStream::from(group.stream());
-                eprintln!("Group content: {:?}", content);
+                // eprintln!("Group content: {:?}", content);
                 match syn::parse2::<ParameterDecl>(content.clone()) {
                     Ok(param) => {
-                        eprintln!("Successfully parsed parameter: {:?}", param);
+                        // eprintln!("Successfully parsed parameter: {:?}", param);
                         params.push(param);
                     }
                     Err(_) => {
-                        eprintln!("Failed to parse parameter from content: {:?}", content);
+                        // eprintln!("Failed to parse parameter from content: {:?}", content);
                     }
                 }
             } else {
-                eprintln!("Group is not parentheses, it's: {:?}", group.delimiter());
+                // eprintln!("Group is not parentheses, it's: {:?}", group.delimiter());
             }
         }
 
         // Check for comma separator
         if let Some(proc_macro2::TokenTree::Punct(punct)) = stream.next() {
-            eprintln!("Found punct: {:?}", punct);
+            // eprintln!("Found punct: {:?}", punct);
             if punct.as_char() != ',' {
-                eprintln!("Not a comma, breaking");
+                // eprintln!("Not a comma, breaking");
                 // Not a comma, we're done
                 break;
             }
         } else {
-            eprintln!("No more tokens");
+            // eprintln!("No more tokens");
             // No more tokens
             break;
         }
     }
 
-    eprintln!("Final params: {:?}", params);
+    // eprintln!("Final params: {:?}", params);
     params
 }
 
@@ -1228,42 +1228,42 @@ struct ParameterDecl {
 
 impl Parse for ParameterDecl {
     fn parse(input: ParseStream) -> Result<Self> {
-        eprintln!("Starting to parse ParameterDecl");
+        // eprintln!("Starting to parse ParameterDecl");
 
         let index: syn::Expr = input.parse()?;
-        eprintln!("Parsed index: {:?}", index);
+        // eprintln!("Parsed index: {:?}", index);
         input.parse::<Token![,]>()?;
-        eprintln!("Parsed first comma");
+        // eprintln!("Parsed first comma");
 
         let subindex: syn::Expr = input.parse()?;
-        eprintln!("Parsed subindex: {:?}", subindex);
+        // eprintln!("Parsed subindex: {:?}", subindex);
         input.parse::<Token![,]>()?;
-        eprintln!("Parsed second comma");
+        // eprintln!("Parsed second comma");
 
         let length: syn::Expr = input.parse()?;
-        eprintln!("Parsed length: {:?}", length);
+        // eprintln!("Parsed length: {:?}", length);
         input.parse::<Token![,]>()?;
-        eprintln!("Parsed third comma");
+        // eprintln!("Parsed third comma");
 
         let range: syn::Expr = input.parse()?;
-        eprintln!("Parsed range: {:?}", range);
+        // eprintln!("Parsed range: {:?}", range);
         input.parse::<Token![,]>()?;
-        eprintln!("Parsed fourth comma");
+        // eprintln!("Parsed fourth comma");
 
         let access: syn::Ident = input.parse()?;
-        eprintln!("Parsed access: {:?}", access);
+        // eprintln!("Parsed access: {:?}", access);
         input.parse::<Token![,]>()?;
-        eprintln!("Parsed fifth comma");
+        // eprintln!("Parsed fifth comma");
 
         let data_type: Type = input.parse()?;
-        eprintln!("Parsed data_type: {:?}", data_type);
+        // eprintln!("Parsed data_type: {:?}", data_type);
         input.parse::<Token![,]>()?;
-        eprintln!("Parsed sixth comma");
+        // eprintln!("Parsed sixth comma");
 
         let default_value: syn::Expr = input.parse()?;
-        eprintln!("Parsed default_value: {:?}", default_value);
+        // eprintln!("Parsed default_value: {:?}", default_value);
 
-        eprintln!("Successfully parsed all fields");
+        // eprintln!("Successfully parsed all fields");
         Ok(Self {
             index,
             subindex,
@@ -1286,7 +1286,7 @@ fn extract_int_value(expr: &syn::Expr, expected_type: &str) -> Result<u64> {
         }) => {
             // Handle literal integers
             let value = lit_int.base10_parse::<u64>()?;
-            eprintln!("Parsed literal: {} -> {}", lit_int, value);
+            // eprintln!("Parsed literal: {} -> {}", lit_int, value);
             Ok(value)
         }
         syn::Expr::Block(syn::ExprBlock { block, .. }) => {
@@ -1325,7 +1325,7 @@ fn extract_int_value(expr: &syn::Expr, expected_type: &str) -> Result<u64> {
             let left_val = extract_int_value(left, expected_type)?;
             let right_val = extract_int_value(right, expected_type)?;
 
-            eprintln!("Binary operation: {} {:?} {} = ?", left_val, op, right_val);
+            // eprintln!("Binary operation: {} {:?} {} = ?", left_val, op, right_val);
 
             let result = match op {
                 syn::BinOp::Add(_) => left_val + right_val,
@@ -1354,7 +1354,7 @@ fn extract_int_value(expr: &syn::Expr, expected_type: &str) -> Result<u64> {
                 }
             };
 
-            eprintln!("Binary operation result: {}", result);
+            // eprintln!("Binary operation result: {}", result);
             Ok(result)
         }
         syn::Expr::Unary(syn::ExprUnary {
@@ -1476,13 +1476,13 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
     let params = parse_parameter_list(input);
 
     // Debug output
-    eprintln!("Parsed {} parameters", params.len());
-    for (i, param) in params.iter().enumerate() {
-        eprintln!(
-            "Parameter {}: index={:?}, subindex={:?}, length={:?}, access={:?}, data_type={:?}",
-            i, param.index, param.subindex, param.length, param.access, param.data_type
-        );
-    }
+    // eprintln!("Parsed {} parameters", params.len());
+    // for (i, param) in params.iter().enumerate() {
+    //      eprintln!(
+    //         "Parameter {}: index={:?}, subindex={:?}, length={:?}, access={:?}, data_type={:?}",
+    //         i, param.index, param.subindex, param.length, param.access, param.data_type
+    //     );
+    // }
 
     let mut storage_fields = Vec::new();
     let mut new_fields = Vec::new();
@@ -1495,7 +1495,7 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
         .map(|p| extract_u8_value(&p.length).unwrap() as usize)
         .max()
         .unwrap();
-    eprintln!("Max parameter length: {}", max_parameter_length);
+    // eprintln!("Max parameter length: {}", max_parameter_length);
 
     for param in params {
         let index = &param.index;
@@ -1621,7 +1621,7 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
             proc_macro2::Span::call_site(),
         );
 
-        eprintln!("Generated field: {}", field_ident);
+        // eprintln!("Generated field: {}", field_ident);
 
         // Generate storage field
         storage_fields.push(quote! {
@@ -1669,11 +1669,11 @@ pub fn declare_parameter_storage(input: TokenStream) -> TokenStream {
         });
     }
 
-    eprintln!(
-        "Generated {} storage fields, {} parameter map entries",
-        storage_fields.len(),
-        parameter_map.len()
-    );
+    // eprintln!(
+    //     "Generated {} storage fields, {} parameter map entries",
+    //     storage_fields.len(),
+    //     parameter_map.len()
+    // );
 
     let expanded = quote! {
         /// Access rights for a parameter in the IO-Link parameter storage.
