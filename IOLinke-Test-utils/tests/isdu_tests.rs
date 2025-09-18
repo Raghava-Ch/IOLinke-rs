@@ -1,12 +1,15 @@
 use iolinke_derived_config::device as derived_config;
 use iolinke_test_utils::TestDeviceMode;
-use iolinke_types::{handlers::pm::{DataStorageIndexSubIndex, DeviceParametersIndex, SubIndex}, page::page1::MasterCommand};
+use iolinke_types::{
+    handlers::pm::{DataStorageIndexSubIndex, DeviceParametersIndex, SubIndex},
+    page::page1::MasterCommand,
+};
 
 /// Test ISDU read operations for vendor name
 #[test]
 fn test_isdu_read_vendor_name() {
     // Set up test environment
-    let (_io_link_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
 
     // Test startup sequence is successful and device is in startup mode
     let result = iolinke_test_utils::util_test_startup_sequence(&poll_tx, &poll_response_rx);
@@ -55,7 +58,7 @@ fn test_isdu_read_vendor_name() {
 #[test]
 fn test_isdu_read_product_name() {
     // Set up test environment
-    let (_io_link_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
 
     // Test startup sequence is successful and device is in startup mode
     let result = iolinke_test_utils::util_test_startup_sequence(&poll_tx, &poll_response_rx);
@@ -105,7 +108,7 @@ fn test_isdu_read_product_name() {
 #[test]
 fn test_isdu_write_and_read_data_storage_index() {
     // Set up test environment
-    let (_io_link_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
 
     // Test startup sequence is successful and device is in startup mode
     let result = iolinke_test_utils::util_test_startup_sequence(&poll_tx, &poll_response_rx);
@@ -167,11 +170,10 @@ fn test_isdu_write_and_read_data_storage_index() {
     }
 }
 
-
 #[test]
 fn test_isdu_write_and_read_data_storage_index_operate_mode() {
     // Set up test environment
-    let (_io_link_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
 
     // Test startup sequence is successful and device is in startup mode
     let result = iolinke_test_utils::util_test_startup_sequence(&poll_tx, &poll_response_rx);
@@ -204,7 +206,10 @@ fn test_isdu_write_and_read_data_storage_index_operate_mode() {
         TestDeviceMode::Operate,
         MasterCommand::ProcessDataOutputOperate,
     );
-    assert!(is_master_pre_op_written, "Failed to write master process data output operate");
+    assert!(
+        is_master_pre_op_written,
+        "Failed to write master process data output operate"
+    );
 
     let m_sequence_capability = iolinke_test_utils::read_m_sequence_capability(
         &poll_tx,
@@ -231,7 +236,7 @@ fn test_isdu_write_and_read_data_storage_index_operate_mode() {
 
         // Write the data
         let result = iolinke_test_utils::util_op_test_isdu_sequence_write(
-        &poll_tx,
+            &poll_tx,
             &poll_response_rx,
             data_storage_index_index,
             Some(index_list_subindex),
@@ -257,6 +262,4 @@ fn test_isdu_write_and_read_data_storage_index_operate_mode() {
             "ISDU data not matching"
         );
     }
-
-
 }

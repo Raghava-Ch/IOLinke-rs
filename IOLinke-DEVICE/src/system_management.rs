@@ -32,6 +32,7 @@ use iolinke_types::handlers::sm::{
 use iolinke_types::page::page1::{DeviceIdent, RevisionId};
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
+use crate::services;
 use crate::{al, pl};
 
 /// System Management state transition types.
@@ -510,9 +511,12 @@ impl SystemManagement {
     ///     }
     /// }
     /// ```
-    pub fn poll<T: pl::physical_layer::PhysicalLayerReq>(
+    pub fn poll<
+        T: pl::physical_layer::PhysicalLayerReq,
+        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+    >(
         &mut self,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         if self.reconfig.revision_id.is_some()
@@ -615,9 +619,9 @@ impl SystemManagement {
         Ok(())
     }
 
-    fn poll_active_state(
+    fn poll_active_state<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &mut self,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
         use SystemManagementState as State;
         match self.state {
@@ -644,9 +648,12 @@ impl SystemManagement {
     }
 
     /// Execute T1 transition: Switch to SIO mode
-    fn execute_t1<T: pl::physical_layer::PhysicalLayerReq>(
+    fn execute_t1<
+        T: pl::physical_layer::PhysicalLayerReq,
+        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+    >(
         &mut self,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         // Invoke PL_SetMode(DI|DO|INACTIVE)
@@ -662,9 +669,12 @@ impl SystemManagement {
     }
 
     /// Execute T2 transition: Switch to communication mode
-    fn execute_t2<T: pl::physical_layer::PhysicalLayerReq>(
+    fn execute_t2<
+        T: pl::physical_layer::PhysicalLayerReq,
+        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+    >(
         &mut self,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         let com_mode = match self.device_com.transmission_rate {
@@ -680,9 +690,12 @@ impl SystemManagement {
     }
 
     /// Execute T3 transition: Switch to SM_Idle mode
-    fn execute_t3<T: pl::physical_layer::PhysicalLayerReq>(
+    fn execute_t3<
+        T: pl::physical_layer::PhysicalLayerReq,
+        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+    >(
         &mut self,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         // TODO: Cleanup any active communication sessions and reset state
@@ -694,10 +707,10 @@ impl SystemManagement {
     }
 
     /// Execute T4 transition: Indicate baudrate establishment
-    fn execute_t4(
+    fn execute_t4<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &mut self,
         mode: DeviceMode,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
         // Invoke SM_DeviceMode(COMx)
         // TODO: Invoke SM_DeviceMode(COMx)
@@ -706,7 +719,10 @@ impl SystemManagement {
     }
 
     /// Execute T5 transition: Enter device identification phase
-    fn execute_t5(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t5<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         // TODO: Prepare device identification data for master verification
         // Invoke SM_DeviceMode(IDENTSTARTUP)
         let _ = application_layer.sm_device_mode_ind(DeviceMode::Identstartup);
@@ -714,7 +730,10 @@ impl SystemManagement {
     }
 
     /// Execute T6 transition: Enter device identity check phase
-    fn execute_t6(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t6<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         // TODO: Handle master-provided RID and DID parameters for compatibility check
         // Invoke SM_DeviceMode(IDENTCHANGE)
         let _ = application_layer.sm_device_mode_ind(DeviceMode::Identchange);
@@ -730,7 +749,10 @@ impl SystemManagement {
     }
 
     /// Execute T8 transition: Enter device preoperate phase
-    fn execute_t8(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t8<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         // TODO: Prepare device for parameterization and data storage operations
         // Invoke SM_DeviceMode(PREOPERATE)
         let _ = application_layer.sm_device_mode_ind(DeviceMode::Preoperate);
@@ -738,7 +760,10 @@ impl SystemManagement {
     }
 
     /// Execute T9 transition: Enter device operate phase
-    fn execute_t9(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t9<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         // TODO: Initialize cyclic process data exchange and acyclic data transfer
         // Invoke SM_DeviceMode(OPERATE)
         let _ = application_layer.sm_device_mode_ind(DeviceMode::Operate);
@@ -746,7 +771,10 @@ impl SystemManagement {
     }
 
     /// Execute T10 transition: Enter device preoperate phase from IdentStartup
-    fn execute_t10(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t10<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         // TODO: Handle direct transition from identification to preoperate
         // Invoke SM_DeviceMode(PREOPERATE)
         let _ = application_layer.sm_device_mode_ind(DeviceMode::Preoperate);
@@ -754,7 +782,10 @@ impl SystemManagement {
     }
 
     /// Execute T11 transition: Enter device operate phase from ComStartup
-    fn execute_t11(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t11<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         // TODO: Handle legacy master behavior (direct transition to operate)
         // Invoke SM_DeviceMode(OPERATE)
         let _ = application_layer.sm_device_mode_ind(DeviceMode::Operate);
@@ -762,7 +793,10 @@ impl SystemManagement {
     }
 
     /// Execute T12 transition: Enter communication startup phase from Preoperate
-    fn execute_t12(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t12<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         // TODO: Reset communication parameters and restart identification process
         // Invoke SM_DeviceMode(STARTUP)
         let _ = application_layer.sm_device_mode_ind(DeviceMode::Startup);
@@ -770,7 +804,10 @@ impl SystemManagement {
     }
 
     /// Execute T13 transition: Enter communication startup phase from Operate
-    fn execute_t13(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t13<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         // TODO: Handle communication restart from operate mode
         // Invoke SM_DeviceMode(STARTUP)
         let _ = application_layer.sm_device_mode_ind(DeviceMode::Startup);
@@ -778,9 +815,12 @@ impl SystemManagement {
     }
 
     /// Execute T14 transition: Change transmission rate and establish communication
-    fn execute_t14<T: pl::physical_layer::PhysicalLayerReq>(
+    fn execute_t14<
+        T: pl::physical_layer::PhysicalLayerReq,
+        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+    >(
         &mut self,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         physical_layer: &mut T,
     ) -> IoLinkResult<()> {
         // TODO: Implement transmission rate change logic based on device identification requirements
@@ -868,14 +908,19 @@ impl DlReadWriteInd for SystemManagement {
     }
 }
 
-impl SystemManagementReq<al::ApplicationLayer> for SystemManagement {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
+    SystemManagementReq<al::ApplicationLayer<ALS>> for SystemManagement
+{
     fn sm_set_device_com_req(&mut self, device_com: &DeviceCom) -> SmResult<()> {
         // Set the device communication parameters
         self.device_com = device_com.clone();
         Ok(())
     }
 
-    fn sm_get_device_com_req(&mut self, application_layer: &al::ApplicationLayer) -> SmResult<()> {
+    fn sm_get_device_com_req(
+        &mut self,
+        application_layer: &al::ApplicationLayer<ALS>,
+    ) -> SmResult<()> {
         // Return the current device communication parameters
         // Typically, this would trigger a confirmation callback
         // Here, we just return Ok(())
@@ -892,7 +937,7 @@ impl SystemManagementReq<al::ApplicationLayer> for SystemManagement {
 
     fn sm_get_device_ident_req(
         &mut self,
-        application_layer: &al::ApplicationLayer,
+        application_layer: &al::ApplicationLayer<ALS>,
     ) -> SmResult<()> {
         // Return the current device identification parameters
         let device_ident = Ok(&self.device_ident);

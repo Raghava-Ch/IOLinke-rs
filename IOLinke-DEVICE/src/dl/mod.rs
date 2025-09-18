@@ -20,7 +20,7 @@
 //! - Section 7.3: Device Identification and Communication
 //! - Section 7.4: Message Handling and Transmission
 //! - Annex A: Protocol Details and Timing
-use crate::al;
+use crate::{al, services};
 use crate::{pl, system_management};
 use iolinke_types::custom::IoLinkResult;
 use iolinke_types::frame;
@@ -151,11 +151,14 @@ impl DataLinkLayer {
     ///     }
     /// }
     /// ```
-    pub fn poll<T: pl::physical_layer::PhysicalLayerReq>(
+    pub fn poll<
+        PHY: pl::physical_layer::PhysicalLayerReq,
+        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+    >(
         &mut self,
         system_management: &mut system_management::SystemManagement,
-        physical_layer: &mut T,
-        application_layer: &mut al::ApplicationLayer,
+        physical_layer: &mut PHY,
+        application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
         // Command handler poll - handles master commands
         {
@@ -424,7 +427,9 @@ impl Default for DataLinkLayer {
     }
 }
 
-impl pl::physical_layer::PhysicalLayerInd for DataLinkLayer {
+impl<PHY: pl::physical_layer::PhysicalLayerReq> pl::physical_layer::PhysicalLayerInd<PHY>
+    for DataLinkLayer
+{
     /// Handles wake-up notifications from the physical layer.
     ///
     /// This method is called when the physical layer detects
@@ -434,8 +439,8 @@ impl pl::physical_layer::PhysicalLayerInd for DataLinkLayer {
     ///
     /// - `Ok(())` if wake-up was processed successfully
     /// - `Err(IoLinkError)` if an error occurred
-    fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
-        self.mode_handler.pl_wake_up_ind()
+    fn pl_wake_up_ind(&mut self, physical_layer: &PHY) -> IoLinkResult<()> {
+        self.mode_handler.pl_wake_up_ind(physical_layer)
     }
 
     /// Handles data transfer notifications from the physical layer.
@@ -451,11 +456,7 @@ impl pl::physical_layer::PhysicalLayerInd for DataLinkLayer {
     ///
     /// - `Ok(())` if data transfer was processed successfully
     /// - `Err(IoLinkError)` if an error occurred
-    fn pl_transfer_ind<T: pl::physical_layer::PhysicalLayerReq>(
-        &mut self,
-        physical_layer: &mut T,
-        rx_byte: u8,
-    ) -> IoLinkResult<()> {
+    fn pl_transfer_ind(&mut self, physical_layer: &PHY, rx_byte: u8) -> IoLinkResult<()> {
         self.message_handler
             .pl_transfer_ind(physical_layer, rx_byte)
     }

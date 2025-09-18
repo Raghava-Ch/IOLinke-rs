@@ -10,10 +10,8 @@ use iolinke_types::{
     handlers::event::EventEntry,
 };
 
-use crate::{
-    al::services::{AlEventCnf, AlEventReq, ApplicationLayerServices},
-    dl,
-};
+use crate::al::services;
+use crate::{al::services::AlEventReq, dl};
 
 struct Events {
     event_code: u8,
@@ -109,9 +107,9 @@ impl EventHandler {
     }
 
     /// Poll the state machine
-    pub fn poll(
+    pub fn poll<ALS: services::AlEventCnf>(
         &mut self,
-        application: &mut ApplicationLayerServices,
+        application: &mut ALS,
         data_link_layer: &mut dl::DataLinkLayer,
     ) -> IoLinkResult<()> {
         // Process pending transitions
@@ -171,7 +169,7 @@ impl EventHandler {
     }
 
     /// Execute transition T4: AwaitEventResponse -> EventIdle
-    fn execute_t4(&mut self, application: &mut ApplicationLayerServices) -> IoLinkResult<()> {
+    fn execute_t4<ALS: services::AlEventCnf>(&mut self, application: &mut ALS) -> IoLinkResult<()> {
         // T4: DlEventTriggerConf -> EventIdle
         // Action: A DL_EventTrigger confirmation triggers an AL_Event confirmation
 

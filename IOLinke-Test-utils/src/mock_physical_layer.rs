@@ -1,11 +1,16 @@
 //! Mock physical layer implementation for testing IO-Link device stack
 
+use crate::mock_app_layer::MockApplicationLayer;
+
 use super::types::ThreadMessage;
-use iolinke_device::{IoLinkDevice, PhysicalLayerInd, PhysicalLayerReq, Timer};
+use iolinke_device::{AlEventCnf, ApplicationLayerServicesInd};
+use iolinke_device::{
+    DlControlCode, DlControlInd, IoLinkDevice, PhysicalLayerInd, PhysicalLayerReq, Timer,
+};
 use iolinke_types::custom::IoLinkResult;
 use iolinke_types::handlers::sm::IoLinkMode;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
 /// Mock timer state for tracking timer expiration
@@ -76,19 +81,9 @@ impl MockPhysicalLayer {
         }
     }
 
-    /// Transfer the received data to the IO-Link device
-    pub fn transfer_ind(
-        &mut self,
-        rx_buffer: &[u8],
-        io_link_device: Arc<Mutex<IoLinkDevice>>,
-    ) -> IoLinkResult<()> {
+    pub fn set_rx_data_from_slice(&mut self, data: &[u8]) {
         self.rx_data.clear();
-        self.rx_data.extend_from_slice(rx_buffer);
-        let mut io_link_device_lock = io_link_device.lock().unwrap();
-        for rx_buffer_byte in rx_buffer {
-            let _ = io_link_device_lock.pl_transfer_ind(self, *rx_buffer_byte);
-        }
-        Ok(())
+        self.rx_data.extend_from_slice(data);
     }
 
     pub fn timer_expired(&mut self, timer: Timer) {
@@ -121,6 +116,17 @@ impl MockPhysicalLayer {
             self.timer_expired(timer_id);
         }
     }
+}
+
+/// Transfer the received data to the IO-Link device
+pub fn transfer_ind(
+    rx_buffer: &[u8],
+    io_link_device_lock: &mut IoLinkDevice<MockPhysicalLayer, MockApplicationLayer>,
+) -> IoLinkResult<()> {
+    for rx_buffer_byte in rx_buffer {
+        let _ = io_link_device_lock.pl_transfer_ind(*rx_buffer_byte);
+    }
+    Ok(())
 }
 
 impl PhysicalLayerReq for MockPhysicalLayer {

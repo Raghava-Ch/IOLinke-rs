@@ -16,6 +16,7 @@ use iolinke_util::frame_fromat::isdu::RxIsduMessageBuffer;
 use iolinke_util::frame_fromat::isdu::TxIsduMessageBuffer;
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
+use crate::services;
 use crate::{al, dl::message_handler};
 
 /// See 7.3.6.4 State machine of the Device ISDU handler
@@ -118,8 +119,6 @@ struct MessageBuffer {
     rx_buffer: RxIsduMessageBuffer,
 }
 
-
-
 /// ISDU Handler implementation
 pub struct IsduHandler {
     state: IsduHandlerState,
@@ -186,10 +185,10 @@ impl IsduHandler {
     }
     /// Poll the ISDU handler
     /// See IO-Link v1.1.4 Section 8.4.3
-    pub fn poll(
+    pub fn poll<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &mut self,
         message_handler: &mut message_handler::MessageHandler,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
@@ -313,9 +312,9 @@ impl IsduHandler {
 
     /// Execute transition T4: ISDURequest (2) -> ISDUWait (3)
     /// Action: Invoke DL_ISDUTransport.ind to AL (see 7.2.1.6)
-    fn execute_t4(
+    fn execute_t4<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &mut self,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         message_handler: &mut message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         use iolinke_types::frame::isdu::IsduIServiceCode;
@@ -350,7 +349,8 @@ impl IsduHandler {
             self.process_event(IsduHandlerEvent::IsduError)?;
             return Err(IoLinkError::InvalidData);
         };
-        let data: Vec<u8, MAX_ISDU_LENGTH> = Vec::from_slice(isdu_data.unwrap_or_default()).map_err(|_| IoLinkError::InvalidLength)?;
+        let data: Vec<u8, MAX_ISDU_LENGTH> = Vec::from_slice(isdu_data.unwrap_or_default())
+            .map_err(|_| IoLinkError::InvalidLength)?;
         application_layer.dl_isdu_transport_ind(IsduMessage {
             index,
             sub_index,
@@ -435,7 +435,9 @@ impl IsduHandler {
         message_handler: &mut message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
         self.expected_segment = 0;
-        self.message_buffer.tx_buffer.compile_isdu_no_service_response();
+        self.message_buffer
+            .tx_buffer
+            .compile_isdu_no_service_response();
         let isdu_no_service = self.message_buffer.tx_buffer.get_as_slice();
         message_handler.od_rsp(isdu_no_service.len() as u8, &isdu_no_service)?;
         Ok(())
@@ -451,7 +453,10 @@ impl IsduHandler {
 
     /// Execute transition T10: ISDUWait (3) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
-    fn execute_t10(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t10<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
@@ -459,7 +464,10 @@ impl IsduHandler {
 
     /// Execute transition T11: ISDUResponse (4) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
-    fn execute_t11(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t11<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
@@ -473,7 +481,10 @@ impl IsduHandler {
 
     /// Execute transition T13: ISDURequest (2) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
-    fn execute_t13(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t13<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
@@ -485,14 +496,19 @@ impl IsduHandler {
         &mut self,
         message_handler: &mut message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
-        self.message_buffer.tx_buffer.compile_isdu_no_service_response();
+        self.message_buffer
+            .tx_buffer
+            .compile_isdu_no_service_response();
         let isdu_no_service = self.message_buffer.tx_buffer.get_as_slice();
         message_handler.od_rsp(isdu_no_service.len() as u8, &isdu_no_service)
     }
 
     /// Execute transition T15: ISDUWait (3) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
-    fn execute_t15(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t15<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
@@ -500,7 +516,10 @@ impl IsduHandler {
 
     /// Execute transition T16: ISDUResponse (4) -> Idle (1)
     /// Action: Invoke DL_ISDUAbort
-    fn execute_t16(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t16<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         self.expected_segment = 0;
         self.message_buffer.tx_buffer.clear();
         application_layer.dl_isdu_abort()
@@ -508,10 +527,10 @@ impl IsduHandler {
 
     pub fn dl_isdu_transport_read_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
         self.message_buffer.tx_buffer.clear();
-        let _ = self.message_buffer.tx_buffer.compile_isdu_read_success_response(
-            length,
-            data,
-        );
+        let _ = self
+            .message_buffer
+            .tx_buffer
+            .compile_isdu_read_success_response(length, data);
 
         Ok(())
     }
@@ -529,10 +548,10 @@ impl IsduHandler {
         error: u8,
         additional_error: u8,
     ) -> IoLinkResult<()> {
-        let _ = self.message_buffer.tx_buffer.compile_isdu_read_failure_response(
-            error,
-            additional_error,
-        );
+        let _ = self
+            .message_buffer
+            .tx_buffer
+            .compile_isdu_read_failure_response(error, additional_error);
         Ok(())
     }
 
@@ -541,10 +560,10 @@ impl IsduHandler {
         error: u8,
         additional_error: u8,
     ) -> IoLinkResult<()> {
-        let _ = self.message_buffer.tx_buffer.compile_isdu_write_failure_response(
-            error,
-            additional_error,
-        );
+        let _ = self
+            .message_buffer
+            .tx_buffer
+            .compile_isdu_write_failure_response(error, additional_error);
         Ok(())
     }
 

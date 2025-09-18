@@ -195,12 +195,12 @@ impl MessageHandler {
 
     /// Poll the message handler
     /// See IO-Link v1.1.4 Section 6.3
-    pub fn poll<T: pl::physical_layer::PhysicalLayerReq>(
+    pub fn poll<PHY: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
         od_handler: &mut od_handler::OnRequestDataHandler,
         pd_handler: &mut pd_handler::ProcessDataHandler,
         mode_handler: &mut mode_handler::DlModeHandler,
-        physical_layer: &mut T,
+        physical_layer: &mut PHY,
     ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
@@ -254,11 +254,13 @@ impl MessageHandler {
             }
         }
 
-        let _ = self.poll_active_states::<T>();
+        let _ = self.poll_active_states::<PHY>();
         Ok(())
     }
 
-    fn poll_active_states<T: pl::physical_layer::PhysicalLayerReq>(&mut self) -> IoLinkResult<()> {
+    fn poll_active_states<PHY: pl::physical_layer::PhysicalLayerReq>(
+        &mut self,
+    ) -> IoLinkResult<()> {
         match self.state {
             MessageHandlerState::CheckMessage => {
                 self.execute_check_message()?;
@@ -290,9 +292,9 @@ impl MessageHandler {
 
     /// Transition T2: Idle -> GetMessage (start timers)
     /// Start "MaxUARTframeTime" and "MaxCycleTime" when in OPERATE
-    fn execute_t2<T: pl::physical_layer::PhysicalLayerReq>(
+    fn execute_t2<PHY: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
-        physical_layer: &T,
+        physical_layer: &PHY,
         rx_byte: u8,
     ) -> IoLinkResult<()> {
         self.buffers.rx_buffer.clear();
@@ -307,9 +309,9 @@ impl MessageHandler {
 
     /// Transition T3: GetMessage -> GetMessage (restart MaxUARTframeTime)
     /// Restart timer "MaxUARTframeTime"
-    fn execute_t3<T: pl::physical_layer::PhysicalLayerReq>(
+    fn execute_t3<PHY: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
-        physical_layer: &T,
+        physical_layer: &PHY,
         rx_byte: u8,
     ) -> IoLinkResult<()> {
         let _ = self.buffers.rx_buffer.push(rx_byte);
@@ -335,9 +337,9 @@ impl MessageHandler {
 
     /// Transition T4: GetMessage -> CheckMessage (reset MaxUARTframeTime)
     /// Reset timer "MaxUARTframeTime"
-    fn execute_t4<T: pl::physical_layer::PhysicalLayerReq>(
+    fn execute_t4<PHY: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
-        physical_layer: &mut T,
+        physical_layer: &mut PHY,
     ) -> IoLinkResult<()> {
         physical_layer.stop_timer(pl::physical_layer::Timer::MaxUARTframeTime)?;
         Ok(())
@@ -385,7 +387,11 @@ impl MessageHandler {
         let rw = mc.read_write();
         let channel = mc.comm_channel();
         let addr_ctrl = mc.address_fctrl();
-        let od_data = match self.buffers.rx_buffer.extract_od_from_write_req(self.rx_frame_operation_state) {
+        let od_data = match self
+            .buffers
+            .rx_buffer
+            .extract_od_from_write_req(self.rx_frame_operation_state)
+        {
             Ok(od_data) => od_data,
             Err(_) => &[],
         };
@@ -407,9 +413,9 @@ impl MessageHandler {
 
     /// Transition T6: CreateMessage -> Idle
     /// Compile and invoke PL_Transfer.rsp service response (Device sends response message)
-    fn execute_t6<T: pl::physical_layer::PhysicalLayerReq>(
+    fn execute_t6<PHY: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
-        physical_layer: &mut T,
+        physical_layer: &mut PHY,
     ) -> IoLinkResult<()> {
         // Compiled and send response via PL_Transfer.rsp (handled externally)
         physical_layer.pl_transfer_req(self.buffers.tx_buffer.get_as_slice())?;
@@ -435,9 +441,9 @@ impl MessageHandler {
 
     /// Transition T9: GetMessage -> Idle
     /// Reset both timers "MaxUARTframeTime" and "MaxCycleTime"
-    fn execute_t9<T: pl::physical_layer::PhysicalLayerReq>(
+    fn execute_t9<PHY: pl::physical_layer::PhysicalLayerReq>(
         &mut self,
-        physical_layer: &mut T,
+        physical_layer: &mut PHY,
     ) -> IoLinkResult<()> {
         physical_layer.stop_timer(pl::physical_layer::Timer::MaxUARTframeTime)?;
         physical_layer.stop_timer(pl::physical_layer::Timer::MaxCycleTime)?;
@@ -520,7 +526,11 @@ impl MessageHandler {
     pub fn od_rsp(&mut self, length: u8, data: &[u8]) -> IoLinkResult<()> {
         self.buffers
             .tx_buffer
-            .insert_od(length as usize, &data[..length as usize], self.rx_frame_operation_state)
+            .insert_od(
+                length as usize,
+                &data[..length as usize],
+                self.rx_frame_operation_state,
+            )
             .map_err(|_| IoLinkError::InvalidParameter)?;
         Ok(())
     }
@@ -530,11 +540,11 @@ impl MessageHandler {
     /// communication channel. The confirmation of the service contains the data from the receiver.
     /// The parameters of the service primitives are listed in Table 36.
     pub fn pd_rsp(&mut self, length: usize, data: &[u8]) -> IoLinkResult<()> {
+        self.pd_status = self.pd_in_valid_status;
         self.buffers
             .tx_buffer
             .insert_pd(&data[..length as usize], self.rx_frame_operation_state)
             .map_err(|_| IoLinkError::InvalidParameter)?;
-        self.pd_status = self.pd_in_valid_status;
         Ok(())
     }
 
@@ -565,16 +575,15 @@ impl MessageHandler {
 
 // Physical layer indication trait implementation would go here
 // when the physical layer module is properly defined
-impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler {
-    fn pl_transfer_ind<T: pl::physical_layer::PhysicalLayerReq>(
-        &mut self,
-        physical_layer: &mut T,
-        rx_byte: u8,
-    ) -> IoLinkResult<()> {
+impl<PHY: pl::physical_layer::PhysicalLayerReq> pl::physical_layer::PhysicalLayerInd<PHY>
+    for MessageHandler
+{
+    fn pl_transfer_ind(&mut self, physical_layer: &PHY, rx_byte: u8) -> IoLinkResult<()> {
         use MessageHandlerState as State;
         let current_state = self.state;
         let event = MessageHandlerEvent::PlTransfer;
         let _ = self.process_event(event);
+        println!("PL_Transfer.ind received byte: {:?}: ", current_state);
         match current_state {
             State::Idle => {
                 self.execute_t2(physical_layer, rx_byte)?;
@@ -594,10 +603,7 @@ impl<'a> pl::physical_layer::PhysicalLayerInd for MessageHandler {
 impl pl::physical_layer::IoLinkTimer for MessageHandler {
     /// Any MasterCommand received by the Device command handler
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
-    fn timer_elapsed<T: pl::physical_layer::PhysicalLayerReq>(
-        &mut self,
-        timer: pl::physical_layer::Timer,
-    ) -> IoLinkResult<()> {
+    fn timer_elapsed(&mut self, timer: pl::physical_layer::Timer) -> IoLinkResult<()> {
         let event = match timer {
             pl::physical_layer::Timer::MaxCycleTime => MessageHandlerEvent::TimerMaxCycle,
             pl::physical_layer::Timer::MaxUARTframeTime => MessageHandlerEvent::TimerMaxUARTFrame,

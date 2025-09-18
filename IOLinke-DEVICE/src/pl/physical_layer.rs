@@ -34,7 +34,7 @@ use iolinke_types::{
 /// - IO-Link v1.1.4 Section 5.2: Physical Layer
 /// - Section 5.2.2.2: Data Transfer
 /// - Section 5.2.2.3: Wake-up Procedure
-pub trait PhysicalLayerInd {
+pub trait PhysicalLayerInd<PHY: PhysicalLayerReq> {
     /// Handles data transfer requests from the data link layer.
     ///
     /// This method is called when the data link layer needs to
@@ -53,11 +53,7 @@ pub trait PhysicalLayerInd {
     ///
     /// This is a placeholder implementation that should be replaced
     /// with actual hardware-specific code.
-    fn pl_transfer_ind<T: PhysicalLayerReq>(
-        &mut self,
-        physical_layer: &mut T,
-        rx_byte: u8,
-    ) -> IoLinkResult<()> {
+    fn pl_transfer_ind(&mut self, physical_layer: &PHY, rx_byte: u8) -> IoLinkResult<()> {
         let _ = physical_layer;
         let _ = rx_byte; // Placeholder for actual implementation
         Err(IoLinkError::NoImplFound)
@@ -77,8 +73,8 @@ pub trait PhysicalLayerInd {
     ///
     /// This is a placeholder implementation that should be replaced
     /// with actual hardware-specific code.
-    fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
-        // Placeholder for actual implementation
+    fn pl_wake_up_ind(&mut self, physical_layer: &PHY) -> IoLinkResult<()> {
+        let _ = physical_layer;
         Err(IoLinkError::NoImplFound)
     }
 }
@@ -227,7 +223,7 @@ pub trait IoLinkTimer {
     /// # Returns
     ///
     /// `true` if the timer has expired, `false` otherwise.
-    fn timer_elapsed<T: PhysicalLayerReq>(&mut self, timer: Timer) -> IoLinkResult<()> {
+    fn timer_elapsed(&mut self, timer: Timer) -> IoLinkResult<()> {
         let _ = timer;
         Err(IoLinkError::NoImplFound)
     }

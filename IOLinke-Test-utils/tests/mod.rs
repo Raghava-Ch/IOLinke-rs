@@ -2,7 +2,7 @@
 // This file organizes all test modules
 
 use iolinke_test_utils::{self, TestDeviceMode};
-use iolinke_types::{handlers::pm::{DataStorageIndexSubIndex, DeviceParametersIndex, SubIndex}, page::page1::MasterCommand};
+use iolinke_types::page::page1::MasterCommand;
 
 pub mod isdu_tests;
 pub mod preop_tests;
@@ -11,7 +11,7 @@ pub mod startup_tests;
 #[test]
 fn mock_test_device_operations() {
     // Set up test environment
-    let (_io_link_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
 
     // Test startup sequence is successful and device is in startup mode
     let result = iolinke_test_utils::util_test_startup_sequence(&poll_tx, &poll_response_rx);
@@ -44,7 +44,10 @@ fn mock_test_device_operations() {
         TestDeviceMode::Operate,
         MasterCommand::ProcessDataOutputOperate,
     );
-    assert!(is_master_pre_op_written, "Failed to write master process data output operate");
+    assert!(
+        is_master_pre_op_written,
+        "Failed to write master process data output operate"
+    );
 
     let m_sequence_capability = iolinke_test_utils::read_m_sequence_capability(
         &poll_tx,
@@ -55,8 +58,4 @@ fn mock_test_device_operations() {
         m_sequence_capability.isdu(),
         "Test m sequence capability failed"
     );
-
-
-
-
 }

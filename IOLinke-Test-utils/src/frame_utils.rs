@@ -14,6 +14,9 @@ use iolinke_types::frame::msequence::{
 use iolinke_util::frame_fromat::message::calculate_checksum_for_testing;
 use std::sync::{Arc, Mutex};
 
+use crate::MockPhysicalLayer;
+use crate::mock_app_layer::MockApplicationLayer;
+
 /// Extracts and validates checksum from response
 pub fn validate_checksum(response: &[u8], expected_checksum: u8) -> bool {
     if response.len() < 2 {
@@ -49,7 +52,9 @@ pub fn validate_device_frame_checksum(data: &mut Vec<u8>) -> bool {
 }
 
 /// Sets up the device with basic configuration for testing
-pub fn setup_device_configuration(io_link_device: &Arc<Mutex<IoLinkDevice>>) {
+pub fn setup_device_configuration(
+    io_link_device: &Arc<Mutex<IoLinkDevice<MockPhysicalLayer, MockApplicationLayer>>>,
+) {
     let mseq_cap = derived_config::m_seq_capability::m_sequence_capability_parameter();
     let mut min_cycle_time = CycleTime::new();
     min_cycle_time.set_time_base(0b10);
@@ -99,13 +104,19 @@ pub fn setup_device_configuration(io_link_device: &Arc<Mutex<IoLinkDevice>>) {
 }
 
 /// Performs the startup sequence for the device
-pub fn perform_startup_sequence(io_link_device: &Arc<Mutex<IoLinkDevice>>) {
-    let _ = io_link_device.lock().unwrap().pl_wake_up_ind();
-    std::thread::sleep(std::time::Duration::from_micros(100));
-    let _ = io_link_device
-        .lock()
-        .unwrap()
-        .successful_com(TransmissionRate::Com3);
+pub fn perform_startup_sequence(
+    io_link_device: &Arc<Mutex<IoLinkDevice<MockPhysicalLayer, MockApplicationLayer>>>,
+) {
+    {
+        let mut io_link_device_lock = io_link_device.lock().unwrap();
+        let _ = io_link_device_lock.pl_wake_up_ind();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(1));
+    let mut io_link_device_lock = io_link_device.lock().unwrap();
+    let _ = io_link_device_lock.successful_com(TransmissionRate::Com3);
+    std::thread::sleep(std::time::Duration::from_millis(1));
+
+;
 }
 
 /// Creates a read request message for testing
@@ -206,7 +217,8 @@ pub fn create_op_write_isdu_request(flow_control: u8, buffer: &[u8]) -> Vec<u8> 
         .with_address_fctrl(flow_control)
         .build();
 
-    const MSEQ_BASE_TYPE: MsequenceBaseType = derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
+    const MSEQ_BASE_TYPE: MsequenceBaseType =
+        derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
     let mut ckt = ChecksumMsequenceTypeBuilder::new()
         .with_m_seq_type(MSEQ_BASE_TYPE)
         .with_checksum(0)

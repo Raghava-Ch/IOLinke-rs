@@ -11,6 +11,7 @@ use iolinke_types::{
 };
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
+use crate::services;
 use crate::{
     al,
     dl::{message_handler, mode_handler},
@@ -132,10 +133,10 @@ impl CommandHandler {
     }
 
     /// Poll the handler
-    pub fn poll(
+    pub fn poll<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &mut self,
         message_handler: &mut message_handler::MessageHandler,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         mode_handler: &mut mode_handler::DlModeHandler,
     ) -> IoLinkResult<()> {
         // Process pending events
@@ -178,10 +179,10 @@ impl CommandHandler {
     }
 
     /// Execute transition T2: Idle -> Idle (PDOUT commands)
-    fn execute_t2(
+    fn execute_t2<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &mut self,
         master_command: page1::MasterCommand,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         mode_handler: &mut mode_handler::DlModeHandler,
     ) -> IoLinkResult<()> {
         use handlers::command::DlControlCode;
