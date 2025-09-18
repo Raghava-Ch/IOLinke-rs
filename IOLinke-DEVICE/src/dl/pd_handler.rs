@@ -4,7 +4,6 @@
 //! IO-Link Specification v1.1.4 Section 7.2
 use heapless::Vec;
 use iolinke_derived_config as derived_config;
-use iolinke_types::frame::msequence::PdStatus;
 use iolinke_types::handlers::pd::DlPDOutputTransportInd;
 use iolinke_types::{
     custom::IoLinkResult,
@@ -12,7 +11,7 @@ use iolinke_types::{
 };
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
-use crate::{al, dl::message_handler};
+use crate::{al, dl::message_handler, services};
 
 /// Process Data Handler states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,10 +125,10 @@ impl ProcessDataHandler {
 
     /// Poll the process data handler
     /// See IO-Link v1.1.4 Section 7.2
-    pub fn poll(
+    pub fn poll<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &mut self,
         message_handler: &mut message_handler::MessageHandler,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
         match self.exec_transition {
             Transition::Tn => {
@@ -155,7 +154,7 @@ impl ProcessDataHandler {
             Transition::T4(pd_in_length) => {
                 // State: PDActive (1) -> HandlePD (2)
                 self.exec_transition = Transition::Tn;
-                self.execute_t4(pd_in_length, message_handler)?;
+                self.execute_t4(pd_in_length, application_layer, message_handler)?;
             }
             Transition::T5 => {
                 // State: HandlePD (2) -> PDActive (1)
@@ -201,22 +200,16 @@ impl ProcessDataHandler {
         Ok(())
     }
 
-    fn execute_t4(
+    fn execute_t4<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &mut self,
-        pd_in_length: u8,
+        _pd_in_length: u8,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         message_handler: &mut message_handler::MessageHandler,
     ) -> IoLinkResult<()> {
-        let pd_data = if pd_in_length != self.process_data.input.len() as u8 {
-            let _ = message_handler.pd_in_status_req(PdStatus::INVALID);
-            let _ = self.process_data.input.resize(self.process_data.input.capacity(), 0);
-            &self.process_data.input
-        } else {
-            let _ = message_handler.pd_in_status_req(PdStatus::VALID);
-            &self.process_data.input
-        };
         // State: PDActive (1) -> HandlePD (2)
         // Action: Message handler demands input PD via a PD.ind service and delivers output PD or segment of output PD. Invoke PD.rsp with input Process Data when in non-interleave mode (see 7.2.2.3).
-        let _ = message_handler.pd_rsp(pd_data.len(), pd_data);
+        let _ = message_handler.pd_rsp(self.process_data.input.len(), &self.process_data.input);
+        let _ = application_layer.dl_pd_output_transport_ind(&self.process_data.output);
         let _ = self.process_event(ProcessDataHandlerEvent::PDComplete);
         Ok(())
     }
@@ -226,7 +219,10 @@ impl ProcessDataHandler {
         Ok(())
     }
 
-    fn execute_t6(&mut self, application_layer: &mut al::ApplicationLayer) -> IoLinkResult<()> {
+    fn execute_t6<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+        &mut self,
+        application_layer: &mut al::ApplicationLayer<ALS>,
+    ) -> IoLinkResult<()> {
         // State: HandlePD (2) -> PDActive (1)
         // Action: Invoke DL_PDOutputTransport.ind
         let _ = application_layer.dl_pd_output_transport_ind(&self.process_data.output);
@@ -282,14 +278,11 @@ impl ProcessDataHandler {
     /// (Process Data from Device to Master) on the data link layer. The parameters of the service
     /// primitives are listed in Table 25.
     pub fn dl_pd_input_update_req(&mut self, length: u8, input_data: &[u8]) -> IoLinkResult<()> {
-        self.process_data.input.fill(0);
-        for (i, &byte) in input_data.iter().enumerate() {
-            if i < length as usize {
-                self.process_data.input[i] = byte;
-            } else {
-                break; // Avoid out of bounds access
-            }
-        }
+        let _ = length;
+        self.process_data.input.clear();
+        self.process_data.input.extend_from_slice(input_data).map_err(|_| {
+            iolinke_types::custom::IoLinkError::InvalidParameter
+        })?;
         self.process_event(ProcessDataHandlerEvent::DlPDInputUpdate)?;
         Ok(())
     }

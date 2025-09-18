@@ -31,7 +31,7 @@ pub mod services;
 
 use heapless::Vec;
 use iolinke_types::custom::IoLinkResult;
-use iolinke_types::handlers;
+use iolinke_types::handlers::{self, pd};
 
 /// Application Layer Read/Write Interface for parameter access.
 ///
@@ -197,20 +197,22 @@ pub trait ApplicationLayerEventInd {
 /// The application layer maintains its own state and coordinates with
 /// the data link layer and system management to ensure proper protocol
 /// operation according to the IO-Link specification.
-pub struct ApplicationLayer {
+pub struct ApplicationLayer<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> {
     /// Handles device events and reporting to the master
     event_handler: event_handler::EventHandler,
     /// Handles on-request data operations (parameter read/write)
     od_handler: od_handler::OnRequestDataHandler,
     /// Provides application layer services
-    services: services::ApplicationLayerServices,
+    services: ALS,
     /// Manages device parameters and storage
     parameter_manager: parameter_manager::ParameterManager,
     /// Handles persistent parameter storage
     data_storage: data_storage::DataStorage,
+    /// Handles process data communication
+    pde: pd_handler::ProcessDataHandler,
 }
 
-impl ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> ApplicationLayer<ALS> {
     /// Polls all application layer components to advance their state.
     ///
     /// This method must be called regularly to:
@@ -247,7 +249,21 @@ impl ApplicationLayer {
     }
 }
 
-impl services::AlEventReq for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> services::AlSetInputReq
+    for ApplicationLayer<ALS>
+{
+    fn al_set_input_req(
+        &mut self,
+        pd_data: &[u8],
+        data_link_layer: &mut dl::DataLinkLayer,
+    ) -> IoLinkResult<()> {
+        self.pde.al_set_input_req(pd_data, data_link_layer)
+    }
+}
+
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> services::AlEventReq
+    for ApplicationLayer<ALS>
+{
     /// Handles event requests from the application layer services.
     ///
     /// This method is called when the services need to report events
@@ -271,7 +287,9 @@ impl services::AlEventReq for ApplicationLayer {
     }
 }
 
-impl handlers::sm::SystemManagementInd for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
+    handlers::sm::SystemManagementInd for ApplicationLayer<ALS>
+{
     /// Handles device mode change notifications from system management.
     ///
     /// This method is called when the system management changes the
@@ -292,7 +310,9 @@ impl handlers::sm::SystemManagementInd for ApplicationLayer {
     }
 }
 
-impl handlers::sm::SystemManagementCnf for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
+    handlers::sm::SystemManagementCnf for ApplicationLayer<ALS>
+{
     /// Handles device communication setup confirmations.
     ///
     /// This method is called when the system management confirms
@@ -380,52 +400,65 @@ impl handlers::sm::SystemManagementCnf for ApplicationLayer {
     }
 }
 
-impl dl::DlIsduAbort for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlIsduAbort
+    for ApplicationLayer<ALS>
+{
     fn dl_isdu_abort(&mut self) -> IoLinkResult<()> {
         self.od_handler.dl_isdu_abort()
     }
 }
 
-impl dl::DlIsduTransportInd for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlIsduTransportInd
+    for ApplicationLayer<ALS>
+{
     fn dl_isdu_transport_ind(&mut self, isdu: dl::IsduMessage) -> IoLinkResult<()> {
         self.od_handler.dl_isdu_transport_ind(isdu)
     }
 }
 
-impl dl::DlReadParamInd for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlReadParamInd
+    for ApplicationLayer<ALS>
+{
     fn dl_read_param_ind(&mut self, address: u8) -> IoLinkResult<()> {
         self.od_handler.dl_read_param_ind(address)
     }
 }
 
-impl dl::DlWriteParamInd for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlWriteParamInd
+    for ApplicationLayer<ALS>
+{
     fn dl_write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()> {
         self.od_handler.dl_write_param_ind(index, data)
     }
 }
 
-impl dl::DlControlInd for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlControlInd
+    for ApplicationLayer<ALS>
+{
     fn dl_control_ind(
         &mut self,
         control_code: handlers::command::DlControlCode,
     ) -> IoLinkResult<()> {
-        self.services.dl_control_ind(control_code)
+        self.services.al_control_ind(control_code)
     }
 }
 
-impl Default for ApplicationLayer {
-    fn default() -> Self {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> ApplicationLayer<ALS> {
+    pub fn new(al_services: ALS) -> Self {
         Self {
             event_handler: event_handler::EventHandler::new(),
             od_handler: od_handler::OnRequestDataHandler::new(),
-            services: services::ApplicationLayerServices::new(),
+            services: al_services,
             parameter_manager: parameter_manager::ParameterManager::new(),
             data_storage: data_storage::DataStorage::new(),
+            pde: pd_handler::ProcessDataHandler::new(),
         }
     }
 }
 
-impl ApplicationLayerReadWriteInd for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> ApplicationLayerReadWriteInd
+    for ApplicationLayer<ALS>
+{
     fn al_read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<()> {
         self.parameter_manager.al_read_ind(index, sub_index)
     }
@@ -439,15 +472,18 @@ impl ApplicationLayerReadWriteInd for ApplicationLayer {
     }
 }
 
-impl dl::DlPDOutputTransportInd for ApplicationLayer {
+impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlPDOutputTransportInd
+    for ApplicationLayer<ALS>
+{
     fn dl_pd_output_transport_ind(
         &mut self,
-        _pd_out: &Vec<u8, { dl::PD_OUTPUT_LENGTH }>,
+        pd_out: &Vec<u8, { dl::PD_OUTPUT_LENGTH }>,
     ) -> IoLinkResult<()> {
-        Err(iolinke_types::custom::IoLinkError::NoImplFound)
+        self.pde
+            .dl_pd_output_transport_ind(pd_out, &mut self.services)
     }
 
     fn dl_pd_cycle_ind(&mut self) -> IoLinkResult<()> {
-        todo!()
+        self.pde.dl_pd_cycle_ind(&mut self.services)
     }
 }

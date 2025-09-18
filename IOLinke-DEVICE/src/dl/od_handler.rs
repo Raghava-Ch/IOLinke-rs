@@ -12,6 +12,7 @@ use iolinke_types::{
 };
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
+use crate::services;
 use crate::{
     al,
     dl::{command_handler, event_handler, isdu_handler, message_handler},
@@ -116,12 +117,12 @@ impl OnRequestDataHandler {
 
     /// Poll the process data handler
     /// See IO-Link v1.1.4 Section 7.2
-    pub fn poll(
+    pub fn poll<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &mut self,
         command_handler: &mut command_handler::CommandHandler,
         isdu_handler: &mut isdu_handler::IsduHandler,
         event_handler: &mut event_handler::EventHandler,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         match self.exec_transition {
@@ -185,11 +186,11 @@ impl OnRequestDataHandler {
 
     /// Handle transition T2: Idle (1) -> Idle (1)
     /// Action: Provide data content of requested parameter or perform appropriate write action
-    fn execute_t2(
+    fn execute_t2<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &self,
         od_ind_data: &OdIndData,
         command_handler: &mut command_handler::CommandHandler,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         if od_ind_data.com_channel == frame::msequence::ComChannel::Page {
@@ -214,11 +215,11 @@ impl OnRequestDataHandler {
 
     /// Handle transition T3: Idle (1) -> Idle (1)
     /// Action: Redirect to command handler
-    fn execute_t3(
+    fn execute_t3<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
         &self,
         od_ind_data: &OdIndData,
         command_handler: &mut command_handler::CommandHandler,
-        application_layer: &mut al::ApplicationLayer,
+        application_layer: &mut al::ApplicationLayer<ALS>,
         system_management: &mut system_management::SystemManagement,
     ) -> IoLinkResult<()> {
         let address = od_ind_data.address_ctrl;

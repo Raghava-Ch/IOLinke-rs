@@ -24,6 +24,7 @@ description = "Complete IO-Link Master and Device Stack implementation in Rust, 
 
 [workspace.dependencies]
 # Shared dependencies across workspace
+iolinke-device = { path = "IOLinke-DEVICE" }
 iolinke-types = { path = "IOLinke-types" }
 iolinke-macros = { path = "IOLinke-macros" }
 iolinke-dev-config = { path = "IOLinke-Dev-config" }

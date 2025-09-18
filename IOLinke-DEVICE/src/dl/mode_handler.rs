@@ -599,12 +599,15 @@ impl Default for DlModeHandler {
     }
 }
 
-impl pl::physical_layer::PhysicalLayerInd for DlModeHandler {
+impl<PHY: pl::physical_layer::PhysicalLayerReq> pl::physical_layer::PhysicalLayerInd<PHY>
+    for DlModeHandler
+{
     /// The PL-WakeUp service initiates or indicates a specific sequence which prepares the
     /// Physical Layer to send and receive communication requests (see 5.3.3.3). This unconfirmed
     /// service has no parameters. Its success can only be verified by a Master by attempting to
     /// communicate with the Device. The service primitives are listed in Table 3.
-    fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
+    fn pl_wake_up_ind(&mut self, physical_layer: &PHY) -> IoLinkResult<()> {
+        let _ = physical_layer;
         let _ = self.process_event(DlModeEvent::PlWakeUp);
         Ok(())
     }

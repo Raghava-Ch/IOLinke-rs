@@ -13,10 +13,11 @@ description.workspace = true
 [lib]
 
 [dependencies]
-iolinke-device = { path = "../IOLinke-DEVICE" }
+iolinke-device = { workspace = true }
 iolinke-util = { workspace = true }
 iolinke-types = { workspace = true }
 iolinke-derived-config = { workspace = true }
+iolinke-dev-config = { workspace = true }
 
 heapless = { workspace = true }
 bitfields = { workspace = true }

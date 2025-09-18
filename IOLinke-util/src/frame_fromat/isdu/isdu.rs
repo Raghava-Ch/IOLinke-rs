@@ -113,7 +113,9 @@ impl TxIsduMessageBuffer {
         self.tx_buffer
             .push(additional_error_code)
             .map_err(|_| IoLinkError::InvalidLength)?;
-        self.tx_buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?; // checksum byte placeholder
+        self.tx_buffer
+            .push(0)
+            .map_err(|_| IoLinkError::InvalidLength)?; // checksum byte placeholder
         let chkpdu = calculate_checksum(4, &self.tx_buffer[0..4]);
         self.tx_buffer.pop();
         self.tx_buffer
@@ -141,7 +143,9 @@ impl TxIsduMessageBuffer {
         self.tx_buffer
             .push(additional_error_code)
             .map_err(|_| IoLinkError::InvalidLength)?;
-        self.tx_buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?; // checksum byte placeholder
+        self.tx_buffer
+            .push(0)
+            .map_err(|_| IoLinkError::InvalidLength)?; // checksum byte placeholder
         let chkpdu = calculate_checksum(4, &self.tx_buffer[0..4]);
         self.tx_buffer.pop();
         self.tx_buffer
@@ -273,7 +277,8 @@ impl RxIsduMessageBuffer {
                 Ok((i_service, index, sub_index, None))
             }
             IsduIServiceCode::ReadRequestIndexSubindex => {
-                let (i_service, index, sub_index) = parse_read_request_with_index_subindex(&self.rx_buffer)?;
+                let (i_service, index, sub_index) =
+                    parse_read_request_with_index_subindex(&self.rx_buffer)?;
                 Ok((i_service, index, sub_index, None))
             }
             IsduIServiceCode::ReadRequestIndexIndexSubindex => {
@@ -282,7 +287,8 @@ impl RxIsduMessageBuffer {
                 Ok((i_service, index, sub_index, None))
             }
             IsduIServiceCode::WriteRequestIndex => {
-                let (i_service, index, sub_index, range) = parse_write_request_with_index(&self.rx_buffer)?;
+                let (i_service, index, sub_index, range) =
+                    parse_write_request_with_index(&self.rx_buffer)?;
                 Ok((i_service, index, sub_index, Some(range)))
             }
             IsduIServiceCode::WriteRequestIndexSubindex => {

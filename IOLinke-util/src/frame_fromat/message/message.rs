@@ -163,11 +163,15 @@ impl<const BUFF_LEN: usize> TxMessageBuffer<BUFF_LEN> {
         device_mode: DeviceOperationMode,
     ) -> MessageBufferResult<()> {
         match device_mode {
-            DeviceOperationMode::Startup => <Self as StartupTxMessageBuffer>::insert_od(self, od_length, od),
+            DeviceOperationMode::Startup => {
+                <Self as StartupTxMessageBuffer>::insert_od(self, od_length, od)
+            }
             DeviceOperationMode::PreOperate => {
                 <Self as PreOperateTxMessageBuffer>::insert_od(self, od_length, od)
             }
-            DeviceOperationMode::Operate => <Self as OperateTxMessageBuffer>::insert_od(self, od_length, od),
+            DeviceOperationMode::Operate => {
+                <Self as OperateTxMessageBuffer>::insert_od(self, od_length, od)
+            }
         }
     }
 
@@ -267,7 +271,10 @@ impl<const BUFF_LEN: usize> RxMessageBuffer<BUFF_LEN> {
         Ok(mc)
     }
 
-    pub fn valid_req(&mut self, device_mode: DeviceOperationMode) -> MessageBufferResult<RwDirection> {
+    pub fn valid_req(
+        &mut self,
+        device_mode: DeviceOperationMode,
+    ) -> MessageBufferResult<RwDirection> {
         match device_mode {
             DeviceOperationMode::Startup => <Self as StartupRxMessageBuffer>::valid_req(self),
             DeviceOperationMode::PreOperate => <Self as PreOperateRxMessageBuffer>::valid_req(self),
@@ -275,11 +282,20 @@ impl<const BUFF_LEN: usize> RxMessageBuffer<BUFF_LEN> {
         }
     }
 
-    pub fn extract_od_from_write_req(&mut self, device_mode: DeviceOperationMode) -> MessageBufferResult<&[u8]> {
+    pub fn extract_od_from_write_req(
+        &mut self,
+        device_mode: DeviceOperationMode,
+    ) -> MessageBufferResult<&[u8]> {
         match device_mode {
-            DeviceOperationMode::Startup => <Self as StartupRxMessageBuffer>::extract_od_from_write_req(self),
-            DeviceOperationMode::PreOperate => <Self as PreOperateRxMessageBuffer>::extract_od_from_write_req(self),
-            DeviceOperationMode::Operate => <Self as OperateRxMessageBuffer>::extract_od_from_write_req(self),
+            DeviceOperationMode::Startup => {
+                <Self as StartupRxMessageBuffer>::extract_od_from_write_req(self)
+            }
+            DeviceOperationMode::PreOperate => {
+                <Self as PreOperateRxMessageBuffer>::extract_od_from_write_req(self)
+            }
+            DeviceOperationMode::Operate => {
+                <Self as OperateRxMessageBuffer>::extract_od_from_write_req(self)
+            }
         }
     }
 
@@ -562,7 +578,8 @@ impl<const BUFF_LEN: usize> StartupRxMessageBuffer for RxMessageBuffer<BUFF_LEN>
 impl<const BUFF_LEN: usize> PreOperateRxMessageBuffer for RxMessageBuffer<BUFF_LEN> {
     fn valid_req(&mut self) -> MessageBufferResult<RwDirection> {
         if validate_master_frame_checksum(self.length, self.buffer.as_mut_slice()) {
-            const PRE_OP_MSEQ_BASE_TYPE: MsequenceBaseType = derived_config::m_seq_capability::pre_operate_m_sequence::m_sequence_base_type();
+            const PRE_OP_MSEQ_BASE_TYPE: MsequenceBaseType =
+                derived_config::m_seq_capability::pre_operate_m_sequence::m_sequence_base_type();
             let (mc, ckt) = extract_mc_ckt_bytes(self.buffer.as_slice())
                 .map_err(|_| MessageBufferError::InvalidChecksum)?;
             if ckt.m_seq_type() != PRE_OP_MSEQ_BASE_TYPE {
@@ -602,7 +619,8 @@ impl<const BUFF_LEN: usize> PreOperateRxMessageBuffer for RxMessageBuffer<BUFF_L
 impl<const BUFF_LEN: usize> OperateRxMessageBuffer for RxMessageBuffer<BUFF_LEN> {
     fn valid_req(&mut self) -> MessageBufferResult<RwDirection> {
         if validate_master_frame_checksum(self.length, self.buffer.as_mut_slice()) {
-            const OP_MSEQ_BASE_TYPE: MsequenceBaseType = derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
+            const OP_MSEQ_BASE_TYPE: MsequenceBaseType =
+                derived_config::m_seq_capability::operate_m_sequence::m_sequence_base_type();
             let (mc, ckt) = extract_mc_ckt_bytes(self.buffer.as_slice())
                 .map_err(|_| MessageBufferError::InvalidChecksum)?;
             if ckt.m_seq_type() != OP_MSEQ_BASE_TYPE {

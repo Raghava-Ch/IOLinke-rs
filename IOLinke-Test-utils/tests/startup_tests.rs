@@ -5,7 +5,7 @@ use iolinke_test_utils::TestDeviceMode;
 
 #[test]
 fn test_min_cycle_time() {
-    let (_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
     let min_cycle_time = iolinke_test_utils::page_params::read_min_cycle_time(
         &poll_tx,
         &poll_response_rx,
@@ -27,7 +27,7 @@ fn test_min_cycle_time() {
 
 #[test]
 fn test_m_sequence_capability() {
-    let (_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
     let m_sequence_capability = iolinke_test_utils::page_params::read_m_sequence_capability(
         &poll_tx,
         &poll_response_rx,
@@ -54,7 +54,7 @@ fn test_m_sequence_capability() {
 
 #[test]
 fn test_revision_id() {
-    let (_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
     let revision_id = iolinke_test_utils::page_params::read_revision_id(
         &poll_tx,
         &poll_response_rx,
@@ -76,7 +76,7 @@ fn test_revision_id() {
 
 #[test]
 fn test_process_data_in() {
-    let (_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
     let process_data_in = iolinke_test_utils::page_params::read_process_data_in(
         &poll_tx,
         &poll_response_rx,
@@ -103,7 +103,7 @@ fn test_process_data_in() {
 
 #[test]
 fn test_process_data_out() {
-    let (_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
     let process_data_out = iolinke_test_utils::page_params::read_process_data_out(
         &poll_tx,
         &poll_response_rx,
@@ -125,7 +125,7 @@ fn test_process_data_out() {
 
 #[test]
 fn test_vendor_id_1() {
-    let (_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
     let vendor_id_1 = iolinke_test_utils::page_params::read_vendor_id_1(
         &poll_tx,
         &poll_response_rx,
@@ -137,7 +137,7 @@ fn test_vendor_id_1() {
 
 #[test]
 fn test_vendor_id_2() {
-    let (_device, poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
+    let (poll_tx, poll_response_rx) = iolinke_test_utils::setup_test_environment();
     let vendor_id_2 = iolinke_test_utils::page_params::read_vendor_id_2(
         &poll_tx,
         &poll_response_rx,

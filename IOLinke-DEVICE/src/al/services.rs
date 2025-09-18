@@ -3,6 +3,8 @@
 //! This module implements the Application Layer interface as defined in
 //! IO-Link Specification v1.1.4 Section 8.4
 
+use crate::dl;
+use heapless::Vec;
 use iolinke_types::custom::{IoLinkError, IoLinkResult};
 use iolinke_types::handlers;
 
@@ -23,7 +25,10 @@ pub trait ApplicationLayerServicesInd {
 
     fn al_pd_cycle_ind(&mut self);
 
-    fn al_new_output_ind(&mut self) -> IoLinkResult<()> {
+    fn al_new_output_ind(
+        &mut self,
+        pd_out: &Vec<u8, { dl::PD_OUTPUT_LENGTH }>,
+    ) -> IoLinkResult<()> {
         Err(IoLinkError::NoImplFound)
     }
 
@@ -65,7 +70,11 @@ pub trait AlControlReq {
 }
 
 pub trait AlSetInputReq {
-    fn al_set_input_req(&mut self, pd_data: &[u8]) -> IoLinkResult<()>;
+    fn al_set_input_req(
+        &mut self,
+        pd_data: &[u8],
+        data_link_layer: &mut dl::DataLinkLayer,
+    ) -> IoLinkResult<()>;
 }
 
 pub trait AlSetInputCnf {
@@ -86,62 +95,4 @@ pub trait AlGetOutputCnf {
 
 pub trait AlEventCnf {
     fn al_event_cnf(&mut self) -> IoLinkResult<()>;
-}
-
-pub struct ApplicationLayerServices {}
-
-impl ApplicationLayerServices {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for ApplicationLayerServices {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl handlers::command::DlControlInd for ApplicationLayerServices {
-    fn dl_control_ind(
-        &mut self,
-        _control_code: handlers::command::DlControlCode,
-    ) -> IoLinkResult<()> {
-        Ok(())
-    }
-}
-
-impl ApplicationLayerServicesInd for ApplicationLayerServices {
-    fn al_read_ind(&mut self, _index: u16, _sub_index: u8) -> IoLinkResult<()> {
-        todo!()
-    }
-
-    fn al_write_ind(&mut self, _index: u16, _sub_index: u8, _data: &[u8]) -> IoLinkResult<()> {
-        todo!()
-    }
-
-    fn al_abort_ind(&mut self) -> IoLinkResult<()> {
-        todo!()
-    }
-
-    fn al_pd_cycle_ind(&mut self) {
-        todo!()
-    }
-
-    fn al_new_output_ind(&mut self) -> IoLinkResult<()> {
-        todo!()
-    }
-
-    fn al_control_ind(
-        &mut self,
-        _control_code: handlers::command::DlControlCode,
-    ) -> IoLinkResult<()> {
-        todo!()
-    }
-}
-
-impl AlEventCnf for ApplicationLayerServices {
-    fn al_event_cnf(&mut self) -> IoLinkResult<()> {
-        todo!()
-    }
 }

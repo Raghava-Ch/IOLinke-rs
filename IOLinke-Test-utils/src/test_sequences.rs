@@ -331,8 +331,7 @@ pub fn util_op_test_isdu_sequence_read(
     index: u16,
     subindex: Option<u8>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    const OD_LENGTH_PER_FRAME: usize =
-        derived_config::on_req_data::operate::od_length() as usize;
+    const OD_LENGTH_PER_FRAME: usize = derived_config::on_req_data::operate::od_length() as usize;
 
     let isdu_read_request = frame_utils::isdu_frame::create_isdu_read_request(index, subindex);
     println!("isdu_read_request: {:?}", isdu_read_request);
@@ -347,8 +346,7 @@ pub fn util_op_test_isdu_sequence_read(
         let chunk_len = end - offset;
         chunk_buf[..chunk_len].copy_from_slice(&isdu_read_request[offset..end]);
         let chunk = &chunk_buf[..];
-        let frame =
-            frame_utils::create_op_write_isdu_request(circular_offset.into_bits(), chunk);
+        let frame = frame_utils::create_op_write_isdu_request(circular_offset.into_bits(), chunk);
         offset += OD_LENGTH_PER_FRAME;
         circular_offset = IsduFlowCtrl::Count(circular_offset.into_bits() + 1);
         if circular_offset.into_bits() > 15 {
@@ -487,8 +485,7 @@ pub fn util_pre_op_test_isdu_sequence_write(
     subindex: Option<u8>,
     data: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    const OD_LENGTH_PER_FRAME: usize =
-        derived_config::on_req_data::operate::od_length() as usize;
+    const OD_LENGTH_PER_FRAME: usize = derived_config::on_req_data::operate::od_length() as usize;
 
     let isdu_write_request =
         frame_utils::isdu_frame::create_isdu_write_request(index, subindex, data);
@@ -616,8 +613,7 @@ pub fn util_op_test_isdu_sequence_write(
     subindex: Option<u8>,
     data: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    const OD_LENGTH_PER_FRAME: usize =
-        derived_config::on_req_data::operate::od_length() as usize;
+    const OD_LENGTH_PER_FRAME: usize = derived_config::on_req_data::operate::od_length() as usize;
 
     let isdu_write_request =
         frame_utils::isdu_frame::create_isdu_write_request(index, subindex, data);
@@ -633,8 +629,7 @@ pub fn util_op_test_isdu_sequence_write(
         let chunk_len = end - offset;
         chunk_buf[..chunk_len].copy_from_slice(&isdu_write_request[offset..end]);
         let chunk = &chunk_buf[..];
-        let frame =
-            frame_utils::create_op_write_isdu_request(circular_offset.into_bits(), chunk);
+        let frame = frame_utils::create_op_write_isdu_request(circular_offset.into_bits(), chunk);
         offset += OD_LENGTH_PER_FRAME;
         // circular_offset wraps around 0..=15
         circular_offset = IsduFlowCtrl::Count(circular_offset.into_bits() + 1);

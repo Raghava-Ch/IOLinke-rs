@@ -58,6 +58,7 @@
 //! - Annex B: Direct Parameters and System Commands
 
 // Re-export macros for convenience
+use al::services;
 pub use iolinke_macros::*;
 use iolinke_types::{
     custom::{IoLinkError, IoLinkResult},
@@ -71,6 +72,9 @@ mod pl;
 mod storage;
 mod system_management;
 
+pub use al::services::AlEventCnf;
+pub use al::services::ApplicationLayerServicesInd;
+pub use handlers::command::{DlControlCode, DlControlInd};
 pub use iolinke_types::frame::msequence::TransmissionRate;
 pub use iolinke_types::handlers::sm::DeviceCom;
 pub use iolinke_types::handlers::sm::DeviceMode;
@@ -83,6 +87,8 @@ pub use iolinke_types::page::page1::ProcessDataIn;
 pub use iolinke_types::page::page1::ProcessDataOut;
 pub use iolinke_types::page::page1::RevisionId;
 pub use pl::physical_layer::{PhysicalLayerInd, PhysicalLayerReq, Timer};
+
+use crate::al::services::AlSetInputReq;
 
 /// Main IO-Link device implementation that orchestrates all protocol layers.
 ///
@@ -117,20 +123,34 @@ pub use pl::physical_layer::{PhysicalLayerInd, PhysicalLayerReq, Timer};
 ///     break; // Example purpose only
 /// }
 /// ```
-pub struct IoLinkDevice {
+pub struct IoLinkDevice<
+    PHY: pl::physical_layer::PhysicalLayerReq,
+    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
+> {
     /// Data link layer managing protocol state machines and message handling
     data_link_layer: dl::DataLinkLayer,
     /// System management handling device identification and communication setup
     system_management: system_management::SystemManagement,
     /// Application layer providing parameter access and event handling
-    application_layer: al::ApplicationLayer,
+    application_layer: al::ApplicationLayer<ALS>,
+    /// Physical layer managing communication, timing, and mode switching
+    physical_layer: PHY,
 }
 
-impl IoLinkDevice {
-    /// Creates a new IO-Link device with default configuration.
+impl<
+    PHY: pl::physical_layer::PhysicalLayerReq,
+    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
+> IoLinkDevice<PHY, ALS>
+{
+    /// Creates a new IO-Link device with the provided implementations.
     ///
     /// The device starts in the **Idle** state and must be configured with
     /// device identification before entering operational modes.
+    ///
+    /// # Parameters
+    ///
+    /// * `physical_layer` - Physical layer implementation
+    /// * `al_services` - Application layer services implementation
     ///
     /// # Returns
     ///
@@ -139,13 +159,16 @@ impl IoLinkDevice {
     /// # Example
     ///
     /// ```ignore
-    /// let device = IoLinkDevice::new();
+    /// let physical_layer = MockPhysicalLayer::new();
+    /// let al_services = MockApplicationLayer::new();
+    /// let device = IoLinkDevice::new(physical_layer, al_services);
     /// ```
-    pub fn new() -> Self {
+    pub fn new(physical_layer: PHY, al_services: ALS) -> Self {
         Self {
             system_management: system_management::SystemManagement::default(),
             data_link_layer: dl::DataLinkLayer::default(),
-            application_layer: al::ApplicationLayer::default(),
+            application_layer: al::ApplicationLayer::new(al_services),
+            physical_layer,
         }
     }
 
@@ -231,24 +254,41 @@ impl IoLinkDevice {
     ///     }
     /// }
     /// ```
-    pub fn poll<T: pl::physical_layer::PhysicalLayerReq>(
-        &mut self,
-        physical_layer: &mut T,
-    ) -> IoLinkResult<()> {
+    pub fn poll(&mut self) -> IoLinkResult<()> {
         // Poll all state machines in dependency order
         self.application_layer.poll(&mut self.data_link_layer)?;
         self.data_link_layer.poll(
             &mut self.system_management,
-            physical_layer,
+            &mut self.physical_layer,
             &mut self.application_layer,
         )?;
         self.system_management
-            .poll(&mut self.application_layer, physical_layer)?;
+            .poll(&mut self.application_layer, &mut self.physical_layer)?;
         Ok(())
+    }
+
+    pub fn pl_transfer_ind(&mut self, rx_byte: u8) -> IoLinkResult<()> {
+        self.data_link_layer
+            .pl_transfer_ind(&self.physical_layer, rx_byte)?;
+        Ok(())
+    }
+
+    pub fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
+        let _ = self.data_link_layer.pl_wake_up_ind(&self.physical_layer);
+        Ok(())
+    }
+
+    pub fn al_pd_input_update_req(&mut self, length: u8, input_data: &[u8]) -> IoLinkResult<()> {
+        self.application_layer
+            .al_set_input_req(input_data, &mut self.data_link_layer)
     }
 }
 
-impl al::ApplicationLayerReadWriteInd for IoLinkDevice {
+impl<
+    PHY: pl::physical_layer::PhysicalLayerReq,
+    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
+> al::ApplicationLayerReadWriteInd for IoLinkDevice<PHY, ALS>
+{
     /// Handles read requests from the master for device parameters.
     ///
     /// This method is called when the master requests to read a parameter
@@ -300,7 +340,11 @@ impl al::ApplicationLayerReadWriteInd for IoLinkDevice {
     }
 }
 
-impl al::ApplicationLayerProcessDataInd for IoLinkDevice {
+impl<
+    PHY: pl::physical_layer::PhysicalLayerReq,
+    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
+> al::ApplicationLayerProcessDataInd for IoLinkDevice<PHY, ALS>
+{
     /// Handles input data updates from the application.
     ///
     /// This method is called when the application has new input data
@@ -366,53 +410,50 @@ impl al::ApplicationLayerProcessDataInd for IoLinkDevice {
     }
 }
 
-impl handlers::sm::SystemManagementReq<al::ApplicationLayer> for IoLinkDevice {
+impl<
+    PHY: pl::physical_layer::PhysicalLayerReq,
+    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
+> handlers::sm::SystemManagementReq<al::ApplicationLayer<ALS>> for IoLinkDevice<PHY, ALS>
+{
     fn sm_set_device_com_req(&mut self, device_com: &handlers::sm::DeviceCom) -> SmResult<()> {
         // Set the device communication parameters
-        self.system_management.sm_set_device_com_req(device_com)?;
+        <system_management::SystemManagement as handlers::sm::SystemManagementReq<
+            al::ApplicationLayer<ALS>,
+        >>::sm_set_device_com_req(&mut self.system_management, device_com)?;
         Ok(())
     }
 
-    fn sm_get_device_com_req(&mut self, application_layer: &al::ApplicationLayer) -> SmResult<()> {
-        self.system_management
-            .sm_get_device_com_req(application_layer)?;
+    fn sm_get_device_com_req(
+        &mut self,
+        application_layer: &al::ApplicationLayer<ALS>,
+    ) -> SmResult<()> {
+        <system_management::SystemManagement as handlers::sm::SystemManagementReq<
+            al::ApplicationLayer<ALS>,
+        >>::sm_get_device_com_req(&mut self.system_management, application_layer)?;
         Ok(())
     }
 
     fn sm_set_device_ident_req(&mut self, device_ident: &page1::DeviceIdent) -> SmResult<()> {
-        self.system_management
-            .sm_set_device_ident_req(device_ident)?;
+        <system_management::SystemManagement as handlers::sm::SystemManagementReq<
+            al::ApplicationLayer<ALS>,
+        >>::sm_set_device_ident_req(&mut self.system_management, device_ident)?;
         Ok(())
     }
 
     fn sm_get_device_ident_req(
         &mut self,
-        application_layer: &al::ApplicationLayer,
+        application_layer: &al::ApplicationLayer<ALS>,
     ) -> SmResult<()> {
-        self.system_management
-            .sm_get_device_ident_req(application_layer)?;
+        <system_management::SystemManagement as handlers::sm::SystemManagementReq<
+            al::ApplicationLayer<ALS>,
+        >>::sm_get_device_ident_req(&mut self.system_management, application_layer)?;
         Ok(())
     }
 
     fn sm_set_device_mode_req(&mut self, mode: DeviceMode) -> SmResult<()> {
-        self.system_management.sm_set_device_mode_req(mode)?;
-        Ok(())
-    }
-}
-
-impl pl::physical_layer::PhysicalLayerInd for IoLinkDevice {
-    fn pl_transfer_ind<T: pl::physical_layer::PhysicalLayerReq>(
-        &mut self,
-        physical_layer: &mut T,
-        rx_byte: u8,
-    ) -> IoLinkResult<()> {
-        self.data_link_layer
-            .pl_transfer_ind(physical_layer, rx_byte)?;
-        Ok(())
-    }
-
-    fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
-        let _ = self.data_link_layer.pl_wake_up_ind();
+        <system_management::SystemManagement as handlers::sm::SystemManagementReq<
+            al::ApplicationLayer<ALS>,
+        >>::sm_set_device_mode_req(&mut self.system_management, mode)?;
         Ok(())
     }
 }
