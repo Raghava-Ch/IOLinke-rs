@@ -1,12 +1,13 @@
 [package]
 name = "iolinke-macros"
-version = "0.1.0"
-edition = "2024"
-description = "Procedural macros for IO-Link Device Stack implementation"
-license = "GPL-3"
-keywords = ["iolink", "embedded", "macros", "no-std"]
-categories = ["embedded", "no-std"]
-repository = "https://github.com/Raghava-Ch/IOLinke-Device"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [lib]
 proc-macro = true

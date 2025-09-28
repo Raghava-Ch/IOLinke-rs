@@ -72,6 +72,7 @@ pub trait DlControlInd {
 /// - Section 7.2.2.5 PDInStatus
 /// - Section 8.2.2.12
 /// - Section 7.3.7.1
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DlControlCode {
     /// Input Process Data valid; see 7.2.2.5, 8.2.2.12

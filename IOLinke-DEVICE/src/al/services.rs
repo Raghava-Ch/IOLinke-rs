@@ -8,6 +8,8 @@ use heapless::Vec;
 use iolinke_types::custom::{IoLinkError, IoLinkResult};
 use iolinke_types::handlers;
 
+use core::result::Result::Err;
+
 /// Application Layer trait defining all request/indication methods
 /// See IO-Link v1.1.4 Section 8.4
 pub trait ApplicationLayerServicesInd {

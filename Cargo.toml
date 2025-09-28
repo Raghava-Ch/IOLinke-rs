@@ -8,6 +8,7 @@ members = [
     "IOLinke-Derived-config",
     "IOLinke-Dev-config",
     "IOLinke-Examples",
+    "IOLinke-Bindings",
 ]
 resolver = "2"
 
@@ -24,13 +25,13 @@ description = "Complete IO-Link Master and Device Stack implementation in Rust, 
 
 [workspace.dependencies]
 # Shared dependencies across workspace
-iolinke-device = { path = "IOLinke-DEVICE" }
-iolinke-types = { path = "IOLinke-types" }
-iolinke-macros = { path = "IOLinke-macros" }
-iolinke-dev-config = { path = "IOLinke-Dev-config" }
-iolinke-derived-config = { path = "IOLinke-Derived-config" }
-iolinke-util = { path = "IOLinke-util" }
-iolinke-test-utils = { path = "IOLinke-Test-utils" }
+iolinke-device = { path = "IOLinke-DEVICE", default-features = false }
+iolinke-types = { path = "IOLinke-types", default-features = false }
+iolinke-macros = { path = "IOLinke-macros", default-features = false }
+iolinke-dev-config = { path = "IOLinke-Dev-config", default-features = false }
+iolinke-derived-config = { path = "IOLinke-Derived-config", default-features = false }
+iolinke-util = { path = "IOLinke-util", default-features = false }
+iolinke-test-utils = { path = "IOLinke-Test-utils", default-features = false }
 
 heapless = { version = "0.8.0" }
 bitfields = { version = "1.0.0" }

@@ -1,0 +1,32 @@
+[package]
+name = "iolinke-bindings"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+path = "src/ffi.rs"
+
+[dependencies]
+iolinke-device = {workspace = true }
+iolinke-types = { workspace = true }
+iolinke-derived-config = { workspace = true }
+
+heapless = { workspace = true }
+
+[build-dependencies]
+regex = "1.11.2"
+cbindgen = "0.29.0"
+
+[target.thumbv7em-none-eabihf]
+linker = "/opt/ST/STM32CubeCLT_1.19.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc"
+rustflags = [
+  "-C", "link-arg=-Tlink.x",   # linker script
+]

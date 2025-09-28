@@ -4,12 +4,17 @@
 //! IO-Link Specification v1.1.4 Section 7.2
 use heapless::Vec;
 use iolinke_derived_config as derived_config;
+use iolinke_types::handlers;
 use iolinke_types::handlers::pd::DlPDOutputTransportInd;
 use iolinke_types::{
     custom::IoLinkResult,
     handlers::pd::{PD_OUTPUT_LENGTH, PdConfState, ProcessData},
 };
 use iolinke_util::{log_state_transition, log_state_transition_error};
+
+use core::result::Result::{Ok, Err};
+use core::default::Default;
+use core::clone::Clone;
 
 use crate::{al, dl::message_handler, services};
 
@@ -125,7 +130,11 @@ impl ProcessDataHandler {
 
     /// Poll the process data handler
     /// See IO-Link v1.1.4 Section 7.2
-    pub fn poll<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    pub fn poll<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         message_handler: &mut message_handler::MessageHandler,
         application_layer: &mut al::ApplicationLayer<ALS>,
@@ -200,7 +209,11 @@ impl ProcessDataHandler {
         Ok(())
     }
 
-    fn execute_t4<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t4<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         _pd_in_length: u8,
         application_layer: &mut al::ApplicationLayer<ALS>,
@@ -219,7 +232,11 @@ impl ProcessDataHandler {
         Ok(())
     }
 
-    fn execute_t6<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t6<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -280,9 +297,10 @@ impl ProcessDataHandler {
     pub fn dl_pd_input_update_req(&mut self, length: u8, input_data: &[u8]) -> IoLinkResult<()> {
         let _ = length;
         self.process_data.input.clear();
-        self.process_data.input.extend_from_slice(input_data).map_err(|_| {
-            iolinke_types::custom::IoLinkError::InvalidParameter
-        })?;
+        self.process_data
+            .input
+            .extend_from_slice(input_data)
+            .map_err(|_| iolinke_types::custom::IoLinkError::InvalidParameter)?;
         self.process_event(ProcessDataHandlerEvent::DlPDInputUpdate)?;
         Ok(())
     }

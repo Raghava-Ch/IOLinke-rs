@@ -10,6 +10,10 @@ use iolinke_types::{
     handlers::event::EventEntry,
 };
 
+pub use core::result::Result::{Ok, Err};
+use core::option::{Option, Option::{Some, None}};
+use core::default::Default;
+
 use crate::al::services;
 use crate::{al::services::AlEventReq, dl};
 
@@ -86,7 +90,7 @@ impl EventHandler {
         use EventStateMachineEvent as Event;
         use EventStateMachineState as State;
 
-        let (new_transition, new_state) = match (self.state, event) {
+        let (new_transition, new_state) = match (self.state.clone(), event) {
             // Valid transitions according to Table 77
             (State::EventInactive, Event::Activate) => (Transition::T1, State::EventIdle),
             (State::EventIdle, Event::Deactivate) => (Transition::T2, State::EventInactive),

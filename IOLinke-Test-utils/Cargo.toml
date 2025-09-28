@@ -13,11 +13,11 @@ description.workspace = true
 [lib]
 
 [dependencies]
-iolinke-device = { workspace = true }
-iolinke-util = { workspace = true }
-iolinke-types = { workspace = true }
-iolinke-derived-config = { workspace = true }
-iolinke-dev-config = { workspace = true }
+iolinke-device = { workspace = true, default-features = false, features = ["std"]}
+iolinke-util = { workspace = true, default-features = false, features = ["std"] }
+iolinke-types = { workspace = true, default-features = false, features = ["std"] }
+iolinke-derived-config = { workspace = true, default-features = false, features = ["std"] }
+iolinke-dev-config = { workspace = true, default-features = false, features = ["std"] }
 
 heapless = { workspace = true }
 bitfields = { workspace = true }

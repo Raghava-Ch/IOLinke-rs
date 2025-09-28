@@ -21,12 +21,16 @@ use iolinke_util::{
     log_state_transition, log_state_transition_error,
 };
 
+use core::result::{Result, Result::{Ok, Err}};
+use core::default::Default;
+use core::clone::Clone;
+
 use crate::{
     dl::{mode_handler, od_handler, pd_handler},
     pl,
 };
 /// Message Handler states
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MessageHandlerState {
     /// Waiting for activation by the Device DL-mode handler through MH_Conf_ACTIVE
     /// (see Table 45, Transition T1).
@@ -302,7 +306,7 @@ impl MessageHandler {
         // Start MaxUARTframeTime and MaxCycleTime timers according to the transmission rate
         let max_uart_frame_time = calculate_max_uart_frame_time(self.transmission_rate);
         let _ = physical_layer
-            .start_timer(pl::physical_layer::Timer::MaxCycleTime, max_uart_frame_time);
+            .pl_start_timer_req(handlers::pl::Timer::MaxCycleTime, max_uart_frame_time);
         self.expected_rx_bytes = 0;
         Ok(())
     }
@@ -316,10 +320,8 @@ impl MessageHandler {
     ) -> IoLinkResult<()> {
         let _ = self.buffers.rx_buffer.push(rx_byte);
         let max_uart_frame_time = calculate_max_uart_frame_time(self.transmission_rate);
-        let _ = physical_layer.restart_timer(
-            pl::physical_layer::Timer::MaxUARTframeTime,
-            max_uart_frame_time,
-        );
+        let _ = physical_layer
+            .pl_restart_timer_req(handlers::pl::Timer::MaxUARTframeTime, max_uart_frame_time);
         let rx_buffer_len = self.buffers.rx_buffer.len();
         // Find the number of UART frames to be received using first two bytes of the message
         if rx_buffer_len == 2 {
@@ -341,7 +343,7 @@ impl MessageHandler {
         &mut self,
         physical_layer: &mut PHY,
     ) -> IoLinkResult<()> {
-        physical_layer.stop_timer(pl::physical_layer::Timer::MaxUARTframeTime)?;
+        physical_layer.pl_stop_timer_req(handlers::pl::Timer::MaxUARTframeTime)?;
         Ok(())
     }
 
@@ -445,8 +447,8 @@ impl MessageHandler {
         &mut self,
         physical_layer: &mut PHY,
     ) -> IoLinkResult<()> {
-        physical_layer.stop_timer(pl::physical_layer::Timer::MaxUARTframeTime)?;
-        physical_layer.stop_timer(pl::physical_layer::Timer::MaxCycleTime)?;
+        physical_layer.pl_stop_timer_req(handlers::pl::Timer::MaxUARTframeTime)?;
+        physical_layer.pl_stop_timer_req(handlers::pl::Timer::MaxCycleTime)?;
         Ok(())
     }
 
@@ -580,10 +582,9 @@ impl<PHY: pl::physical_layer::PhysicalLayerReq> pl::physical_layer::PhysicalLaye
 {
     fn pl_transfer_ind(&mut self, physical_layer: &PHY, rx_byte: u8) -> IoLinkResult<()> {
         use MessageHandlerState as State;
-        let current_state = self.state;
+        let current_state = self.state.clone();
         let event = MessageHandlerEvent::PlTransfer;
         let _ = self.process_event(event);
-        println!("PL_Transfer.ind received byte: {:?}: ", current_state);
         match current_state {
             State::Idle => {
                 self.execute_t2(physical_layer, rx_byte)?;
@@ -603,10 +604,10 @@ impl<PHY: pl::physical_layer::PhysicalLayerReq> pl::physical_layer::PhysicalLaye
 impl pl::physical_layer::IoLinkTimer for MessageHandler {
     /// Any MasterCommand received by the Device command handler
     /// (see Table 44 and Figure 54, state "CommandHandler_2")
-    fn timer_elapsed(&mut self, timer: pl::physical_layer::Timer) -> IoLinkResult<()> {
+    fn timer_elapsed(&mut self, timer: handlers::pl::Timer) -> IoLinkResult<()> {
         let event = match timer {
-            pl::physical_layer::Timer::MaxCycleTime => MessageHandlerEvent::TimerMaxCycle,
-            pl::physical_layer::Timer::MaxUARTframeTime => MessageHandlerEvent::TimerMaxUARTFrame,
+            handlers::pl::Timer::MaxCycleTime => MessageHandlerEvent::TimerMaxCycle,
+            handlers::pl::Timer::MaxUARTframeTime => MessageHandlerEvent::TimerMaxUARTFrame,
             _ => return Ok(()),
         };
         let _ = self.process_event(event);

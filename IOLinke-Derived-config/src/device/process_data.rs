@@ -1,5 +1,8 @@
-use iolinke_dev_config::device::process_data::ProcessDataLength;
+use iolinke_dev_config::device as dev_config;
+use dev_config::process_data::ProcessDataLength;
 use iolinke_types::page::page1;
+
+pub use core::result::{Result, Result::{Ok, Err}};
 
 /// Constructs the `ProcessDataIn` parameter byte (see IO-Link Spec v1.1.4, Section B.1.6, Figure B.5).
 ///

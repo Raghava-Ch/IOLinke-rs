@@ -41,6 +41,9 @@ pub use handlers::mode::DlModeInd;
 pub use handlers::od::{DlParamRsp, DlReadParamInd, DlWriteParamInd};
 pub use handlers::pd::{DlPDInputUpdate, DlPDOutputTransportInd, PD_OUTPUT_LENGTH};
 
+use core::result::Result::Ok;
+use core::default::Default;
+
 /// Main Data Link Layer implementation that orchestrates all DL services.
 ///
 /// The Data Link Layer manages the complete data link functionality
@@ -153,7 +156,9 @@ impl DataLinkLayer {
     /// ```
     pub fn poll<
         PHY: pl::physical_layer::PhysicalLayerReq,
-        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
     >(
         &mut self,
         system_management: &mut system_management::SystemManagement,

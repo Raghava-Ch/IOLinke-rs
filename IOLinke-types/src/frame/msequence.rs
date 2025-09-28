@@ -427,6 +427,7 @@ impl Into<u8> for MsequenceType {
 ///
 /// - IO-Link v1.1.4 Section 5.2.2: Communication Modes
 /// - Table 5.1: Communication mode characteristics
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransmissionRate {
     /// COM1 mode - 1200 baud effective rate

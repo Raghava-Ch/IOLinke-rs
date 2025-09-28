@@ -1,4 +1,6 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
+#![warn(missing_docs)]
+
 //! Utility modules for IO-Link Device Stack.
 //!
 //! This module provides utility functions and data structures used

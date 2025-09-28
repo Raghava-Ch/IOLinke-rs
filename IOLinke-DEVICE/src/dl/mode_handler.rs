@@ -16,6 +16,9 @@ use crate::{
     pl, system_management,
 };
 
+use core::result::Result::{Ok, Err};
+use core::default::Default;
+
 /// DL-Mode Handler states
 /// See IO-Link v1.1.4 Section 7.3.2.5
 /// See Table 45 – State transition tables of the Device DL-mode handler
@@ -586,8 +589,8 @@ impl DlModeHandler {
 
     /// Timer elapsed event
     /// This function is called to indicate a Tdsio timer has elapsed.
-    pub fn timer_elapsed(&mut self, timer: pl::physical_layer::Timer) {
-        if timer == pl::physical_layer::Timer::Tdsio {
+    pub fn timer_elapsed(&mut self, timer: handlers::pl::Timer) {
+        if timer == handlers::pl::Timer::Tdsio {
             let _ = self.process_event(DlModeEvent::TimerElapsedTdsio);
         }
     }

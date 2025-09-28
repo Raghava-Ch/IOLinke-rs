@@ -1,6 +1,7 @@
 //! Test-specific types and enums for IO-Link device testing
 
 use iolinke_device::Timer;
+use std::vec::Vec;
 
 /// Thread message types for communication between test threads
 #[derive(Debug, Clone)]

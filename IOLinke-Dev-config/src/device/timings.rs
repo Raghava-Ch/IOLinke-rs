@@ -33,13 +33,13 @@
 ///
 /// # Panics
 /// Panics if the configured value is outside the valid ranges.
-const fn time_in_ms() -> f32 {
+pub const fn time_in_ms() -> f32 {
     const TIME_IN_MS: f32 = /*CONFIG:MIN_CYCLE_TIME_IN_MS*/ 33 /*ENDCONFIG*/ as f32;
     let valid = (TIME_IN_MS >= 0.4 && TIME_IN_MS <= 6.3)
         || (TIME_IN_MS >= 6.4 && TIME_IN_MS <= 31.6)
         || (TIME_IN_MS >= 32.0 && TIME_IN_MS <= 132.8);
     if !valid {
-        panic!(
+        core::panic!(
             "Invalid min cycle time configuration. Valid ranges: 0.4–6.3, 6.4–31.6, 32.0–132.8 milli seconds (see IO-Link Spec Table B.3)"
         );
     }

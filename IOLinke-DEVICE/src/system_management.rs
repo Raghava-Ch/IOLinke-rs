@@ -32,6 +32,11 @@ use iolinke_types::handlers::sm::{
 use iolinke_types::page::page1::{DeviceIdent, RevisionId};
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
+use core::result::Result::{Ok, Err};
+use core::option::Option::Some;
+use core::default::Default;
+use core::clone::Clone;
+
 use crate::services;
 use crate::{al, pl};
 
@@ -513,7 +518,9 @@ impl SystemManagement {
     /// ```
     pub fn poll<
         T: pl::physical_layer::PhysicalLayerReq,
-        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
     >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
@@ -619,7 +626,11 @@ impl SystemManagement {
         Ok(())
     }
 
-    fn poll_active_state<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn poll_active_state<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -650,7 +661,9 @@ impl SystemManagement {
     /// Execute T1 transition: Switch to SIO mode
     fn execute_t1<
         T: pl::physical_layer::PhysicalLayerReq,
-        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
     >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
@@ -671,7 +684,9 @@ impl SystemManagement {
     /// Execute T2 transition: Switch to communication mode
     fn execute_t2<
         T: pl::physical_layer::PhysicalLayerReq,
-        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
     >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
@@ -692,7 +707,9 @@ impl SystemManagement {
     /// Execute T3 transition: Switch to SM_Idle mode
     fn execute_t3<
         T: pl::physical_layer::PhysicalLayerReq,
-        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
     >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
@@ -707,7 +724,11 @@ impl SystemManagement {
     }
 
     /// Execute T4 transition: Indicate baudrate establishment
-    fn execute_t4<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t4<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         mode: DeviceMode,
         application_layer: &mut al::ApplicationLayer<ALS>,
@@ -719,7 +740,11 @@ impl SystemManagement {
     }
 
     /// Execute T5 transition: Enter device identification phase
-    fn execute_t5<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t5<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -730,7 +755,11 @@ impl SystemManagement {
     }
 
     /// Execute T6 transition: Enter device identity check phase
-    fn execute_t6<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t6<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -749,7 +778,11 @@ impl SystemManagement {
     }
 
     /// Execute T8 transition: Enter device preoperate phase
-    fn execute_t8<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t8<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -760,7 +793,11 @@ impl SystemManagement {
     }
 
     /// Execute T9 transition: Enter device operate phase
-    fn execute_t9<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t9<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -771,7 +808,11 @@ impl SystemManagement {
     }
 
     /// Execute T10 transition: Enter device preoperate phase from IdentStartup
-    fn execute_t10<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t10<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -782,7 +823,11 @@ impl SystemManagement {
     }
 
     /// Execute T11 transition: Enter device operate phase from ComStartup
-    fn execute_t11<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t11<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -793,7 +838,11 @@ impl SystemManagement {
     }
 
     /// Execute T12 transition: Enter communication startup phase from Preoperate
-    fn execute_t12<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t12<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -804,7 +853,11 @@ impl SystemManagement {
     }
 
     /// Execute T13 transition: Enter communication startup phase from Operate
-    fn execute_t13<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t13<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
     ) -> IoLinkResult<()> {
@@ -817,7 +870,9 @@ impl SystemManagement {
     /// Execute T14 transition: Change transmission rate and establish communication
     fn execute_t14<
         T: pl::physical_layer::PhysicalLayerReq,
-        ALS: services::ApplicationLayerServicesInd + services::AlEventCnf,
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
     >(
         &mut self,
         application_layer: &mut al::ApplicationLayer<ALS>,
@@ -908,8 +963,11 @@ impl DlReadWriteInd for SystemManagement {
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
-    SystemManagementReq<al::ApplicationLayer<ALS>> for SystemManagement
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> SystemManagementReq<al::ApplicationLayer<ALS>> for SystemManagement
 {
     fn sm_set_device_com_req(&mut self, device_com: &DeviceCom) -> SmResult<()> {
         // Set the device communication parameters

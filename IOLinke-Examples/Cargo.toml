@@ -1,5 +1,5 @@
 [package]
-name = "IOLinke-Examples"
+name = "iolinke-examples"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,7 +8,11 @@ repository.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "IO-Link Examples applications"
+description = "IOLinke Examples applications"
+
+[features]
+default = []
+std = []
 
 [lib]
 path = "src/lib.rs"

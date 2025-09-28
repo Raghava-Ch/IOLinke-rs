@@ -11,7 +11,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["rlib"]
 
 [dependencies]
 # Workspace dependencies
@@ -26,7 +26,7 @@ bitfields = { workspace = true }
 iolinke-macros = { path = "../IOLinke-macros" }
 
 [features]
-default = ["std", "log"]
+default = []
 std = []
 log = []
 block_parameterization = []
@@ -39,3 +39,9 @@ block_parameterization = []
 # cbindgen = "0.27"
 
 [dev-dependencies]
+
+[target.thumbv7em-none-eabihf]
+linker = "/opt/ST/STM32CubeCLT_1.19.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc"
+rustflags = [
+  "-C", "link-arg=-Tlink.x",   # your linker script
+]

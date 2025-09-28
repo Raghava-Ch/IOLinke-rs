@@ -1,0 +1,7 @@
+# .cargo/config.toml
+[target.thumbv7em-none-eabihf]
+linker = "/opt/ST/STM32CubeCLT_1.19.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc"
+
+rustflags = [
+  "-C", "link-arg=-Tlink.x",   # use your custom linker script
+]

@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.nu": "shellscript",
+        "*.rigve": "sql",
+        "iolinke_device.h": "c"
+    }
+}

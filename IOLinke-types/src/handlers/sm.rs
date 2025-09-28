@@ -206,6 +206,7 @@ pub trait SystemManagementInd {
 ///
 /// These error types are used when system management operations
 /// fail due to parameter conflicts or other issues.
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SmError {
     /// Parameter conflict detected during operation
@@ -227,7 +228,8 @@ pub type SmResult<T> = Result<T, SmError>;
 ///
 /// - IO-Link v1.1.4 Section 5.2.2: Communication Modes
 /// - Section 5.3: SIO Mode Operation
-#[derive(Clone, Debug)]
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
 pub enum SioMode {
     /// C/Q line in high impedance state (no communication)
     Inactive,
@@ -252,6 +254,7 @@ impl Default for SioMode {
 ///
 /// - IO-Link v1.1.4 Section 6.3: State Machines
 /// - Table 94: SM_DeviceMode state definitions
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceMode {
     /// Device is idle and waiting for configuration
@@ -337,7 +340,7 @@ impl Default for DeviceCom {
 /// - IO-Link v1.1.4 Section 5.2.2: Communication Modes
 /// - Table 5.1: Communication mode characteristics
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
+#[repr(C)]
 pub enum IoLinkMode {
     /// SIO mode (Standard I/O) - Digital input/output without communication
     Sio = 0,

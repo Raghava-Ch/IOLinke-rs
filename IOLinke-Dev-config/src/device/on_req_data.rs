@@ -1,4 +1,5 @@
 pub mod pre_operate {
+
     /// M-sequence types for the PREOPERATE mode as per IO-Link Specification (v1.1.4, Table A.8).
     ///
     /// The following table describes valid M-sequence types, expected on-request data length (in octets),
@@ -25,7 +26,7 @@ pub mod pre_operate {
             2 => 2u8,
             8 => 8u8,
             32 => 32u8,
-            _ => panic!("Invalid PREOPERATE OD length configuration"),
+            _ => core::panic!("Invalid PREOPERATE OD length configuration"),
         }
     }
 }
@@ -75,7 +76,7 @@ pub mod operate {
             2 => 2u8,
             8 => 8u8,
             32 => 32u8,
-            _ => panic!("Invalid OPERATE M-sequence configuration"),
+            _ => core::panic!("Invalid OPERATE M-sequence configuration"),
         }
     }
 }

@@ -11,6 +11,8 @@ use iolinke_types::{
 };
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
+pub use core::result::Result::{Ok, Err};
+
 use crate::al::{event_handler, parameter_manager};
 
 /// See 8.3.3.2 Event state machine of the Device AL

@@ -66,6 +66,9 @@ use iolinke_types::{
     page::page1,
 };
 
+pub use core::result::{Result, Result::{Ok, Err}};
+use core::default::Default;
+
 mod al;
 mod dl;
 mod pl;
@@ -75,6 +78,7 @@ mod system_management;
 pub use al::services::AlEventCnf;
 pub use al::services::ApplicationLayerServicesInd;
 pub use handlers::command::{DlControlCode, DlControlInd};
+pub use handlers::pl::Timer;
 pub use iolinke_types::frame::msequence::TransmissionRate;
 pub use iolinke_types::handlers::sm::DeviceCom;
 pub use iolinke_types::handlers::sm::DeviceMode;
@@ -86,7 +90,7 @@ pub use iolinke_types::page::page1::MsequenceCapability;
 pub use iolinke_types::page::page1::ProcessDataIn;
 pub use iolinke_types::page::page1::ProcessDataOut;
 pub use iolinke_types::page::page1::RevisionId;
-pub use pl::physical_layer::{PhysicalLayerInd, PhysicalLayerReq, Timer};
+pub use pl::physical_layer::{PhysicalLayerInd, PhysicalLayerReq};
 
 use crate::al::services::AlSetInputReq;
 
@@ -125,7 +129,9 @@ use crate::al::services::AlSetInputReq;
 /// ```
 pub struct IoLinkDevice<
     PHY: pl::physical_layer::PhysicalLayerReq,
-    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
+    ALS: al::services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
 > {
     /// Data link layer managing protocol state machines and message handling
     data_link_layer: dl::DataLinkLayer,
@@ -139,7 +145,9 @@ pub struct IoLinkDevice<
 
 impl<
     PHY: pl::physical_layer::PhysicalLayerReq,
-    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
+    ALS: al::services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
 > IoLinkDevice<PHY, ALS>
 {
     /// Creates a new IO-Link device with the provided implementations.
@@ -211,7 +219,7 @@ impl<
 
     /// Main polling function that advances all protocol state machines.
     ///
-    /// This method must be called regularly (typically every 1-10ms) to:
+    /// This method must be called regularly to:
     /// - Process incoming messages from the master
     /// - Update internal state machines
     /// - Handle timeouts and state transitions
@@ -267,18 +275,101 @@ impl<
         Ok(())
     }
 
+    /// Handles Physical Layer transfer indication with received byte data.
+    ///
+    /// This method is called when the Physical Layer receives a byte from the master.
+    /// It forwards the received byte to the Data Link Layer for processing.
+    ///
+    /// # Parameters
+    ///
+    /// * `rx_byte` - The received byte from Physical Layer (value 0-255)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the byte was processed successfully
+    /// * `Err(IoLinkError)` if an error occurred during processing
+    ///
+    /// # Specification Reference
+    ///
+    /// - IO-Link Interface Spec v1.1.4 Section 5.2.2.3: PL_Transfer Service
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut device = IoLinkDevice::new();
+    /// device.pl_transfer_ind(0x55)?; // Handle received byte 0x55
+    /// ```
     pub fn pl_transfer_ind(&mut self, rx_byte: u8) -> IoLinkResult<()> {
         self.data_link_layer
             .pl_transfer_ind(&self.physical_layer, rx_byte)?;
         Ok(())
     }
 
+    /// Handles Physical Layer wake-up indication from the master.
+    ///
+    /// This method is called when the Physical Layer detects a wake-up sequence from the master.
+    /// The wake-up service prepares the Physical Layer to send and receive communication requests.
+    /// This is an unconfirmed service with no parameters.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the wake-up indication was processed successfully
+    /// * `Err(IoLinkError)` if an error occurred during processing
+    ///
+    /// # Specification Reference
+    ///
+    /// - IO-Link Interface Spec v1.1.4 Section 5.2.2.2: PL_WakeUp Service
+    /// - IO-Link Interface Spec v1.1.4 Section 5.3.3.3: Wake-up sequence
+    ///
+    /// # Note
+    ///
+    /// The success of the wake-up can only be verified by the master through subsequent
+    /// communication attempts with the device.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut device = IoLinkDevice::new();
+    /// device.pl_wake_up_ind()?; // Handle wake-up indication
+    /// ```
     pub fn pl_wake_up_ind(&mut self) -> IoLinkResult<()> {
         let _ = self.data_link_layer.pl_wake_up_ind(&self.physical_layer);
         Ok(())
     }
 
-    pub fn al_pd_input_update_req(&mut self, length: u8, input_data: &[u8]) -> IoLinkResult<()> {
+    /// Updates the input data within the Process Data of the device (AL_SetInput service).
+    ///
+    /// This method implements the AL_SetInput local service, which updates the input data
+    /// in the device's Process Data area as specified by IO-Link. The input data is provided
+    /// as an octet string and transmitted to the Application Layer.
+    ///
+    /// # Parameters
+    ///
+    /// * `length` - The length of the input data to be transmitted.
+    /// * `input_data` - A slice containing the Process Data values (octet string) to be set.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the input data was updated successfully.
+    /// * `Err(IoLinkError)` if the service failed (e.g., due to a state conflict).
+    ///
+    /// # Errors
+    ///
+    /// - `IoLinkError::StateConflict`: Service unavailable within the current state.
+    ///
+    /// # Specification Reference
+    ///
+    /// - IO-Link Interface Spec v1.1.4 Section 8.2.2.6: AL_SetInput
+    /// - Table 67: AL_SetInput service parameters
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut device = IoLinkDevice::new(...);
+    /// let input_data = [0x01, 0x02, 0x03];
+    /// device.al_set_input_req(input_data.len() as u8, &input_data)?;
+    /// ```
+    pub fn al_set_input_req(&mut self, _length: u8, input_data: &[u8]) -> IoLinkResult<()> {
         self.application_layer
             .al_set_input_req(input_data, &mut self.data_link_layer)
     }
@@ -286,7 +377,9 @@ impl<
 
 impl<
     PHY: pl::physical_layer::PhysicalLayerReq,
-    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
+    ALS: al::services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
 > al::ApplicationLayerReadWriteInd for IoLinkDevice<PHY, ALS>
 {
     /// Handles read requests from the master for device parameters.
@@ -342,7 +435,9 @@ impl<
 
 impl<
     PHY: pl::physical_layer::PhysicalLayerReq,
-    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
+    ALS: al::services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
 > al::ApplicationLayerProcessDataInd for IoLinkDevice<PHY, ALS>
 {
     /// Handles input data updates from the application.
@@ -355,7 +450,9 @@ impl<
     /// - `Ok(())` if input data was processed successfully
     /// - `Err(IoLinkError)` if an error occurred
     fn al_set_input_ind(&mut self) -> IoLinkResult<()> {
-        todo!("Implement process data input handling");
+        // TODO: "Implement process data input handling");
+
+        Ok(())
     }
 
     /// Handles process data cycle notifications.
@@ -363,7 +460,7 @@ impl<
     /// This method is called at the beginning of each process data cycle
     /// to allow the application to prepare input/output data.
     fn al_pd_cycle_ind(&mut self) {
-        todo!("Implement process data cycle handling");
+        // TODO: "Implement process data cycle handling");
     }
 
     /// Handles output data requests from the master.
@@ -376,7 +473,9 @@ impl<
     /// - `Ok(())` if output data was provided successfully
     /// - `Err(IoLinkError)` if an error occurred
     fn al_get_output_ind(&mut self) -> IoLinkResult<()> {
-        todo!("Implement output data handling");
+        // TODO: "Implement output data handling");
+
+        Ok(())
     }
 
     /// Handles new output data from the master.
@@ -389,7 +488,9 @@ impl<
     /// - `Ok(())` if output data was processed successfully
     /// - `Err(IoLinkError)` if an error occurred
     fn al_new_output_ind(&mut self) -> IoLinkResult<()> {
-        todo!("Implement new output data handling");
+        // TODO: "Implement new output data handling");
+
+        Ok(())
     }
 
     /// Handles control commands from the master.
@@ -406,16 +507,47 @@ impl<
     /// - `Ok(())` if control command was processed successfully
     /// - `Err(IoLinkError)` if an error occurred
     fn al_control(&mut self, _control_code: u8) -> IoLinkResult<()> {
-        todo!("Implement control command handling");
+        // TODO: "Implement control command handling"
+
+        Ok(())
     }
 }
 
 impl<
     PHY: pl::physical_layer::PhysicalLayerReq,
-    ALS: al::services::ApplicationLayerServicesInd + services::AlEventCnf,
-> handlers::sm::SystemManagementReq<al::ApplicationLayer<ALS>> for IoLinkDevice<PHY, ALS>
+    ALS: al::services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> IoLinkDevice<PHY, ALS>
 {
-    fn sm_set_device_com_req(&mut self, device_com: &handlers::sm::DeviceCom) -> SmResult<()> {
+    /// Sets the device communication parameters according to IO-Link SM_SetDeviceCom service.
+    ///
+    /// This method configures the device's communication and identification parameters
+    /// as specified in the IO-Link protocol (see Table 89 – SM_SetDeviceCom).
+    ///
+    /// # Parameters
+    ///
+    /// * `device_com` - Reference to the device communication configuration, including:
+    ///     - Supported SIO mode (`SupportedSIOMode`): INACTIVE, DI, DO
+    ///     - Supported transmission rate (`SupportedTransmissionrate`): COM1, COM2, COM3
+    ///     - Minimum cycle time (`MinCycleTime`)
+    ///     - M-sequence capability (`M-sequence Capability`)
+    ///     - Protocol revision (`RevisionID`)
+    ///     - Process data lengths (`ProcessDataIn`, `ProcessDataOut`)
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if the service has been executed successfully.
+    /// - `Err(SmError)` if the service failed, including error information such as parameter conflict.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the parameter set is inconsistent or violates protocol requirements.
+    ///
+    /// # See Also
+    ///
+    /// - IO-Link Specification, Table 89 – SM_SetDeviceCom
+    pub fn sm_set_device_com_req(&mut self, device_com: &handlers::sm::DeviceCom) -> SmResult<()> {
         // Set the device communication parameters
         <system_management::SystemManagement as handlers::sm::SystemManagementReq<
             al::ApplicationLayer<ALS>,
@@ -423,37 +555,224 @@ impl<
         Ok(())
     }
 
-    fn sm_get_device_com_req(
-        &mut self,
-        application_layer: &al::ApplicationLayer<ALS>,
-    ) -> SmResult<()> {
+    /// Reads the current communication properties of the device according to the IO-Link SM_GetDeviceCom service.
+    ///
+    /// This method retrieves the configured communication parameters from System Management, as specified in the IO-Link protocol
+    /// (see Table 90 – SM_GetDeviceCom).
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if the service has been executed successfully and the communication parameters have been retrieved.
+    /// - `Err(SmError)` if the service failed, including error information such as state conflict.
+    ///
+    /// # Result Data
+    ///
+    /// On success, the following communication parameters are available:
+    /// - `CurrentMode`: Indicates the current SIO or Communication Mode (INACTIVE, DI, DO, COM1, COM2, COM3).
+    /// - `MasterCycleTime`: Contains the MasterCycleTime set by System Management (valid only in SM_Operate state).
+    /// - `M-sequence Capability`: Indicates the current M-sequence capabilities (ISDU support, OPERATE, PREOPERATE types).
+    /// - `RevisionID`: Current protocol revision.
+    /// - `ProcessDataIn`: Current length of process data to be sent to the Master.
+    /// - `ProcessDataOut`: Current length of process data to be sent by the Master.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service is unavailable within the current state (`STATE_CONFLICT`).
+    ///
+    /// # See Also
+    ///
+    /// - IO-Link Specification, Table 90 – SM_GetDeviceCom
+    pub fn sm_get_device_com_req(&mut self) -> SmResult<()> {
         <system_management::SystemManagement as handlers::sm::SystemManagementReq<
             al::ApplicationLayer<ALS>,
-        >>::sm_get_device_com_req(&mut self.system_management, application_layer)?;
+        >>::sm_get_device_com_req(&mut self.system_management, &self.application_layer)?;
         Ok(())
     }
 
-    fn sm_set_device_ident_req(&mut self, device_ident: &page1::DeviceIdent) -> SmResult<()> {
+    /// Sets the device identification parameters according to IO-Link SM_SetDeviceIdent service.
+    ///
+    /// This method configures the device's identification data as specified in the IO-Link protocol
+    /// (see Table 91 – SM_SetDeviceIdent).
+    ///
+    /// # Parameters
+    ///
+    /// * `device_ident` - Reference to the device identification configuration, including:
+    ///     - VendorID (`VID`): Vendor identifier assigned to the device (2 octets)
+    ///     - DeviceID (`DID`): Device identifier assigned to the device (3 octets)
+    ///     - FunctionID (`FID`): Function identifier assigned to the device (2 octets)
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if the service has been executed successfully.
+    /// - `Err(SmError)` if the service failed, including error information such as state conflict or parameter conflict.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service is unavailable within the current state (`STATE_CONFLICT`)
+    /// or if the consistency of the parameter set is violated (`PARAMETER_CONFLICT`).
+    ///
+    /// # See Also
+    ///
+    /// - IO-Link Specification, Table 91 – SM_SetDeviceIdent
+    pub fn sm_set_device_ident_req(&mut self, device_ident: &page1::DeviceIdent) -> SmResult<()> {
         <system_management::SystemManagement as handlers::sm::SystemManagementReq<
             al::ApplicationLayer<ALS>,
         >>::sm_set_device_ident_req(&mut self.system_management, device_ident)?;
         Ok(())
     }
 
-    fn sm_get_device_ident_req(
-        &mut self,
-        application_layer: &al::ApplicationLayer<ALS>,
-    ) -> SmResult<()> {
+    /// Reads the device identification parameters according to the IO-Link SM_GetDeviceIdent service.
+    ///
+    /// This method retrieves the configured identification parameters from System Management, as specified in the IO-Link protocol
+    /// (see Table 92 – SM_GetDeviceIdent).
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if the service has been executed successfully and the identification parameters have been retrieved.
+    /// - `Err(SmError)` if the service failed, including error information such as state conflict.
+    ///
+    /// # Result Data
+    ///
+    /// On success, the following identification parameters are available:
+    /// - `VendorID (VID)`: The actual VendorID of the device (2 octets).
+    /// - `DeviceID (DID)`: The actual DeviceID of the device (3 octets).
+    /// - `FunctionID (FID)`: The actual FunctionID of the device (2 octets).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service is unavailable within the current state (`STATE_CONFLICT`).
+    ///
+    /// # See Also
+    ///
+    /// - IO-Link Specification, Table 92 – SM_GetDeviceIdent
+    pub fn sm_get_device_ident_req(&mut self) -> SmResult<()> {
         <system_management::SystemManagement as handlers::sm::SystemManagementReq<
             al::ApplicationLayer<ALS>,
-        >>::sm_get_device_ident_req(&mut self.system_management, application_layer)?;
+        >>::sm_get_device_ident_req(&mut self.system_management, &self.application_layer)?;
         Ok(())
     }
 
-    fn sm_set_device_mode_req(&mut self, mode: DeviceMode) -> SmResult<()> {
+    /// Sets the device operational mode according to the IO-Link SM_SetDeviceMode service.
+    ///
+    /// This method sets the device into a defined operational state during initialization,
+    /// as specified in the IO-Link protocol (see Table 93 – SM_SetDeviceMode).
+    ///
+    /// # Parameters
+    ///
+    /// * `mode` - The desired device mode to set. Permitted values:
+    ///     - `DeviceMode::Idle`: Device changes to waiting for configuration.
+    ///     - `DeviceMode::Sio`: Device changes to the mode defined in the SM_SetDeviceCom service.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if the service has been executed successfully.
+    /// - `Err(SmError)` if the service failed, including error information such as state conflict.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service is unavailable within the current state (`STATE_CONFLICT`).
+    ///
+    /// # See Also
+    ///
+    /// - IO-Link Specification, Table 93 – SM_SetDeviceMode
+    pub fn sm_set_device_mode_req(&mut self, mode: DeviceMode) -> SmResult<()> {
         <system_management::SystemManagement as handlers::sm::SystemManagementReq<
             al::ApplicationLayer<ALS>,
         >>::sm_set_device_mode_req(&mut self.system_management, mode)?;
         Ok(())
     }
 }
+
+// impl<
+//     ALS: services::ApplicationLayerServicesInd
+//         + handlers::sm::SystemManagementCnf
+//         + services::AlEventCnf,
+//     PHY: pl::physical_layer::PhysicalLayerReq,
+// > handlers::sm::SystemManagementCnf for IoLinkDevice<PHY, ALS>
+// {
+//     /// Handles device communication setup confirmations.
+//     ///
+//     /// This method is called when the system management confirms
+//     /// device communication setup operations.
+//     ///
+//     /// # Parameters
+//     ///
+//     /// * `result` - Result of the communication setup operation
+//     ///
+//     /// # Returns
+//     ///
+//     /// - `Ok(())` if confirmation was processed successfully
+//     /// - `Err(SmError)` if an error occurred
+//     fn sm_set_device_com_cnf(
+//         &self,
+//         __result: handlers::sm::SmResult<()>,
+//     ) -> handlers::sm::SmResult<()> {
+//         todo!("Implement device communication setup confirmation");
+//     }
+
+//     /// Handles device communication get confirmations.
+//     ///
+//     /// This method is called when the system management confirms
+//     /// device communication get operations.
+//     ///
+//     /// # Parameters
+//     ///
+//     /// * `result` - Result containing device communication parameters
+//     ///
+//     /// # Returns
+//     ///
+//     /// - `Ok(())` if confirmation was processed successfully
+//     /// - `Err(SmError)` if an error occurred
+//     fn sm_get_device_com_cnf(
+//         &self,
+//         _result: handlers::sm::SmResult<&handlers::sm::DeviceCom>,
+//     ) -> handlers::sm::SmResult<()> {
+//         todo!("Implement device communication get confirmation");
+//     }
+
+//     /// Handles device identification setup confirmations.
+//     ///
+//     /// This method is called when the system management confirms
+//     /// device identification setup operations.
+//     ///
+//     /// # Parameters
+//     ///
+//     /// * `result` - Result of the identification setup operation
+//     ///
+//     /// # Returns
+//     ///
+//     /// - `Ok(())` if confirmation was processed successfully
+//     /// - `Err(SmError)` if an error occurred
+//     fn sm_set_device_ident_cnf(
+//         &self,
+//         _result: handlers::sm::SmResult<()>,
+//     ) -> handlers::sm::SmResult<()> {
+//         todo!("Implement device identification setup confirmation");
+//     }
+
+//     /// Handles device identification get confirmations.
+//     ///
+//     /// This method is called when the system management confirms
+//     /// device identification get operations.
+//     ///
+//     /// # Parameters
+//     ///
+//     /// * `result` - Result containing device identification parameters
+//     ///
+//     /// # Returns
+//     ///
+//     /// - `Ok(())` if confirmation was processed successfully
+//     /// - `Err(SmError)` if an error occurred
+//     fn sm_get_device_ident_cnf(
+//         &self,
+//         _result: handlers::sm::SmResult<&iolinke_types::page::page1::DeviceIdent>,
+//     ) -> handlers::sm::SmResult<()> {
+//         todo!("Implement device identification get confirmation");
+//     }
+//     fn sm_set_device_mode_cnf(
+//         &self,
+//         _result: handlers::sm::SmResult<()>,
+//     ) -> handlers::sm::SmResult<()> {
+
+//     }
+// }

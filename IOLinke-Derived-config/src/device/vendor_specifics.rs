@@ -1,6 +1,8 @@
 use iolinke_dev_config::device as dev_config;
 use iolinke_types::page::page1::RevisionId;
 
+pub use core::result::{Result, Result::{Ok, Err}};
+
 pub const fn revision_id_parameter() -> RevisionId {
     RevisionId::from_bits(dev_config::vendor_specifics::REVISION_ID)
 }

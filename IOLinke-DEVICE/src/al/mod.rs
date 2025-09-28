@@ -31,8 +31,9 @@ pub mod services;
 
 use heapless::Vec;
 use iolinke_types::custom::IoLinkResult;
-use iolinke_types::handlers::{self, pd};
+use iolinke_types::handlers;
 
+use core::result::Result::Ok;
 /// Application Layer Read/Write Interface for parameter access.
 ///
 /// This trait defines the interface that the data link layer uses to
@@ -197,7 +198,11 @@ pub trait ApplicationLayerEventInd {
 /// The application layer maintains its own state and coordinates with
 /// the data link layer and system management to ensure proper protocol
 /// operation according to the IO-Link specification.
-pub struct ApplicationLayer<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> {
+pub struct ApplicationLayer<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> {
     /// Handles device events and reporting to the master
     event_handler: event_handler::EventHandler,
     /// Handles on-request data operations (parameter read/write)
@@ -212,7 +217,12 @@ pub struct ApplicationLayer<ALS: services::ApplicationLayerServicesInd + service
     pde: pd_handler::ProcessDataHandler,
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> ApplicationLayer<ALS> {
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> ApplicationLayer<ALS>
+{
     /// Polls all application layer components to advance their state.
     ///
     /// This method must be called regularly to:
@@ -249,8 +259,11 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> Applicat
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> services::AlSetInputReq
-    for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> services::AlSetInputReq for ApplicationLayer<ALS>
 {
     fn al_set_input_req(
         &mut self,
@@ -261,8 +274,11 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> services
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> services::AlEventReq
-    for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> services::AlEventReq for ApplicationLayer<ALS>
 {
     /// Handles event requests from the application layer services.
     ///
@@ -287,8 +303,11 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> services
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
-    handlers::sm::SystemManagementInd for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> handlers::sm::SystemManagementInd for ApplicationLayer<ALS>
 {
     /// Handles device mode change notifications from system management.
     ///
@@ -310,8 +329,11 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
-    handlers::sm::SystemManagementCnf for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> handlers::sm::SystemManagementCnf for ApplicationLayer<ALS>
 {
     /// Handles device communication setup confirmations.
     ///
@@ -328,9 +350,9 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
     /// - `Err(SmError)` if an error occurred
     fn sm_set_device_com_cnf(
         &self,
-        __result: handlers::sm::SmResult<()>,
+        result: handlers::sm::SmResult<()>,
     ) -> handlers::sm::SmResult<()> {
-        todo!("Implement device communication setup confirmation");
+        self.services.sm_set_device_com_cnf(result)
     }
 
     /// Handles device communication get confirmations.
@@ -348,9 +370,9 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
     /// - `Err(SmError)` if an error occurred
     fn sm_get_device_com_cnf(
         &self,
-        _result: handlers::sm::SmResult<&handlers::sm::DeviceCom>,
+        result: handlers::sm::SmResult<&handlers::sm::DeviceCom>,
     ) -> handlers::sm::SmResult<()> {
-        todo!("Implement device communication get confirmation");
+        self.services.sm_get_device_com_cnf(result)
     }
 
     /// Handles device identification setup confirmations.
@@ -368,9 +390,9 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
     /// - `Err(SmError)` if an error occurred
     fn sm_set_device_ident_cnf(
         &self,
-        _result: handlers::sm::SmResult<()>,
+        result: handlers::sm::SmResult<()>,
     ) -> handlers::sm::SmResult<()> {
-        todo!("Implement device identification setup confirmation");
+        self.services.sm_set_device_ident_cnf(result)
     }
 
     /// Handles device identification get confirmations.
@@ -388,52 +410,67 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>
     /// - `Err(SmError)` if an error occurred
     fn sm_get_device_ident_cnf(
         &self,
-        _result: handlers::sm::SmResult<&iolinke_types::page::page1::DeviceIdent>,
+        result: handlers::sm::SmResult<&iolinke_types::page::page1::DeviceIdent>,
     ) -> handlers::sm::SmResult<()> {
-        todo!("Implement device identification get confirmation");
+        self.services.sm_get_device_ident_cnf(result)
     }
     fn sm_set_device_mode_cnf(
         &self,
-        _result: handlers::sm::SmResult<()>,
+        result: handlers::sm::SmResult<()>,
     ) -> handlers::sm::SmResult<()> {
-        todo!()
+        self.services.sm_set_device_mode_cnf(result)
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlIsduAbort
-    for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> dl::DlIsduAbort for ApplicationLayer<ALS>
 {
     fn dl_isdu_abort(&mut self) -> IoLinkResult<()> {
         self.od_handler.dl_isdu_abort()
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlIsduTransportInd
-    for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> dl::DlIsduTransportInd for ApplicationLayer<ALS>
 {
     fn dl_isdu_transport_ind(&mut self, isdu: dl::IsduMessage) -> IoLinkResult<()> {
         self.od_handler.dl_isdu_transport_ind(isdu)
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlReadParamInd
-    for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> dl::DlReadParamInd for ApplicationLayer<ALS>
 {
     fn dl_read_param_ind(&mut self, address: u8) -> IoLinkResult<()> {
         self.od_handler.dl_read_param_ind(address)
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlWriteParamInd
-    for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> dl::DlWriteParamInd for ApplicationLayer<ALS>
 {
     fn dl_write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()> {
         self.od_handler.dl_write_param_ind(index, data)
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlControlInd
-    for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> dl::DlControlInd for ApplicationLayer<ALS>
 {
     fn dl_control_ind(
         &mut self,
@@ -443,7 +480,12 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlCo
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> ApplicationLayer<ALS> {
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> ApplicationLayer<ALS>
+{
     pub fn new(al_services: ALS) -> Self {
         Self {
             event_handler: event_handler::EventHandler::new(),
@@ -456,8 +498,11 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> Applicat
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> ApplicationLayerReadWriteInd
-    for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> ApplicationLayerReadWriteInd for ApplicationLayer<ALS>
 {
     fn al_read_ind(&mut self, index: u16, sub_index: u8) -> IoLinkResult<()> {
         self.parameter_manager.al_read_ind(index, sub_index)
@@ -472,8 +517,11 @@ impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> Applicat
     }
 }
 
-impl<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf> dl::DlPDOutputTransportInd
-    for ApplicationLayer<ALS>
+impl<
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> dl::DlPDOutputTransportInd for ApplicationLayer<ALS>
 {
     fn dl_pd_output_transport_ind(
         &mut self,
