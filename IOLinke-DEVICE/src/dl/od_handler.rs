@@ -12,6 +12,10 @@ use iolinke_types::{
 };
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
+use core::result::Result::{Ok, Err};
+use core::default::Default;
+use core::clone::Clone;
+
 use crate::services;
 use crate::{
     al,
@@ -117,7 +121,11 @@ impl OnRequestDataHandler {
 
     /// Poll the process data handler
     /// See IO-Link v1.1.4 Section 7.2
-    pub fn poll<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    pub fn poll<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         command_handler: &mut command_handler::CommandHandler,
         isdu_handler: &mut isdu_handler::IsduHandler,
@@ -186,7 +194,11 @@ impl OnRequestDataHandler {
 
     /// Handle transition T2: Idle (1) -> Idle (1)
     /// Action: Provide data content of requested parameter or perform appropriate write action
-    fn execute_t2<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t2<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &self,
         od_ind_data: &OdIndData,
         command_handler: &mut command_handler::CommandHandler,
@@ -215,7 +227,11 @@ impl OnRequestDataHandler {
 
     /// Handle transition T3: Idle (1) -> Idle (1)
     /// Action: Redirect to command handler
-    fn execute_t3<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t3<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &self,
         od_ind_data: &OdIndData,
         command_handler: &mut command_handler::CommandHandler,

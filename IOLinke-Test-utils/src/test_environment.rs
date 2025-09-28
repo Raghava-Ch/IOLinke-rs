@@ -1,10 +1,13 @@
 //! Test environment setup and device management utilities
 use iolinke_device::IoLinkDevice;
 use iolinke_types::custom::IoLinkError;
-use std::io;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+use core::result::{Result, Result::Ok, Result::Err};
+use std::boxed::Box;
+use std::vec::Vec;
 
 use crate::mock_physical_layer::{self, MockPhysicalLayer};
 
@@ -15,7 +18,7 @@ use super::types::ThreadMessage;
 pub fn take_care_of_poll(
     io_link_device: Arc<Mutex<IoLinkDevice<MockPhysicalLayer, MockApplicationLayer>>>,
     usr_to_mock_rx: Receiver<ThreadMessage>,
-    mock_to_usr_tx: Sender<ThreadMessage>,
+    _mock_to_usr_tx: Sender<ThreadMessage>,
 ) {
     // Main device loop
     std::thread::spawn(move || {
@@ -118,7 +121,7 @@ pub fn setup_test_environment() -> (Sender<ThreadMessage>, Receiver<ThreadMessag
     let _ = io_link_device
         .lock()
         .unwrap()
-        .al_pd_input_update_req(3, &[0x01, 0x02, 0x03]);
+        .al_set_input_req(3, &[0x01, 0x02, 0x03]);
     // Start the polling thread
     let io_link_device_clone_poll = Arc::clone(&io_link_device);
     take_care_of_poll(io_link_device_clone_poll, poll_rx, poll_response_tx);

@@ -3,15 +3,15 @@
 use crate::mock_app_layer::MockApplicationLayer;
 
 use super::types::ThreadMessage;
-use iolinke_device::{AlEventCnf, ApplicationLayerServicesInd};
-use iolinke_device::{
-    DlControlCode, DlControlInd, IoLinkDevice, PhysicalLayerInd, PhysicalLayerReq, Timer,
-};
+use iolinke_device::{IoLinkDevice, PhysicalLayerReq, Timer};
 use iolinke_types::custom::IoLinkResult;
 use iolinke_types::handlers::sm::IoLinkMode;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+use core::result::Result::Ok;
+use std::vec::Vec;
 
 /// Mock timer state for tracking timer expiration
 pub struct MockTimerState {
@@ -135,17 +135,17 @@ impl PhysicalLayerReq for MockPhysicalLayer {
         Ok(())
     }
 
-    fn pl_transfer_req(&mut self, tx_data: &[u8]) -> IoLinkResult<usize> {
+    fn pl_transfer_req(&mut self, tx_data: &[u8]) -> IoLinkResult<()> {
         self.tx_data.clear();
         self.tx_data.extend_from_slice(tx_data);
         self.mock_to_usr_tx
             .send(ThreadMessage::TxData(self.tx_data.clone()))
             .unwrap();
-        let tx_data_len = tx_data.len();
-        Ok(tx_data_len)
+        let _tx_data_len = tx_data.len();
+        Ok(())
     }
 
-    fn stop_timer(&self, timer: Timer) -> IoLinkResult<()> {
+    fn pl_stop_timer_req(&self, timer: Timer) -> IoLinkResult<()> {
         let mut timers = self.timers.lock().unwrap();
         for timer_state in timers.iter_mut() {
             if timer_state.timer_id == timer {
@@ -156,14 +156,14 @@ impl PhysicalLayerReq for MockPhysicalLayer {
         Ok(())
     }
 
-    fn start_timer(&self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+    fn pl_start_timer_req(&self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
         let mut timers = self.timers.lock().unwrap();
         let timer_state = MockTimerState::new(timer, duration_us);
         timers.push(timer_state);
         Ok(())
     }
 
-    fn restart_timer(&self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
+    fn pl_restart_timer_req(&self, timer: Timer, duration_us: u32) -> IoLinkResult<()> {
         let mut timers = self.timers.lock().unwrap();
         for timer_state in timers.iter_mut() {
             if timer_state.timer_id == timer {

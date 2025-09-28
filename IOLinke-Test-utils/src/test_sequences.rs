@@ -1,6 +1,12 @@
 //! Test sequences for IO-Link device testing
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
+use std::vec::Vec;
+
+use core::result::{Result, Result::Ok, Result::Err};
+use core::option::Option;
+use std::boxed::Box;
+
 
 use iolinke_derived_config::device as derived_config;
 use iolinke_device::{CycleTime, MsequenceCapability, ProcessDataIn, ProcessDataOut, RevisionId};

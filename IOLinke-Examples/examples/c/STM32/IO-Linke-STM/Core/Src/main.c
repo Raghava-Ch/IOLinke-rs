@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "iolinke_device.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -100,7 +100,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  iolinke_device_handle_t iolinke_device = io_linke_device_create();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -108,7 +108,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    iolinke_device_poll(iolinke_device);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

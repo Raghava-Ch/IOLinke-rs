@@ -34,6 +34,9 @@
 
 use iolinke_macros::declare_parameter_storage;
 
+use core::result::{Result, Result::{Ok, Err}};
+use core::option::{Option, Option::{Some, None}};
+
 /// Custom data type example for demonstration.
 ///
 /// This struct shows how custom types can be used with the parameter

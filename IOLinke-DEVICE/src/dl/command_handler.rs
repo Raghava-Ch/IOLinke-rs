@@ -17,6 +17,10 @@ use crate::{
     dl::{message_handler, mode_handler},
 };
 
+use core::result::Result::{Ok, Err};
+use core::default::Default;
+use core::convert::TryInto;
+
 /// See 7.3.7.3 State machine of the Device command handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CommandHandlerState {
@@ -133,7 +137,11 @@ impl CommandHandler {
     }
 
     /// Poll the handler
-    pub fn poll<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    pub fn poll<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         message_handler: &mut message_handler::MessageHandler,
         application_layer: &mut al::ApplicationLayer<ALS>,
@@ -179,7 +187,11 @@ impl CommandHandler {
     }
 
     /// Execute transition T2: Idle -> Idle (PDOUT commands)
-    fn execute_t2<ALS: services::ApplicationLayerServicesInd + services::AlEventCnf>(
+    fn execute_t2<
+        ALS: services::ApplicationLayerServicesInd
+            + handlers::sm::SystemManagementCnf
+            + services::AlEventCnf,
+    >(
         &mut self,
         master_command: page1::MasterCommand,
         application_layer: &mut al::ApplicationLayer<ALS>,

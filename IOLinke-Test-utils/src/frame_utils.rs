@@ -1,11 +1,11 @@
 //! Frame format utilities for testing IO-Link device communication
 
 use iolinke_derived_config::device as derived_config;
+use iolinke_device::IoLinkDevice;
 use iolinke_device::{
     CycleTime, DeviceCom, DeviceIdent, DeviceMode, MsequenceCapability, ProcessDataIn,
     ProcessDataOut, RevisionId, SioMode, TransmissionRate,
 };
-use iolinke_device::{IoLinkDevice, PhysicalLayerInd, SystemManagementReq};
 use iolinke_types::frame::isdu::IsduFlowCtrl;
 use iolinke_types::frame::msequence::{
     ChecksumMsequenceType, ChecksumMsequenceTypeBuilder, ChecksumStatus, ComChannel,
@@ -13,6 +13,7 @@ use iolinke_types::frame::msequence::{
 };
 use iolinke_util::frame_fromat::message::calculate_checksum_for_testing;
 use std::sync::{Arc, Mutex};
+use std::vec::Vec;
 
 use crate::MockPhysicalLayer;
 use crate::mock_app_layer::MockApplicationLayer;
@@ -115,8 +116,6 @@ pub fn perform_startup_sequence(
     let mut io_link_device_lock = io_link_device.lock().unwrap();
     let _ = io_link_device_lock.successful_com(TransmissionRate::Com3);
     std::thread::sleep(std::time::Duration::from_millis(1));
-
-;
 }
 
 /// Creates a read request message for testing
@@ -592,7 +591,7 @@ pub fn create_op_write_request(address: u8, data: &[u8]) -> Vec<u8> {
     rx_buffer.push(mc_bits);
     rx_buffer.push(ckt_bits);
 
-    for index in 0..PD_LENGTH_BYTES as usize {
+    for _index in 0..PD_LENGTH_BYTES as usize {
         rx_buffer.push(99); // Add the data to write
     }
 

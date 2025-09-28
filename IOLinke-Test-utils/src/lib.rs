@@ -1,3 +1,4 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 //! Test utilities for IO-Link device stack testing
 //!
 //! This module provides utilities and mock implementations for testing

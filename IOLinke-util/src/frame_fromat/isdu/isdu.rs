@@ -4,7 +4,10 @@ use iolinke_types::{
     frame::isdu::{IsduIServiceCode, IsduLengthCode, IsduService},
     handlers::isdu::MAX_ISDU_LENGTH,
 };
-use std::ops::{Index, IndexMut, Range};
+use core::ops::{Index, IndexMut, Range};
+
+use core::result::{Result, Result::{Ok, Err}};
+use core::option::{Option, Option::{Some, None}};
 
 pub enum IsduMessageBufferError {
     NotEnoughMemory,
@@ -24,11 +27,13 @@ pub enum IsduMessageBufferError {
 
 pub type IsduMessageBufferResult<T> = Result<T, IsduMessageBufferError>;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TxIsduMessageBuffer {
     tx_buffer: Vec<u8, MAX_ISDU_LENGTH>,
     tx_buffer_ready: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RxIsduMessageBuffer {
     rx_buffer: Vec<u8, MAX_ISDU_LENGTH>,
     rx_buffer_ready: bool,

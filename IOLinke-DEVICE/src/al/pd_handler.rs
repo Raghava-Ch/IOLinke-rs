@@ -8,6 +8,9 @@ use heapless::Vec;
 use iolinke_types::custom::IoLinkResult;
 use iolinke_types::handlers::pd::DlPDInputUpdate;
 
+use core::result::Result::Ok;
+use core::default::Default;
+
 pub struct ProcessDataHandler {}
 
 impl ProcessDataHandler {

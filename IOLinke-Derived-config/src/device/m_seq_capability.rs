@@ -36,6 +36,8 @@ pub mod pre_operate_m_sequence {
     use iolinke_dev_config::device as dev_config;
     use iolinke_types as types;
 
+    pub use core::result::{Result, Result::{Ok, Err}};
+
     /// M-sequence types for the PREOPERATE mode as per IO-Link Specification (v1.1.4, Table A.8).
     ///
     /// The following table describes valid M-sequence types, expected on-request data length (in octets),
@@ -110,6 +112,8 @@ pub mod pre_operate_m_sequence {
 pub mod operate_m_sequence {
     use iolinke_dev_config::device as dev_config;
     use iolinke_types as types;
+    
+    pub use core::result::{Result, Result::{Ok, Err}};
 
     /// Returns whether the device is configured to use interleaved mode for M-sequences, when device is in legacy mode.
     // #[cfg(feature = "legacy_device")]

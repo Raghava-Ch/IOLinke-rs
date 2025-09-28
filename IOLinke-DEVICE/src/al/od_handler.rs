@@ -8,6 +8,9 @@ use iolinke_types::handlers;
 use iolinke_types::handlers::isdu::DlIsduTransportRsp;
 use iolinke_types::handlers::od::DlParamRsp;
 
+use core::result::Result::{Ok, Err};
+use core::default::Default;
+
 use crate::al::ApplicationLayerReadWriteInd;
 use crate::{
     al::{parameter_manager, services},
@@ -28,7 +31,7 @@ enum OnRequestDataHandlerState {
 }
 
 /// See Table 75 – States and transitions for the OD state machine of the Device AL
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum Transition {
     /// Tn: No transition
     Tn,
@@ -91,6 +94,7 @@ enum OnRequestHandlerEvent {
 }
 
 /// On-request Data Handler implementation
+#[derive(Debug, Clone)]
 pub struct OnRequestDataHandler {
     state: OnRequestDataHandlerState,
     exec_transition: Transition,
@@ -112,7 +116,7 @@ impl OnRequestDataHandler {
         use OnRequestDataHandlerState as State;
         use OnRequestHandlerEvent as Event;
 
-        let (new_transition, new_state) = match (self.state, event) {
+        let (new_transition, new_state) = match (self.state.clone(), event) {
             // Valid transitions according to Table 75
             (State::Idle, Event::AlAbort) => (Transition::T11, State::Idle),
             (State::Idle, Event::DlWriteParamInd(index, data)) => {

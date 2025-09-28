@@ -15,4 +15,5 @@ description.workspace = true
 [dependencies]
 
 [features]
+default = []
 std = []

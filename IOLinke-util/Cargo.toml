@@ -10,6 +10,10 @@ keywords.workspace = true
 categories.workspace = true
 description.workspace = true
 
+[features]
+default = []
+std = []
+
 [lib]
 
 [dependencies]
@@ -18,8 +22,3 @@ iolinke-derived-config = { workspace = true }
 
 heapless = { workspace = true }
 bitfields = { workspace = true }
-
-[features]
-default = ["std", "log"]
-std = []
-log = []

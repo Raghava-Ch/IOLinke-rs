@@ -20,8 +20,12 @@
 
 use iolinke_types::{
     custom::{IoLinkError, IoLinkResult},
-    handlers::sm::IoLinkMode,
+    handlers::{self, sm::IoLinkMode},
 };
+
+use core::result::{Result, Result::{Ok, Err}};
+use core::option::{Option, Option::{Some, None}};
+
 // use embedded_hal::digital::{InputPin, OutputPin};
 
 /// Physical Layer Interface for low-level UART/PHY access.
@@ -143,63 +147,6 @@ pub trait PhysicalLayerInd<PHY: PhysicalLayerReq> {
 //     fn read_cq(&self) -> IoLinkResult<bool>;
 // }
 
-/// Protocol timer identifiers as defined in the IO-Link specification.
-///
-/// These timers are used to implement the various timing requirements
-/// specified in the IO-Link protocol.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Table 42: Wake-up procedure and retry characteristics
-/// - Annex A.3.7: Cycle time
-/// - Table 47: Internal items
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Timer {
-    /// Tdsio - SIO mode timing (see Table 42)
-    Tdsio,
-    /// MaxCycleTime - Maximum cycle time (see Annex A.3.7)
-    MaxCycleTime,
-    /// MaxUARTFrameTime - Maximum UART frame time (see Table 47)
-    MaxUARTFrameTime,
-    /// MaxUARTframeTime - Alternative naming for maximum UART frame time
-    MaxUARTframeTime,
-}
-
-/// Page access error types for direct parameter operations.
-///
-/// These error types are used when accessing direct parameter pages
-/// as defined in Annex B of the IO-Link specification.
-///
-/// # Specification Reference
-///
-/// - IO-Link v1.1.4 Annex B: Parameter and Commands
-/// - Section B.1: Direct Parameter Page 1 and 2
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PageError {
-    /// Page operation not supported by the device
-    NotSupported,
-    /// Invalid address or length specified
-    InvalidAddrOrLen,
-    /// Reserved address range (see Annex B)
-    Reserved(u8),
-    /// Invalid data format or content
-    InvalidData,
-    /// Attempted write to read-only parameter
-    ReadOnly(u8),
-    /// Attempted read from write-only parameter
-    WriteOnly(u8),
-    /// Error during read operation
-    ReadError,
-    /// Error during write operation
-    WriteError,
-}
-
-/// Result type for page operations.
-///
-/// This type alias provides a convenient way to handle page operation
-/// results with the appropriate error type.
-pub type PageResult<T> = Result<T, PageError>;
-
 /// Timer abstraction for protocol timing requirements.
 ///
 /// This trait provides a hardware-independent interface for managing
@@ -223,7 +170,7 @@ pub trait IoLinkTimer {
     /// # Returns
     ///
     /// `true` if the timer has expired, `false` otherwise.
-    fn timer_elapsed(&mut self, timer: Timer) -> IoLinkResult<()> {
+    fn timer_elapsed(&mut self, timer: handlers::pl::Timer) -> IoLinkResult<()> {
         let _ = timer;
         Err(IoLinkError::NoImplFound)
     }
@@ -386,7 +333,7 @@ pub trait PhysicalLayerReq {
     ///
     /// This is a placeholder implementation that should be replaced
     /// with actual hardware-specific code.
-    fn pl_transfer_req(&mut self, tx_data: &[u8]) -> IoLinkResult<usize> {
+    fn pl_transfer_req(&mut self, tx_data: &[u8]) -> IoLinkResult<()> {
         let _ = tx_data; // Placeholder for actual implementation
         Err(IoLinkError::NoImplFound)
     }
@@ -407,8 +354,10 @@ pub trait PhysicalLayerReq {
     /// # Note
     ///
     /// This method needs to be implemented with actual timer hardware.
-    fn stop_timer(&self, _timer: Timer) -> IoLinkResult<()> {
-        todo!("Implement timer stop logic");
+    fn pl_stop_timer_req(&self, _timer: handlers::pl::Timer) -> IoLinkResult<()> {
+        // TODO: "Implement timer stop logic");
+
+        Ok(())
     }
 
     /// Starts the specified timer with the given duration.
@@ -429,8 +378,13 @@ pub trait PhysicalLayerReq {
     /// # Note
     ///
     /// This method needs to be implemented with actual timer hardware.
-    fn start_timer(&self, _timer: Timer, _duration_us: u32) -> IoLinkResult<()> {
-        todo!("Implement timer start logic");
+    fn pl_start_timer_req(
+        &self,
+        _timer: handlers::pl::Timer,
+        _duration_us: u32,
+    ) -> IoLinkResult<()> {
+        // TODO: "Implement timer start logic");
+        Ok(())
     }
 
     /// Restarts the specified timer with the given duration.
@@ -451,7 +405,13 @@ pub trait PhysicalLayerReq {
     /// # Note
     ///
     /// This method needs to be implemented with actual timer hardware.
-    fn restart_timer(&self, _timer: Timer, _duration_us: u32) -> IoLinkResult<()> {
-        todo!("Implement timer restart logic");
+    fn pl_restart_timer_req(
+        &self,
+        _timer: handlers::pl::Timer,
+        _duration_us: u32,
+    ) -> IoLinkResult<()> {
+        // TODO: "Implement timer restart logic");
+
+        Ok(())
     }
 }

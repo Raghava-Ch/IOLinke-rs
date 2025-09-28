@@ -1,5 +1,7 @@
 use crate::custom::IoLinkError;
 use bitfields::bitfield;
+use core::convert::From;
+use core::result::Result::Ok;
 
 /// All the master commands used in IO-Link
 /// See Table B.1.2 – Types of MasterCommands
@@ -52,11 +54,11 @@ impl TryFrom<u8> for MasterCommand {
 /// The Cycle Time parameter is encoded as a single byte, which informs the IO-Link Master about the minimum supported cycle time of the device.
 ///
 /// ## Bit Layout
-///
+/// ```text
 /// | Bits 7-6   | Bits 5-0         |
 /// |------------|------------------|
 /// | Time Base  | Multiplier (M)   |
-///
+/// ```
 /// - **Bits 7-6 (`time_base`)**: Encodes the time base unit for the cycle time.
 ///     - `0b00` = 0.1 ms
 ///     - `0b01` = 0.4 ms
@@ -289,7 +291,8 @@ pub struct ProcessDataOut {
 ///
 /// - IO-Link v1.1.4 Section 7.3.4.1: Device Identification
 /// - Annex B.1: Direct Parameter Page 1 (VendorID1, VendorID2, DeviceID1-3)
-#[derive(Clone, Debug, Default)]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct DeviceIdent {
     /// Vendor ID (VID) - 16-bit vendor identification
     pub vendor_id: [u8; 2],

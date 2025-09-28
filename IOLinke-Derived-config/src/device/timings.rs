@@ -22,30 +22,7 @@
 ///
 
 pub mod min_cycle_time {
-    /// Returns the configured minimum cycle time in milliseconds.
-    ///
-    /// # Specification Reference
-    /// - IO-Link v1.1.4, Section B.1.3, Table B.3
-    ///
-    /// # Valid Ranges
-    /// - 0.4 ..= 6.3 ms (Time Base 0, Multiplier 4..=63)
-    /// - 6.4 ..= 31.6 ms (Time Base 1, Multiplier 0..=63)
-    /// - 32.0 ..= 132.8 ms (Time Base 2, Multiplier 0..=63)
-    ///
-    /// # Panics
-    /// Panics if the configured value is outside the valid ranges.
-    const fn time_in_ms() -> f32 {
-        let time_in_ms = /*CONFIG:MIN_CYCLE_TIME_IN_MS*/ 33f32 /*ENDCONFIG*/;
-        let valid = (time_in_ms >= 0.4 && time_in_ms <= 6.3)
-            || (time_in_ms >= 6.4 && time_in_ms <= 31.6)
-            || (time_in_ms >= 32.0 && time_in_ms <= 132.8);
-        if !valid {
-            panic!(
-                "Invalid min cycle time configuration in ms. Valid ranges: 0.4–6.3, 6.4–31.6, 32.0–132.8 ms (see IO-Link Spec Table B.3)"
-            );
-        }
-        time_in_ms
-    }
+    use iolinke_dev_config::device as dev_config;
 
     /// Returns the encoded time base for the configured MinCycleTime.
     ///
@@ -57,7 +34,7 @@ pub mod min_cycle_time {
     /// # Panics
     /// Panics if the configured value is outside the valid ranges.
     const fn time_base() -> u8 {
-        match time_in_ms() {
+        match dev_config::timings::time_in_ms() {
             (0.4..=6.3) => 0b00u8,
             (6.4..=31.6) => 0b01u8,
             (32.0..=132.8) => 0b10u8,
@@ -72,7 +49,7 @@ pub mod min_cycle_time {
     /// # Returns
     /// - For 0.4–6.3 ms: `multiplier = round(time_in_ms / 0.1)`
     const fn multiplier() -> u8 {
-        let multiplier = match time_in_ms() {
+        let multiplier = match dev_config::timings::time_in_ms() {
             t if t >= 0.4 && t <= 6.3 => {
                 let m = (t / 0.1 + 0.5) as u8;
                 if m > 63 {

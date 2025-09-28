@@ -1,6 +1,9 @@
 use bitfields::bitfield;
 use iolinke_macros::bitfield_support;
 
+use core::result::{Result, Result::{Ok, Err}};
+use core::option::{Option, Option::{Some, None}};
+
 /// # ISDU I-Service Octet Structure
 ///
 /// This struct represents the I-Service octet as defined in IO-Link Specification v1.1.4,

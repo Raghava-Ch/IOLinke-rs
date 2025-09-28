@@ -1,3 +1,5 @@
+use core::panic;
+
 /// Represents the process data length for IO-Link devices, as specified in IO-Link Specification v1.1.4, Section B.1.6.
 ///
 /// This enum encodes whether the process data length is specified in bits or octets (bytes),
