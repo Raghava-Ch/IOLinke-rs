@@ -108,8 +108,9 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    iolinke_device_poll(iolinke_device);
+
     /* USER CODE BEGIN 3 */
+    iolinke_device_poll(iolinke_device);
   }
   /* USER CODE END 3 */
 }
