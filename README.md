@@ -84,10 +84,8 @@ cargo test --example basic_device --features="panic-halt"
 
 ## License
 
-Licensed under either of:
+Licensed under:
 - GPL-3.0
-
-at your option.
 
 ## Contributing
 
