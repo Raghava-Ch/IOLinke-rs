@@ -1,3 +1,22 @@
+//! This module provides the definition and handling of the `IoLinkError` type.
+//!
+//! The `IoLinkError` is used throughout the crate to represent errors that can occur
+//! during IO-Link communication and processing. It encapsulates various error conditions
+//! specific to IO-Link operations, allowing for robust error reporting and handling.
+//!
+//! # Usage
+//! Import and use `IoLinkError` to handle errors in IO-Link frame and sequence processing.
+//!
+//! # Examples
+//! ```rust
+//! use crate::custom::IoLinkError;
+//!
+//! fn process_frame() -> Result<(), IoLinkError> {
+//!     // ... frame processing logic ...
+//!     Ok(())
+//! }
+//! ```
+
 use crate::custom::IoLinkError;
 use bitfields::bitfield;
 use iolinke_macros::bitfield_support;
@@ -71,12 +90,12 @@ pub struct MsequenceControl {
 /// The octet is structured as follows:
 ///
 /// ```text
-///  Bit 7   | Bit 6   | Bits 5-0
-/// +--------+---------+----------------------+
-/// | M-seq  | M-seq   |     Checksum         |
-/// | type   | type    |   (6 bits)           |
-/// +--------+---------+----------------------+
-/// |<--2--->|<--------6--------------------->|
+///  Bit 7   | Bit 6  | Bits 5-0
+/// +--------+--------+----------------------+
+/// |      M-seq      |     Checksum         |
+/// |      type       |   (6 bits)           |
+/// +-----------------+----------------------+
+/// |<-------2------->|<--------6----------->|
 /// ```
 ///
 /// - **Bits 0 to 5: Checksum**
@@ -242,6 +261,7 @@ pub enum ComChannel {
 }
 
 impl ComChannel {
+    /// Create a new ComChannel enum variant
     pub const fn new() -> Self {
         Self::Process
     }

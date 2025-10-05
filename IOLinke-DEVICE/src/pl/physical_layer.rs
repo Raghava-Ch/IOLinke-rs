@@ -23,8 +23,7 @@ use iolinke_types::{
     handlers::{self, sm::IoLinkMode},
 };
 
-use core::result::{Result, Result::{Ok, Err}};
-use core::option::{Option, Option::{Some, None}};
+use core::result::Result::{Err, Ok};
 
 // use embedded_hal::digital::{InputPin, OutputPin};
 
@@ -283,6 +282,7 @@ pub trait _IoLinkUart {
     fn set_enabled(&mut self, enabled: bool) -> IoLinkResult<()>;
 }
 
+/// Physical Layer Request interface for low-level operations.
 pub trait PhysicalLayerReq {
     /// Sets the communication mode for the physical layer.
     ///

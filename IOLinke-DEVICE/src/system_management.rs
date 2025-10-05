@@ -32,10 +32,10 @@ use iolinke_types::handlers::sm::{
 use iolinke_types::page::page1::{DeviceIdent, RevisionId};
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
-use core::result::Result::{Ok, Err};
-use core::option::Option::Some;
-use core::default::Default;
 use core::clone::Clone;
+use core::default::Default;
+use core::option::Option::Some;
+use core::result::Result::{Err, Ok};
 
 use crate::services;
 use crate::{al, pl};

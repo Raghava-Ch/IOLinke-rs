@@ -65,7 +65,7 @@ fn test_read_isdu_read_vendor_name() {
 
     if m_sequence_capability.isdu() {
         // Vendor Name index 0x10, subindex 0x00
-        const VENDOR_NAME: &'static str = derived_config::vendor_specifics::vendor_name();
+        const VENDOR_NAME: &'static str = derived_config::vendor_specifics::VENDOR_NAME;
         const VENDOR_NAME_LENGTH: u8 = VENDOR_NAME.len() as u8;
         let vendor_name = read_vendor_name(&poll_tx, &poll_response_rx);
         assert!(vendor_name.as_ref().is_ok(), "Test isdu sequence failed");
@@ -118,7 +118,7 @@ fn test_write_data_storage_index_and_read_back() {
 
     if m_sequence_capability.isdu() {
         // Vendor Name index 0x10, subindex 0x00
-        const VENDOR_NAME: &'static str = derived_config::vendor_specifics::vendor_name();
+        const VENDOR_NAME: &'static str = derived_config::vendor_specifics::VENDOR_NAME;
         const VENDOR_NAME_LENGTH: u8 = VENDOR_NAME.len() as u8;
         let vendor_name = read_vendor_name(&poll_tx, &poll_response_rx);
         assert!(vendor_name.as_ref().is_ok(), "Test isdu sequence failed");
@@ -146,7 +146,7 @@ fn test_write_data_storage_index_and_read_back() {
 
     if m_sequence_capability.isdu() {
         // Vendor Name index 0x10, subindex 0x00
-        const VENDOR_NAME: &'static str = derived_config::vendor_specifics::vendor_name();
+        const VENDOR_NAME: &'static str = derived_config::vendor_specifics::VENDOR_NAME;
         const VENDOR_NAME_LENGTH: u8 = VENDOR_NAME.len() as u8;
         let vendor_name = read_vendor_name(&poll_tx, &poll_response_rx);
         assert!(vendor_name.as_ref().is_ok(), "Test isdu sequence failed");

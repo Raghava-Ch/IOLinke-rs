@@ -1,8 +1,56 @@
+//! # ISDU Frame Types for IO-Link Communication
+//!
+//! This module provides types and utilities for working with ISDU (Index-based Service Data Unit)
+//! frames as defined in the IO-Link Specification v1.1.4. It includes representations for the
+//! I-Service octet, I-Service codes, ISDU length codes, and flow control values used in ISDU
+//! communication between IO-Link Master and Device.
+//!
+//! ## Contents
+//! - [`IsduService`]: Bitfield struct representing the I-Service octet, which encodes both the
+//!   I-Service type and the ISDU length.
+//! - [`IsduIServiceCode`]: Enum of all valid I-Service codes (nibble values) as per Table A.16 and
+//!   Table A.18 of the specification.
+//! - [`IsduLengthCode`]: Enum for ISDU length codes as defined in Table A.17.
+//! - [`IsduFlowCtrl`]: Enum for ISDU flow control values, including sequence counters, start, idle,
+//!   reserved, and abort states.
+//!
+//! ## Specification References
+//! - IO-Link Specification v1.1.4, Section A.5.2
+//!   - Figure A.16: I-Service Octet Structure
+//!   - Table A.16: Definitions of the nibble "I-Service"
+//!   - Table A.17: ISDU length codes
+//!   - Table A.18: ISDU syntax
+//!
+//! ## Usage
+//! Use these types to encode, decode, and interpret ISDU frames for IO-Link protocol
+//! implementations. The bitfield and enum representations ensure type safety and adherence to
+//! protocol requirements.
+//!
+//! ## Example
+//! ```rust
+//! use iolinke_types::frame::isdu::{IsduService, IsduIServiceCode, IsduLengthCode, IsduFlowCtrl};
+//!
+//! // Create an ISDU Service octet for a Read Request with extended length
+//! let mut service = IsduService::new();
+//! service.set_i_service(IsduIServiceCode::ReadRequestIndex);
+//! service.set_length(IsduLengthCode::Extended.into());
+//!
+//! // Interpret flow control value
+//! let flow = IsduFlowCtrl::from_u8(0x10).unwrap();
+//! assert_eq!(flow, IsduFlowCtrl::Start);
+//! ```
+
 use bitfields::bitfield;
 use iolinke_macros::bitfield_support;
 
-use core::result::{Result, Result::{Ok, Err}};
-use core::option::{Option, Option::{Some, None}};
+use core::option::{
+    Option,
+    Option::{None, Some},
+};
+use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
 /// # ISDU I-Service Octet Structure
 ///
@@ -141,6 +189,7 @@ impl IsduIServiceCode {
         }
     }
 
+    /// Get the u8 for this I-Service.
     pub const fn into(self) -> u8 {
         self as u8
     }
@@ -250,6 +299,7 @@ impl IsduFlowCtrl {
         }
     }
 
+    /// Get the u8 value for this flow control.
     pub fn into_bits(self) -> u8 {
         match self {
             IsduFlowCtrl::Count(v) => v,

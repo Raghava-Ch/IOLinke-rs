@@ -1,15 +1,39 @@
-//! On-request Data Handler
+//! On-request Data Handler for IO-Link Device Application Layer
 //!
-//! This module implements the On-request Data Handler state machine as defined in
-//! IO-Link Specification v1.1.4
+//! This module implements the state machine and event handling logic for the On-request Data (OD) Handler
+//! as specified in IO-Link standard section 8.3.2.2. It manages transitions between OD states in response
+//! to events from the Data Link Layer (DL) and Application Layer (AL), including parameter read/write and
+//! ISDU transport operations.
+//!
+//! # Features
+//! - Implements the OD state machine with all defined states and transitions (see Table 75 of the IO-Link specification).
+//! - Handles AL and DL events, including parameter read/write indications, ISDU transport, and abort scenarios.
+//! - Provides transition execution logic for AL_Read, AL_Write, DL_ReadParam, DL_WriteParam, and ISDU transport services.
+//! - Ensures correct state transitions and error handling according to the IO-Link protocol.
+//!
+//! # Usage
+//! The main entry point is [`OnRequestDataHandler`], which should be integrated with the device's
+//! parameter manager and data link layer. Events are processed via trait implementations, and the
+//! state machine is advanced by calling [`OnRequestDataHandler::poll`].
+//!
+//! # Example
+//! ```rust
+//! let mut handler = OnRequestDataHandler::new();
+//! handler.dl_write_param_ind(index, data)?;
+//! handler.poll(&mut parameter_manager, &mut data_link_layer)?;
+//! ```
+//!
+//! # References
+//! - IO-Link Specification, Section 8.3.2.2 (OD state machine)
+//! - Table 75 – States and transitions for the OD state machine of the Device AL
 
 use iolinke_types::custom::{IoLinkError, IoLinkResult};
 use iolinke_types::handlers;
 use iolinke_types::handlers::isdu::DlIsduTransportRsp;
 use iolinke_types::handlers::od::DlParamRsp;
 
-use core::result::Result::{Ok, Err};
 use core::default::Default;
+use core::result::Result::{Err, Ok};
 
 use crate::al::ApplicationLayerReadWriteInd;
 use crate::{
@@ -392,14 +416,6 @@ impl services::AlWriteRsp for OnRequestDataHandler {
             }
         }
         self.process_event(OnRequestHandlerEvent::AlWriteRsp)?;
-        Ok(())
-    }
-}
-
-impl services::AlAbortReq for OnRequestDataHandler {
-    fn al_abort_req(&mut self) -> IoLinkResult<()> {
-        // Handle AL_Abort response
-        self.process_event(OnRequestHandlerEvent::AlAbort)?;
         Ok(())
     }
 }

@@ -1,3 +1,41 @@
+//! # Process Data Configuration for IO-Link Devices
+//!
+//! This module provides types and functions for configuring and validating the process data lengths
+//! for IO-Link devices, as specified in the IO-Link Specification v1.1.4, Section B.1.6.
+//!
+//! ## Overview
+//!
+//! IO-Link devices exchange process data in either bit-oriented or octet (byte)-oriented formats.
+//! The process data length must conform to the specification limits:
+//! - Bit-oriented: 0–16 bits
+//! - Octet-oriented: 0–32 octets (bytes)
+//!
+//! This module defines the [`ProcessDataLength`] enum to represent these formats and provides
+//! configuration functions for both input and output process data lengths. These functions ensure
+//! that the configured lengths are within the allowed ranges and provide utility functions to
+//! retrieve the lengths in bytes.
+//!
+//! ## Key Types and Functions
+//!
+//! - [`ProcessDataLength`]: Enum representing bit- or octet-oriented process data length.
+//! - [`config_pd_in_length`]: Returns the configured process data input length, validating its range.
+//! - [`config_pd_in_length_in_bytes`]: Returns the input length in bytes, performing ceiling division for bits.
+//! - [`config_pd_out_length`]: Returns the configured process data output length, validating its range.
+//! - [`config_pd_out_length_in_bytes`]: Returns the output length in bytes, performing ceiling division for bits.
+//!
+//! ## Specification Reference
+//!
+//! - IO-Link Interface and System Specification v1.1.4, Section B.1.6, Table B.6
+//!
+//! ## Usage Example
+//!
+//! ```rust
+//! use device::process_data::*;
+//!
+//! let pd_in_bytes = config_pd_in_length_in_bytes();
+//! let pd_out_bytes = config_pd_out_length_in_bytes();
+//! ```
+
 use core::panic;
 
 /// Represents the process data length for IO-Link devices, as specified in IO-Link Specification v1.1.4, Section B.1.6.

@@ -2,8 +2,8 @@ use heapless::Vec;
 use iolinke_device::{AlEventCnf, ApplicationLayerServicesInd, DlControlCode, DlControlInd};
 use iolinke_types::{custom::IoLinkResult, handlers};
 
-use core::result::Result::{Ok, Err};
 use core::default::Default;
+use core::result::Result::{Err, Ok};
 
 const PD_OUTPUT_LENGTH: usize =
     iolinke_dev_config::device::process_data::config_pd_out_length_in_bytes() as usize;

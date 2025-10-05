@@ -9,8 +9,8 @@ use iolinke_types::{
 };
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
-use core::result::Result::{Ok, Err};
 use core::default::Default;
+use core::result::Result::{Err, Ok};
 
 use crate::{dl::message_handler, storage};
 

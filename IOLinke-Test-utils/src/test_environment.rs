@@ -5,7 +5,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use core::result::{Result, Result::Ok, Result::Err};
+use core::result::{Result, Result::Err, Result::Ok};
 use std::boxed::Box;
 use std::vec::Vec;
 

@@ -1,6 +1,30 @@
+//! # IO-Link Data Link Layer Mode Handler Module
+//!
+//! This module provides traits and types for handling Data Link Layer (DL) mode indications and
+//! read/write operations in IO-Link devices. It defines interfaces for reporting DL operating status
+//! and accessing device parameters via the page communication channel.
+//!
+//! ## Key Traits
+//! - [`DlModeInd`]: Handles DL_Mode indication events.
+//! - [`DlReadWriteInd`]: Handles DL_Read and DL_Write operations.
+//!
+//! ## Key Types
+//! - [`DlMode`]: Enumerates DL mode states as per IO-Link specification.
+//!
+//! ## Specification Reference
+//! - IO-Link v1.1.4, Section 7.2.1.14 (DL_Mode)
+//!
+//! This module is intended for use in IO-Link device implementations to monitor and control
+//! Data Link Layer operating states and parameter access.
+
 use crate::custom::IoLinkResult;
 
-/// DL indications to other modules
+/// Trait for handling DL_Mode indication events.
+///
+/// The `DlModeInd` trait defines a callback for reporting when the Data Link Layer (DL)
+/// reaches a certain operating status. This is typically used by System Management to
+/// monitor the state of the DL. The method corresponds to the DL_Mode service as described
+/// in section 7.2.1.14 of the IO-Link specification.
 pub trait DlModeInd {
     /// See 7.2.1.14 DL_Mode
     /// The DL uses the DL_Mode service to report to System Management that a certain operating
@@ -8,6 +32,18 @@ pub trait DlModeInd {
     fn dl_mode_ind(&mut self, mode: DlMode) -> IoLinkResult<()>;
 }
 
+/// Trait defining the interface for reading and writing device parameters via the page communication channel.
+///
+/// This trait provides methods corresponding to the DL_Write and DL_Read services as specified in the IO-Link protocol.
+/// Implementors of this trait can handle requests to read from and write to device parameters, typically used by System Management.
+///
+/// # Methods
+/// - [`dl_write_ind`]: Writes a value to a device parameter at the specified address.
+/// - [`dl_read_ind`]: Reads a value from a device parameter at the specified address.
+///
+/// # References
+/// - IO-Link Specification 7.2.1.4 DL_Read
+/// - IO-Link Specification 7.2.1.5 DL_Write
 pub trait DlReadWriteInd {
     /// See 7.2.1.5 DL_Write
     /// The DL_Write service is used by System Management to write a Device parameter value to

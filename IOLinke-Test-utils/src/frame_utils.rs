@@ -615,7 +615,7 @@ pub fn create_op_write_request(address: u8, data: &[u8]) -> Vec<u8> {
 /// ISDU frame creation utilities
 pub mod isdu_frame {
     use iolinke_types::frame::isdu::{IsduIServiceCode, IsduService};
-    use iolinke_util::frame_fromat::isdu::calculate_checksum;
+    use iolinke_util::frame_fromat::isdu::calculate_checksum_for_testing;
 
     // 0x0010 0x00
     pub fn create_isdu_read_request(index: u16, sub_index: Option<u8>) -> Vec<u8> {
@@ -632,7 +632,7 @@ pub mod isdu_frame {
             rx_buffer.push(isdu_service.into_bits());
             rx_buffer.push(index_1);
             rx_buffer.push(0); // CHKPDU
-            let checkpdu = calculate_checksum(rx_buffer.len() as u8, &rx_buffer);
+            let checkpdu = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
             rx_buffer.pop();
             rx_buffer.push(checkpdu);
             rx_buffer
@@ -645,7 +645,7 @@ pub mod isdu_frame {
             rx_buffer.push(index_1);
             rx_buffer.push(sub_index.unwrap());
             rx_buffer.push(0); // CHKPDU
-            let checkpdu = calculate_checksum(rx_buffer.len() as u8, &rx_buffer);
+            let checkpdu = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
             rx_buffer.pop();
             rx_buffer.push(checkpdu);
             rx_buffer
@@ -659,7 +659,7 @@ pub mod isdu_frame {
             rx_buffer.push(index_2);
             rx_buffer.push(sub_index.unwrap());
             rx_buffer.push(0); // CHKPDU
-            let checkpdu = calculate_checksum(rx_buffer.len() as u8, &rx_buffer);
+            let checkpdu = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
             rx_buffer.pop();
             rx_buffer.push(checkpdu);
             rx_buffer
@@ -686,7 +686,7 @@ pub mod isdu_frame {
             rx_buffer.push(index_1);
             rx_buffer.extend_from_slice(data);
             rx_buffer.push(0); // CHKPDU
-            let checkpdu = calculate_checksum(rx_buffer.len() as u8, &rx_buffer);
+            let checkpdu = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
             rx_buffer.pop();
             rx_buffer.push(checkpdu);
             rx_buffer
@@ -709,7 +709,7 @@ pub mod isdu_frame {
             rx_buffer.push(sub_index.unwrap());
             rx_buffer.extend_from_slice(data);
             rx_buffer.push(0); // CHKPDU
-            let checkpdu = calculate_checksum(rx_buffer.len() as u8, &rx_buffer);
+            let checkpdu = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
             rx_buffer.pop();
             rx_buffer.push(checkpdu);
             rx_buffer
@@ -724,7 +724,7 @@ pub mod isdu_frame {
             rx_buffer.push(sub_index.unwrap());
             rx_buffer.extend_from_slice(data);
             rx_buffer.push(0); // CHKPDU
-            let checkpdu = calculate_checksum(rx_buffer.len() as u8, &rx_buffer);
+            let checkpdu = calculate_checksum_for_testing(rx_buffer.len(), &rx_buffer);
             rx_buffer.pop();
             rx_buffer.push(checkpdu);
             rx_buffer

@@ -1,3 +1,18 @@
+//! # IO-Link Data Storage Handler Module
+//!
+//! This module provides types and logic for handling Data Storage (DS) commands in IO-Link devices.
+//! It defines the `DsCommand` enum for representing DS operations such as upload, download, and break,
+//! and implements conversion logic for interpreting DS command values.
+//!
+//! ## Key Types
+//! - [`DsCommand`]: Enumerates Data Storage commands as per IO-Link specification Table B.10.
+//!
+//! ## Specification Reference
+//! - IO-Link v1.1.4, Table B.10 – DataStorageIndex assignments
+//!
+//! This module is used in IO-Link device implementations to manage data storage operations
+//! and ensure correct interpretation of DS command codes.
+
 use crate::custom::IoLinkError;
 
 /// See Table B.10 – DataStorageIndex assignments

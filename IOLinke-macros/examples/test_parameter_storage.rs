@@ -34,8 +34,14 @@
 
 use iolinke_macros::declare_parameter_storage;
 
-use core::result::{Result, Result::{Ok, Err}};
-use core::option::{Option, Option::{Some, None}};
+use core::option::{
+    Option,
+    Option::{None, Some},
+};
+use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
 /// Custom data type example for demonstration.
 ///

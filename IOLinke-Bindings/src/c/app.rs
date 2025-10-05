@@ -1,7 +1,48 @@
+#![doc = r#"
+# IO-Link Device Application Layer Bindings
+
+This module provides the Rust bindings and integration points for the IO-Link device application layer, enabling communication and control of IO-Link devices according to the IO-Link Interface Specification v1.1.4.
+
+## Overview
+
+The module defines the core structures, traits, and FFI interfaces required to implement the IO-Link device stack, including:
+
+- Device creation and management
+- Application Layer service requests and indications
+- System Management (SM) service requests and confirmations
+- Data Link Layer (DL) control and event handling
+- Process Data input/output operations
+
+## Features
+
+- **FFI Integration:** Exposes C-callable functions for device creation, polling, and service requests, allowing seamless integration with C-based IO-Link stacks or firmware.
+- **Trait-Based Architecture:** Implements IO-Link protocol services using Rust traits for extensibility and type safety.
+- **State Management:** Maintains device state and action status for robust protocol handling.
+- **Process Data Handling:** Supports input/output data updates and notifications according to IO-Link specification.
+- **System Management:** Provides configuration and identification services for device setup and operation.
+
+## Usage
+
+Typical usage involves:
+
+1. Creating a device instance via `io_linke_device_create`.
+2. Polling the device regularly using `iolinke_device_poll` to advance protocol state machines.
+3. Handling application layer requests such as setting input data (`al_set_input_req`), configuring communication parameters (`sm_set_device_com_req`), and updating device identification (`sm_set_device_ident_req`).
+4. Responding to system management confirmations and events via trait implementations.
+
+## Safety
+
+Many functions in this module are marked `unsafe` and use static mutable state for FFI compatibility. Care must be taken to avoid data races and ensure correct usage in concurrent environments.
+
+## Specification Reference
+
+All services and interfaces are implemented according to the IO-Link Interface Specification v1.1.4, with references to relevant sections and tables provided in the documentation for each function.
+
+"#]
+
 use heapless::Vec;
 use iolinke_device::{
-    AlEventCnf, ApplicationLayerServicesInd, DeviceCom, DeviceIdent, DeviceMode, DlControlCode,
-    DlControlInd, IoLinkDevice,
+    AlControlReq, AlEventCnf, ApplicationLayerServicesInd, DeviceCom, DeviceIdent, DeviceMode, DlControlCode, DlControlInd, IoLinkDevice
 };
 use iolinke_types::{
     custom::IoLinkResult,
@@ -12,8 +53,14 @@ use iolinke_types::{
     page,
 };
 
-pub use core::result::{Result, Result::{Ok, Err}};
-use core::option::{Option, Option::{Some, None}};
+use core::option::{
+    Option,
+    Option::{None, Some},
+};
+pub use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
 use crate::c::{
     self,
@@ -223,7 +270,10 @@ unsafe extern "C" {
     fn sm_set_device_mode_cnf(device_id: IOLinkeDeviceHandle, result: SmResultWrapper);
 }
 
-static NUM_OF_DEVICES: usize = 1; // Number of devices which can be created, //! For now only 1 device is supported.
+/// Number of devices which can be created, //! For now only 1 device is supported.
+static NUM_OF_DEVICES: usize = 1;
+
+/// Global static array to hold the IO-Link device instances and their action states.
 pub static mut IOLINKE_DEVICES: [Option<(
     IoLinkDevice<BindingPhysicalLayer, BindingApplicationLayer>,
     DeviceActionState,
@@ -232,7 +282,9 @@ pub static mut IOLINKE_DEVICES: [Option<(
 const PD_OUTPUT_LENGTH: usize =
     iolinke_derived_config::device::process_data::pd_out::config_length_in_bytes() as usize;
 
+/// Trait to convert internal SmResult types to C-compatible SmResultWrapper.
 pub trait SmResultExt {
+    /// Converts the internal SmResult to a C-compatible SmResultWrapper.
     fn to_operation_result(&self) -> crate::c::types::SmResultWrapper;
 }
 
@@ -289,6 +341,7 @@ impl SmResultExt for DeviceIdent {
     }
 }
 
+/// Binding implementation of the Application Layer for IO-Link device.
 pub struct BindingApplicationLayer {
     device_id: IOLinkeDeviceHandle,
 }
@@ -407,6 +460,45 @@ pub extern "C" fn al_set_input_req(
     match state {
         DeviceActionState::Done => {
             let _ = device.al_set_input_req(len, pd_in_slice);
+            DeviceActionState::Done
+        }
+        _ => DeviceActionState::Busy, // Previous operation still in progress
+    }
+}
+
+/// The `AlControlReq` trait defines the interface for the AL_Control service,
+/// which transmits Process Data qualifier status information to and from the Device application.
+/// This service should be synchronized with AL_GetInput and AL_SetOutput respectively.
+///
+/// # Parameters
+/// - `control_code`: Contains the qualifier status of the Process Data (PD).
+///   Permitted values:
+///   - `VALID` (Input Process Data valid)
+///   - `INVALID` (Input Process Data invalid)
+///   - `PDOUTVALID` (Output Process Data valid)
+///   - `PDOUTINVALID` (Output Process Data invalid)
+///
+/// # Returns
+/// Returns an `IoLinkResult<()>` indicating the success or failure of the operation.
+#[allow(static_mut_refs)]
+#[unsafe(no_mangle)]
+pub extern "C" fn al_control_req(
+    device_id: IOLinkeDeviceHandle,
+    control_code: DlControlCode,
+) -> DeviceActionState {
+    let (device, state) = unsafe {
+        if let Some((device, state)) = IOLINKE_DEVICES
+            .get_mut(device_id as usize)
+            .and_then(|opt| opt.as_mut())
+        {
+            (device, state)
+        } else {
+            return DeviceActionState::NoDevice; // Invalid device ID
+        }
+    };
+    match state {
+        DeviceActionState::Done => {
+            let _ = device.al_control_req(control_code);
             DeviceActionState::Done
         }
         _ => DeviceActionState::Busy, // Previous operation still in progress
@@ -653,6 +745,7 @@ pub extern "C" fn sm_get_device_ident_req(device_id: IOLinkeDeviceHandle) {
 }
 
 impl BindingApplicationLayer {
+    /// Creates a new instance of the BindingApplicationLayer.
     pub fn new(device_id: IOLinkeDeviceHandle) -> Self {
         Self { device_id }
     }

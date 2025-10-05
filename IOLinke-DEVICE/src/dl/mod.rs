@@ -40,9 +40,10 @@ pub use handlers::isdu::{DlIsduAbort, DlIsduTransportInd, DlIsduTransportRsp, Is
 pub use handlers::mode::DlModeInd;
 pub use handlers::od::{DlParamRsp, DlReadParamInd, DlWriteParamInd};
 pub use handlers::pd::{DlPDInputUpdate, DlPDOutputTransportInd, PD_OUTPUT_LENGTH};
+use iolinke_types::handlers::command::DlControlReq;
 
-use core::result::Result::Ok;
 use core::default::Default;
+use core::result::Result::Ok;
 
 /// Main Data Link Layer implementation that orchestrates all DL services.
 ///
@@ -411,6 +412,12 @@ impl DlModeInd for DataLinkLayer {
     fn dl_mode_ind(&mut self, mode: handlers::mode::DlMode) -> IoLinkResult<()> {
         let _ = self.message_handler.dl_mode_ind(mode);
         Ok(())
+    }
+}
+
+impl DlControlReq for DataLinkLayer {
+    fn dl_control_req(&mut self, control_code: handlers::command::DlControlCode) -> IoLinkResult<()> {
+        self.command_handler.dl_control_req(control_code)
     }
 }
 

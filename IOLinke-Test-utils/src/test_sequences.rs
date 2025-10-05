@@ -1,19 +1,23 @@
 //! Test sequences for IO-Link device testing
+use std::boxed::Box;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use std::vec::Vec;
 
-use core::result::{Result, Result::Ok, Result::Err};
 use core::option::Option;
-use std::boxed::Box;
-
+use core::result::{Result, Result::Err, Result::Ok};
 
 use iolinke_derived_config::device as derived_config;
+use iolinke_dev_config::device as dev_config;
 use iolinke_device::{CycleTime, MsequenceCapability, ProcessDataIn, ProcessDataOut, RevisionId};
 use iolinke_types::frame::isdu::{IsduFlowCtrl, IsduIServiceCode, IsduService};
 use iolinke_types::page::page1::MasterCommand;
 
 use crate::{TestDeviceMode, ThreadMessage, frame_utils, page_params, send_test_message_and_wait};
+
+const fn revision_id_parameter() -> RevisionId {
+    RevisionId::from_bits(dev_config::vendor_specifics::REVISION_ID)
+}
 
 pub fn util_test_startup_sequence(
     poll_tx: &Sender<ThreadMessage>,
@@ -58,8 +62,7 @@ pub fn util_test_startup_sequence(
     // Read revision id
     let revision_id =
         page_params::read_revision_id(&poll_tx, &poll_response_rx, TestDeviceMode::Startup);
-    const CONFIG_REVISION_ID: RevisionId =
-        derived_config::vendor_specifics::revision_id_parameter();
+    const CONFIG_REVISION_ID: RevisionId = revision_id_parameter();
     assert!(
         CONFIG_REVISION_ID.major_rev() == revision_id.major_rev(),
         "RevisionID major rev is not matching"
@@ -104,7 +107,7 @@ pub fn util_test_startup_sequence(
     // Read vendor id
     let vendor_id_1 =
         page_params::read_vendor_id_1(&poll_tx, &poll_response_rx, TestDeviceMode::Startup);
-    const CONFIG_VENDOR_ID_1: u8 = derived_config::vendor_specifics::vendor_id_1();
+    const CONFIG_VENDOR_ID_1: u8 = dev_config::vendor_specifics::VENDOR_ID[0];
     assert!(
         CONFIG_VENDOR_ID_1 == vendor_id_1,
         "VendorID1 is not matching"
@@ -113,7 +116,7 @@ pub fn util_test_startup_sequence(
     // Read vendor id
     let vendor_id_2 =
         page_params::read_vendor_id_2(&poll_tx, &poll_response_rx, TestDeviceMode::Startup);
-    const CONFIG_VENDOR_ID_2: u8 = derived_config::vendor_specifics::vendor_id_2();
+    const CONFIG_VENDOR_ID_2: u8 = dev_config::vendor_specifics::VENDOR_ID[1];
     assert!(
         CONFIG_VENDOR_ID_2 == vendor_id_2,
         "VendorID2 is not matching"

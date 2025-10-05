@@ -3,7 +3,7 @@
 //! This module implements the Command Handler state machine as defined in
 //! IO-Link Specification v1.1.4
 
-use iolinke_types::handlers::command::{DlControlInd, MasterCommandInd};
+use iolinke_types::handlers::command::{DlControlInd, DlControlReq, MasterCommandInd};
 use iolinke_types::{
     custom::{IoLinkError, IoLinkResult},
     handlers,
@@ -17,9 +17,9 @@ use crate::{
     dl::{message_handler, mode_handler},
 };
 
-use core::result::Result::{Ok, Err};
-use core::default::Default;
 use core::convert::TryInto;
+use core::default::Default;
+use core::result::Result::{Err, Ok};
 
 /// See 7.3.7.3 State machine of the Device command handler
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -283,12 +283,13 @@ impl CommandHandler {
 
         Ok(())
     }
+}
 
-    /// 7.2.1.18 DL_Control
-    pub fn dl_control_req(
-        &mut self,
-        control_code: handlers::command::DlControlCode,
-    ) -> IoLinkResult<()> {
+impl DlControlReq for CommandHandler {
+    /// Indicate a change in the Process Data (PD) qualifier status to the Device application.
+    ///
+    /// This method is called by the Master to convey the current control code.
+    fn dl_control_req(&mut self, control_code: handlers::command::DlControlCode) -> IoLinkResult<()> {
         let _ = self.process_event(CommandHandlerEvent::DlControlPdIn(control_code));
         Ok(())
     }

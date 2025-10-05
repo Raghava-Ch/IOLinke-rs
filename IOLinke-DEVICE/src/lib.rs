@@ -62,12 +62,15 @@ use al::services;
 pub use iolinke_macros::*;
 use iolinke_types::{
     custom::{IoLinkError, IoLinkResult},
-    handlers::{self, sm::SmResult},
+    handlers::{self, sm::SmResult, command::DlControlReq},
     page::page1,
 };
 
-pub use core::result::{Result, Result::{Ok, Err}};
 use core::default::Default;
+pub use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
 mod al;
 mod dl;
@@ -77,6 +80,7 @@ mod system_management;
 
 pub use al::services::AlEventCnf;
 pub use al::services::ApplicationLayerServicesInd;
+pub use al::services::AlControlReq;
 pub use handlers::command::{DlControlCode, DlControlInd};
 pub use handlers::pl::Timer;
 pub use iolinke_types::frame::msequence::TransmissionRate;
@@ -438,86 +442,6 @@ impl<
     ALS: al::services::ApplicationLayerServicesInd
         + handlers::sm::SystemManagementCnf
         + services::AlEventCnf,
-> al::ApplicationLayerProcessDataInd for IoLinkDevice<PHY, ALS>
-{
-    /// Handles input data updates from the application.
-    ///
-    /// This method is called when the application has new input data
-    /// to send to the master during the next process data cycle.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if input data was processed successfully
-    /// - `Err(IoLinkError)` if an error occurred
-    fn al_set_input_ind(&mut self) -> IoLinkResult<()> {
-        // TODO: "Implement process data input handling");
-
-        Ok(())
-    }
-
-    /// Handles process data cycle notifications.
-    ///
-    /// This method is called at the beginning of each process data cycle
-    /// to allow the application to prepare input/output data.
-    fn al_pd_cycle_ind(&mut self) {
-        // TODO: "Implement process data cycle handling");
-    }
-
-    /// Handles output data requests from the master.
-    ///
-    /// This method is called when the master requests the current
-    /// output data from the device.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if output data was provided successfully
-    /// - `Err(IoLinkError)` if an error occurred
-    fn al_get_output_ind(&mut self) -> IoLinkResult<()> {
-        // TODO: "Implement output data handling");
-
-        Ok(())
-    }
-
-    /// Handles new output data from the master.
-    ///
-    /// This method is called when the master provides new output data
-    /// to the device during a process data cycle.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if output data was processed successfully
-    /// - `Err(IoLinkError)` if an error occurred
-    fn al_new_output_ind(&mut self) -> IoLinkResult<()> {
-        // TODO: "Implement new output data handling");
-
-        Ok(())
-    }
-
-    /// Handles control commands from the master.
-    ///
-    /// This method is called when the master sends a control command
-    /// to the device (e.g., reset, parameter download).
-    ///
-    /// # Parameters
-    ///
-    /// * `control_code` - 8-bit control command code (see Annex B.9)
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if control command was processed successfully
-    /// - `Err(IoLinkError)` if an error occurred
-    fn al_control(&mut self, _control_code: u8) -> IoLinkResult<()> {
-        // TODO: "Implement control command handling"
-
-        Ok(())
-    }
-}
-
-impl<
-    PHY: pl::physical_layer::PhysicalLayerReq,
-    ALS: al::services::ApplicationLayerServicesInd
-        + handlers::sm::SystemManagementCnf
-        + services::AlEventCnf,
 > IoLinkDevice<PHY, ALS>
 {
     /// Sets the device communication parameters according to IO-Link SM_SetDeviceCom service.
@@ -679,6 +603,23 @@ impl<
         <system_management::SystemManagement as handlers::sm::SystemManagementReq<
             al::ApplicationLayer<ALS>,
         >>::sm_set_device_mode_req(&mut self.system_management, mode)?;
+        Ok(())
+    }
+}
+
+impl<
+    PHY: pl::physical_layer::PhysicalLayerReq,
+    ALS: services::ApplicationLayerServicesInd
+        + handlers::sm::SystemManagementCnf
+        + services::AlEventCnf,
+> services::AlControlReq for IoLinkDevice<PHY, ALS>
+{
+    fn al_control_req(
+        &mut self,
+        control_code: handlers::command::DlControlCode,
+    ) -> IoLinkResult<()> {
+        let _ = self.data_link_layer.dl_control_req(control_code);
+
         Ok(())
     }
 }

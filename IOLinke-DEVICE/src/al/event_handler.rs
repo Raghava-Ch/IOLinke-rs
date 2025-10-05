@@ -1,7 +1,41 @@
-//! Event State Machine
+//! Event Handler Module for IO-Link Device Application Layer
 //!
-//! This module implements the Event State Machine as defined in
-//! IO-Link Specification v1.1.4
+//! This module implements the Event State Machine as specified in IO-Link standard section 8.3.3.2,
+//! handling event activation, deactivation, AL_Event requests, and DL_EventTrigger confirmations.
+//!
+//! # Overview
+//!
+//! The event state machine manages the lifecycle of events within the IO-Link Device Application Layer (AL).
+//! It transitions between inactive, idle, and awaiting response states based on incoming events and service requests.
+//!
+//! ## State Machine
+//!
+//! - **EventInactive**: The initial state where no events are processed.
+//! - **EventIdle**: Ready to process AL_Event requests.
+//! - **AwaitEventResponse**: Waiting for confirmation from the Data Link Layer (DL).
+//!
+//! ## Transitions
+//!
+//! - **T1**: Activation (EventInactive → EventIdle)
+//! - **T2**: Deactivation (EventIdle → EventInactive)
+//! - **T3**: AL_Event request (EventIdle → AwaitEventResponse)
+//! - **T4**: DL_EventTrigger confirmation (AwaitEventResponse → EventIdle)
+//!
+//! ## Integration
+//!
+//! The module provides an `EventHandler` struct implementing the state machine logic, and integrates with
+//! AL and DL services via trait implementations. It uses heapless vectors for event entry storage to support
+//! embedded environments.
+//!
+//! # Usage
+//!
+//! - Instantiate `EventHandler` and use its methods to process events and poll transitions.
+//! - Implement required AL and DL service traits for integration with the rest of the IO-Link stack.
+//!
+//! # References
+//!
+//! - IO-Link Specification, Section 8.3.3.2: Event State Machine of the Device AL
+//! - Table 77: State and transitions of the Event state machine
 
 use heapless::Vec;
 use iolinke_types::handlers::event::DlEventReq;
@@ -10,9 +44,12 @@ use iolinke_types::{
     handlers::event::EventEntry,
 };
 
-pub use core::result::Result::{Ok, Err};
-use core::option::{Option, Option::{Some, None}};
 use core::default::Default;
+use core::option::{
+    Option,
+    Option::{None, Some},
+};
+pub use core::result::Result::{Err, Ok};
 
 use crate::al::services;
 use crate::{al::services::AlEventReq, dl};
@@ -59,9 +96,9 @@ enum Transition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventStateMachineEvent {
     /// {Activate} See 8.3.3.2 , Triggers T1
-    Activate,
+    _Activate,
     /// {Deactivate} See 8.3.3.2, Triggers T2
-    Deactivate,
+    _Deactivate,
     /// {AL_Event_request} See 8.3.3.2, Triggers T3
     AlEventRequest,
     /// {DL_EventTrigger_conf} See 8.3.3.2, Triggers T4
@@ -92,8 +129,8 @@ impl EventHandler {
 
         let (new_transition, new_state) = match (self.state.clone(), event) {
             // Valid transitions according to Table 77
-            (State::EventInactive, Event::Activate) => (Transition::T1, State::EventIdle),
-            (State::EventIdle, Event::Deactivate) => (Transition::T2, State::EventInactive),
+            (State::EventInactive, Event::_Activate) => (Transition::T1, State::EventIdle),
+            (State::EventIdle, Event::_Deactivate) => (Transition::T2, State::EventInactive),
             (State::EventIdle, Event::AlEventRequest) => {
                 (Transition::T3, State::AwaitEventResponse)
             }

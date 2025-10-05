@@ -1,7 +1,7 @@
 use iolinke_types::custom::{IoLinkError, IoLinkResult};
 use iolinke_types::handlers::event::{EventEntry, StatusCodeType1, StatusCodeType2};
 
-use core::result::Result::{Ok, Err};
+use core::result::Result::{Err, Ok};
 
 const MAX_EVENT_MEMORY_SIZE: usize = 19;
 

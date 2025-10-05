@@ -16,8 +16,8 @@ use crate::{
     pl, system_management,
 };
 
-use core::result::Result::{Ok, Err};
 use core::default::Default;
+use core::result::Result::{Err, Ok};
 
 /// DL-Mode Handler states
 /// See IO-Link v1.1.4 Section 7.3.2.5

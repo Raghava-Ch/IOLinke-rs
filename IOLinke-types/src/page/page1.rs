@@ -1,3 +1,33 @@
+//! # IO-Link Page 1 Types
+//!
+//! This module defines types and bitfield structures for IO-Link Direct Parameter Page 1,
+//! as specified in IO-Link Specification v1.1.4, Annex B.1. These types are used to encode
+//! and decode device parameters exchanged between IO-Link Masters and Devices.
+//!
+//! ## Contents
+//!
+//! - `MasterCommand`: Enumeration of all master commands used in IO-Link communication.
+//! - `CycleTime`: Bitfield representing the Cycle Time parameter, encoding minimum supported cycle time.
+//! - `MsequenceCapability`: Bitfield representing the device's ISDU and M-sequence capabilities.
+//! - `RevisionId`: Bitfield for protocol revision identifier (major and minor).
+//! - `ProcessDataIn`: Bitfield for Process Data input parameters (Device to Master).
+//! - `ProcessDataOut`: Bitfield for Process Data output parameters (Master to Device).
+//! - `DeviceIdent`: Structure for device identification (Vendor ID, Device ID, Function ID).
+//!
+//! ## Specification References
+//!
+//! - IO-Link Specification v1.1.4, Annex B.1: Direct Parameter Page 1
+//! - Section B.1.2: Master Commands
+//! - Section B.1.3: Cycle Time
+//! - Section B.1.4: M-sequence Capability, RevisionID
+//! - Section B.1.6: Process Data In/Out
+//! - Section 7.3.4.1: Device Identification
+//!
+//! ## Usage
+//!
+//! Use these types to parse, construct, and validate IO-Link Page 1 parameters for device configuration,
+//! identification, and communication capability reporting.
+
 use crate::custom::IoLinkError;
 use bitfields::bitfield;
 use core::convert::From;

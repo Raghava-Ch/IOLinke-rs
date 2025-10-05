@@ -32,11 +32,15 @@
 //! - All configurations must comply with IO-Link Specification requirements
 //! Configuration macros for IO-Link device setup.
 
+/// M-sequence types for the PREOPERATE mode as per IO-Link Specification (Table A.8).
 pub mod pre_operate_m_sequence {
     use iolinke_dev_config::device as dev_config;
     use iolinke_types as types;
 
-    pub use core::result::{Result, Result::{Ok, Err}};
+    pub use core::result::{
+        Result,
+        Result::{Err, Ok},
+    };
 
     /// M-sequence types for the PREOPERATE mode as per IO-Link Specification (v1.1.4, Table A.8).
     ///
@@ -65,6 +69,23 @@ pub mod pre_operate_m_sequence {
         }
     }
 
+    /// M-sequence types for the PREOPERATE mode as per IO-Link Specification (v1.1.4, Table A.8).
+    ///
+    /// The following table describes valid M-sequence types, expected on-request data length (in octets),
+    /// and the required minimum recovery time (`T_initcyc`) the master must observe in PREOPERATE mode:
+    ///
+    /// | PREOPERATE M-sequence code | On-request Data (Octets) | M-sequence Type | Minimum Recovery Time (`T_BIT`) |
+    /// |----------------------------|---------------------------|------------------|----------------------------------|
+    /// | 0                          | 1                         | TYPE_0           | 100                              |
+    /// | 1                          | 2                         | TYPE_1_2         | 100                              |
+    /// | 2                          | 8                         | TYPE_1_V         | 210                              |
+    /// | 3                          | 32                        | TYPE_1_V         | 550                              |
+    ///
+    /// ---
+    ///
+    /// - ⚠️ **Note a**: The minimum recovery time in PREOPERATE mode is a requirement for the Master.
+    /// - ⚠️ **Note b**: It is highly recommended for Devices **not to use TYPE_0**, as it improves error discovery
+    ///   when the Master restarts communication.
     pub const fn m_sequence_type() -> types::frame::msequence::MsequenceType {
         use types::frame::msequence::MsequenceType::*;
         match m_sequence_code() {
@@ -109,25 +130,15 @@ pub mod pre_operate_m_sequence {
     }
 }
 
+/// M-sequence types for the OPERATE mode devices as per IO-Link Specification (Table A.9).
 pub mod operate_m_sequence {
     use iolinke_dev_config::device as dev_config;
     use iolinke_types as types;
-    
-    pub use core::result::{Result, Result::{Ok, Err}};
 
-    /// Returns whether the device is configured to use interleaved mode for M-sequences, when device is in legacy mode.
-    // #[cfg(feature = "legacy_device")]
-    // pub const fn interleaved_mode() -> bool {
-    //     const OPERATE_M_SEQUENCE_LEGACY: types::MsequenceType = operate_m_sequence_legacy();
-    //     (OPERATE_M_SEQUENCE_LEGACY as u8) == (types::MsequenceType::Type11 as u8)
-    // }
-
-    /// Returns whether the device is configured to use interleaved mode for M-sequences.
-    // #[cfg(not(feature = "legacy_device"))]
-    // pub const fn interleaved_mode() -> bool {
-    //     const OPERATE_M_SEQUENCE: types::MsequenceType = operate_m_sequence();
-    //     (OPERATE_M_SEQUENCE as u8) == (types::MsequenceType::Type11 as u8)
-    // }
+    pub use core::result::{
+        Result,
+        Result::{Err, Ok},
+    };
 
     /// M-sequence types for the OPERATE mode (standard protocol) as per IO-Link Specification (Table A.10).
     #[allow(unreachable_patterns)]

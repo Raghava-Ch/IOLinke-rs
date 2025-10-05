@@ -1,48 +1,66 @@
-use iolinke_dev_config::device as dev_config;
+//! # Vendor-Specific Device Configuration for IO-Link
+//!
+//! This module provides vendor-specific configuration and parameter storage layout for IO-Link devices.
+//!
+//! ## Overview
+//!
+//! - Re-exports vendor-specific constants and types from the device configuration crate.
+//! - Defines functions and constants for protocol revision identification and device parameters.
+//! - Implements the parameter storage layout using the `declare_parameter_storage!` macro, mapping device parameters to their indices, subindices, lengths, access types, and default values.
+//!
+//! ## Key Features
+//!
+//! - **Revision ID Parameter:** Provides a function to retrieve the IO-Link protocol revision identifier as specified in Annex B.1 of the IO-Link standard.
+//! - **Parameter Storage Layout:** The `storage_config` submodule defines the complete mapping of device parameters, including vendor and product identification, process data, and protocol capabilities.
+//! - **Config Values Grouping:** The `config_values` submodule centralizes retrieval of configuration values from device-specific constants, ensuring maintainability and consistency.
+//! - **Macro-Based Declaration:** Uses a macro to declare the parameter storage, simplifying updates and ensuring compliance with IO-Link specification.
+//!
+//! ## Specification References
+//!
+//! - IO-Link v1.1.4 Annex B.1: Direct Parameter Page 1
+//! - Section B.1.4: RevisionID parameter
+//!
+//! ## Extensibility
+//!
+//! - Vendor-specific parameters can be added to the parameter storage layout as needed.
+//! - The module is designed to be the single source of truth for device parameter configuration.
+//!
+//! ## Usage
+//!
+//! Import this module to access vendor-specific device configuration and parameter storage for IO-Link stack integration.
+
+pub use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
+pub use dev_config::device::vendor_specifics::*;
+pub use iolinke_dev_config as dev_config;
 use iolinke_types::page::page1::RevisionId;
 
-pub use core::result::{Result, Result::{Ok, Err}};
-
+/// Protocol revision identifier as per Annex B.1.
+///
+/// This bitfield contains the major and minor revision numbers
+/// of the IO-Link protocol version implemented by the device.
+///
+/// # Specification Reference
+///
+/// - IO-Link v1.1.4 Annex B.1: Direct Parameter Page 1
+/// - Section B.1.4: RevisionID parameter
 pub const fn revision_id_parameter() -> RevisionId {
-    RevisionId::from_bits(dev_config::vendor_specifics::REVISION_ID)
+    RevisionId::from_bits(dev_config::device::vendor_specifics::REVISION_ID)
 }
 
-pub const fn vendor_id_1() -> u8 {
-    dev_config::vendor_specifics::VENDOR_ID[0]
-}
-
-pub const fn vendor_id_2() -> u8 {
-    dev_config::vendor_specifics::VENDOR_ID[1]
-}
-
-pub const fn device_id_1() -> u8 {
-    dev_config::vendor_specifics::DEVICE_ID[0]
-}
-
-pub const fn device_id_2() -> u8 {
-    dev_config::vendor_specifics::DEVICE_ID[1]
-}
-
-pub const fn device_id_3() -> u8 {
-    dev_config::vendor_specifics::DEVICE_ID[2]
-}
-
-pub const fn function_id_1() -> u8 {
-    dev_config::vendor_specifics::FUNCTION_ID[0]
-}
-
-pub const fn function_id_2() -> u8 {
-    dev_config::vendor_specifics::FUNCTION_ID[1]
-}
-
-pub const fn vendor_name() -> &'static str {
-    dev_config::vendor_specifics::VENDOR_NAME
-}
-
-pub const fn product_name() -> &'static str {
-    dev_config::vendor_specifics::PRODUCT_NAME
-}
-
+/// The `storage_config` module defines the parameter storage layout for IO-Link device configuration.
+///
+/// This module provides constants and macro invocations to declare the mapping of device parameters
+/// to their storage indices, subindices, lengths, access types, and default values as required by the IO-Link specification.
+///
+/// - The `config_values` submodule groups functions that retrieve configuration values from device-specific constants.
+/// - The constants in this module are used to initialize the parameter storage via the `declare_parameter_storage!` macro.
+/// - The macro invocation lists all supported parameters, their indices, subindices, access permissions, and default values.
+/// - Vendor-specific parameters and names are also included for device identification and customization.
+///
+/// This module is intended to be the single source of truth for the device's parameter storage configuration.
 pub mod storage_config {
     use iolinke_macros::declare_parameter_storage;
     /// Provides grouped constants for configuration values.
@@ -126,6 +144,7 @@ pub mod storage_config {
     }
 
     // --- Configuration Values ---
+    // These constants hold the default values for each parameter, as retrieved from config_values.
     const MIN_CYCLE_TIME_CONFIG_VALUE: u8 = config_values::min_cycle_time();
     const M_SEQUENCE_CAPABILITY_CONFIG_VALUE: u8 = config_values::m_sequence_capability();
     const REVISION_ID_CONFIG_VALUE: u8 = config_values::revision_id();
@@ -141,9 +160,11 @@ pub mod storage_config {
     const VENDOR_NAME: &'static str = config_values::vendor_name();
     const PRODUCT_NAME: &'static str = config_values::product_name();
 
-    // TODO: Integer literals are written because rust compiler not yet support macro expansion in macro calls/constants
-    // TODO: When rust compiler supports macro expansion in macro calls/constants, the integer literals can be removed and use the macro expansion directly or constants
-    // TODO: May need to handle the DATA_STORAGE_INDEX_INDEX
+    // The following macro invocation declares the parameter storage layout for the device.
+    // Each tuple specifies:
+    //   (Index, Subindex, Length, IndexRange, Access, Type, DefaultValue)
+    // This layout is used by the IO-Link stack to manage device parameters.
+    // Vendor-specific parameters can be added as needed.
     declare_parameter_storage! {
         // Note: Index 0x0000 and 0x0001 can only have subindexes 0x00-0x0F
         //                               Index,                                 Subindex,                        Length, IndexRange,    Access, Type, DefaultValue,
