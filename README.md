@@ -85,8 +85,7 @@ cargo test --example basic_device --features="panic-halt"
 ## License
 
 Licensed under either of:
-- Apache License, Version 2.0
-- MIT license
+- GPL-3.0
 
 at your option.
 
