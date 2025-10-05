@@ -1,8 +1,56 @@
-use iolinke_dev_config::device as dev_config;
+//! # Process Data Configuration Module
+//!
+//! This module provides utilities for constructing and encoding IO-Link process data configuration
+//! parameters for both input (`ProcessDataIn`) and output (`ProcessDataOut`) directions, according to
+//! the IO-Link Interface and System Specification v1.1.4 (Section B.1.6, Figure B.5, Table B.6).
+//!
+//! ## Overview
+//!
+//! The IO-Link protocol requires devices to report their process data capabilities using a single
+//! configuration byte. This byte encodes:
+//! - The unit of length (bit-oriented or byte-oriented)
+//! - The process data length
+//! - SIO (Standard Input/Output) mode support (for input)
+//! - Reserved bits (must be set to zero)
+//!
+//! This module provides:
+//! - Functions to calculate and encode the configuration byte for both input and output process data
+//! - Utilities to determine the process data length in bytes
+//! - Enforcement of valid combinations as per the IO-Link specification
+//!
+//! ## Specification Reference
+//! - IO-Link Interface and System Spec v1.1.4
+//! - Section B.1.6 (ProcessDataIn)
+//! - Section B.1.7 (ProcessDataOut)
+//! - Table B.5 (SIO Values)
+//! - Table B.6 (BYTE + LENGTH combinations)
+//!
+//! ## Usage
+//!
+//! Use the `pd_in` and `pd_out` submodules to construct the configuration bytes for input and output
+//! process data, respectively. These can be sent to the IO-Link master to indicate the device's
+//! process data capabilities.
+//!
+//! ## Safety and Validity
+//!
+//! The module enforces valid combinations of BYTE and LENGTH fields, panicking at compile time if
+//! invalid configurations are provided. Reserved bits are always set to zero as required by the spec.
+//!
+//! ## Example
+//!
+//! ```rust
+//! let pd_in_param = process_data::pd_in::pd_in_parameter();
+//! let pd_out_param = process_data::pd_out::pd_out_parameter();
+//! ```
+
 use dev_config::process_data::ProcessDataLength;
+use iolinke_dev_config::device as dev_config;
 use iolinke_types::page::page1;
 
-pub use core::result::{Result, Result::{Ok, Err}};
+pub use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
 /// Constructs the `ProcessDataIn` parameter byte (see IO-Link Spec v1.1.4, Section B.1.6, Figure B.5).
 ///
@@ -95,6 +143,7 @@ pub mod pd_in {
         }
     }
 
+    /// Configure the Process Data Input LENGTH value
     pub const fn param_length() -> u8 {
         use ProcessDataLength::*;
         use iolinke_dev_config::device::process_data::config_pd_in_length;
@@ -247,6 +296,7 @@ pub mod pd_out {
     }
 }
 
+/// Maximum possible Process Data length in bytes (32 bytes).
 pub const fn max_pd_len() -> u8 {
     32u8
 }

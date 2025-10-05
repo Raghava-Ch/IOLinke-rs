@@ -1,11 +1,74 @@
+//! # IO-Link Event Handler Module
+//!
+//! This module defines traits and types for handling event signaling and memory management in IO-Link devices.
+//! It provides interfaces for triggering and confirming events, as well as structures for encoding event qualifiers
+//! and status codes according to the IO-Link specification.
+//!
+//! ## Key Traits
+//! - [`DlEventTriggerConf`]: Handles DL_EventTrigger confirmation.
+//! - [`DlEventReq`]: Handles DL_Event requests and triggers.
+//!
+//! ## Key Types
+//! - [`StatusCodeType1`], [`StatusCodeType2`]: Bitfield structures for event status codes.
+//! - [`EventQualifier`]: Bitfield structure for event qualifier encoding.
+//! - [`EventEntry`]: Represents a single event entry in event memory.
+//! - [`EhConfState`]: Configuration state for the event handler.
+//!
+//! ## Specification Reference
+//! - IO-Link v1.1.4, Section 7.2.1.17 (DL_EventTrigger)
+//! - Section 8.3.3, Figure 56 – State machine of the Device Event handler
+//! - Annex A.6 – Event qualifier and status code encoding
+//!
+//! This module is intended for use in IO-Link device implementations to manage event signaling,
+//! memory, and status reporting in compliance with the protocol.
+
 use crate::custom::IoLinkResult;
+
+/// Trait for handling the DL_EventTrigger service as specified in section 7.2.1.17.
+///
+/// The DL_EventTrigger request initiates Event signaling and freezes the Event memory within the Data Link (DL).
+/// Confirmation is returned after the activated Events have been processed. Additional DL_EventTrigger requests
+/// are ignored until the previous one has been confirmed. This service does not require any parameters.
+///
+/// See: Event flag in Figure A.3, sections 7.3.8, 8.3.3, and Figure 66 of the specification.
 pub trait DlEventTriggerConf {
+    /// Handle the DL_EventTrigger confirmation.
+    /// Event is been confirmed from the master side.
     fn event_trigger_conf(&mut self) -> IoLinkResult<()>;
 }
 
+/// Trait for handling DL_Event service requests as specified in IO-Link.
+///
+/// The DL_Event service indicates a pending status or error information.
+/// The cause for an Event is located in a Device and the Device application triggers the Event transfer.
+///
+/// # Methods
+///
+/// - `dl_event_req`: Handles the DL_Event request, transmitting event entries.
+///   - `event_count`: Number of event entries.
+///   - `event_entries`: Slice of [`EventEntry`] containing event details.
+///   - Returns [`IoLinkResult<()>`] indicating success or failure.
+///
+/// - `dl_event_trigger_req`: Triggers the DL_Event request.
+///   - Returns [`IoLinkResult<()>`] indicating success or failure.
+///
+/// # Parameters (as per IO-Link specification)
+/// - Instance: Indicates the Event source (Application).
+/// - Type: Indicates the Event category (ERROR, WARNING, NOTIFICATION).
+/// - Mode: Indicates the Event mode (SINGLESHOT, APPEARS, DISAPPEARS).
+/// - EventCode: 16-bit code identifying the Event.
+/// - EventsLeft: Number of unprocessed Events.
+///
+/// See IO-Link specification Table 30 – DL_Event for details.
 pub trait DlEventReq {
+    /// - `dl_event_req`: Handles the DL_Event request, transmitting event entries.
+    ///   - `event_count`: Number of event entries.
+    ///   - `event_entries`: Slice of [`EventEntry`] containing event details.
+    ///   - Returns [`IoLinkResult<()>`] indicating success or failure.
     fn dl_event_req(&mut self, event_count: u8, event_entries: &[EventEntry]) -> IoLinkResult<()>;
 
+    /// - `dl_event_trigger_req`: Triggers the DL_Event request.
+    ///   - Returns [`IoLinkResult<()>`] indicating success or failure.
     fn dl_event_trigger_req(&mut self) -> IoLinkResult<()>;
 }
 

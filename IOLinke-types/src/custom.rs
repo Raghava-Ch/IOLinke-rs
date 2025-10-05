@@ -1,3 +1,15 @@
+//! # IO-Link Error Types
+//!
+//! This module defines the error types used throughout the IO-Link stack.
+//! The `IoLinkError` enum provides a comprehensive set of error variants
+//! to represent various failure conditions that may occur during IO-Link
+//! operations, including communication errors, protocol violations, memory
+//! issues, and custom error types for specific stack components.
+//!
+//! The module also defines a convenient `IoLinkResult<T>` type alias for
+//! results that may return an `IoLinkError`, streamlining error handling
+//! in IO-Link related functions and traits.
+
 /// Error types for the IO-Link stack
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IoLinkError {

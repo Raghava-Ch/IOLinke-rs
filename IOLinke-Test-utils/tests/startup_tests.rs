@@ -131,7 +131,7 @@ fn test_vendor_id_1() {
         &poll_response_rx,
         TestDeviceMode::Startup,
     );
-    const CONFIG_VENDOR_ID_1: u8 = derived_config::vendor_specifics::vendor_id_1();
+    const CONFIG_VENDOR_ID_1: u8 = derived_config::vendor_specifics::VENDOR_ID[0];
     assert_eq!(CONFIG_VENDOR_ID_1, vendor_id_1, "VendorID1 is not matching");
 }
 
@@ -143,6 +143,6 @@ fn test_vendor_id_2() {
         &poll_response_rx,
         TestDeviceMode::Startup,
     );
-    const CONFIG_VENDOR_ID_2: u8 = derived_config::vendor_specifics::vendor_id_2();
+    const CONFIG_VENDOR_ID_2: u8 = derived_config::vendor_specifics::VENDOR_ID[1];
     assert_eq!(CONFIG_VENDOR_ID_2, vendor_id_2, "VendorID2 is not matching");
 }

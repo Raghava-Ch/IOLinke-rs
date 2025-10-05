@@ -1,38 +1,97 @@
+//! # ISDU Message Buffer Utilities
+//!
+//! This module provides utilities for handling ISDU (Indexed Service Data Unit) message buffers
+//! for IO-Link communication. It defines types and functions for transmitting and receiving
+//! ISDU messages, including buffer management, message compilation, parsing, and checksum validation.
+//!
+//! ## Features
+//!
+//! - **Transmit Buffer (`TxIsduMessageBuffer`)**: Provides methods to compile various ISDU responses
+//!   (success, failure, busy, no service) and manage the transmission buffer.
+//! - **Receive Buffer (`RxIsduMessageBuffer`)**: Handles incoming ISDU requests, including parsing
+//!   service codes, extracting indices, subindices, and data, and validating checksums.
+//! - **Error Handling**: Defines comprehensive error types for buffer operations and parsing.
+//! - **Checksum Calculation**: Implements checksum logic for message integrity verification.
+//! - **Indexing Support**: Enables slice and element indexing for buffer types.
+//!
+//! ## Usage
+//!
+//! Use the transmit and receive buffer types to manage ISDU message flows in IO-Link device or master
+//! implementations. The parsing and compilation functions ensure correct message formatting and validation
+//! according to the IO-Link specification.
+//!
+//! ## Example
+//!
+//! ```rust
+//! let mut tx_buffer = TxIsduMessageBuffer::new();
+//! tx_buffer.compile_isdu_write_success_response();
+//! assert!(tx_buffer.is_ready());
+//!
+//! let mut rx_buffer = RxIsduMessageBuffer::new();
+//! rx_buffer.extend(&[/* ISDU request bytes */]);
+//! if let Ok((service, index, subindex, data)) = rx_buffer.extract_isdu_data() {
+//!     // Handle parsed ISDU request
+//! }
+//! ```
+use core::ops::{Index, IndexMut, Range};
 use heapless::Vec;
 use iolinke_types::{
     custom::{IoLinkError, IoLinkResult},
     frame::isdu::{IsduIServiceCode, IsduLengthCode, IsduService},
     handlers::isdu::MAX_ISDU_LENGTH,
 };
-use core::ops::{Index, IndexMut, Range};
 
-use core::result::{Result, Result::{Ok, Err}};
-use core::option::{Option, Option::{Some, None}};
+use core::option::{
+    Option,
+    Option::{None, Some},
+};
+use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
+/// Error type for the ISDU (Indexed Service Data Unit) message buffer operations.
+#[derive(Debug, PartialEq, Eq)]
 pub enum IsduMessageBufferError {
+    /// Buffer does not have enough memory to perform the operation
     NotEnoughMemory,
+    /// Invalid parameter provided
     InvalidIndex,
+    /// Invalid parameter provided
     InvalidLength,
+    /// Object Dictionary (OD) not available
     OdNotAvailable,
+    /// Process Data (PD) not available
     PdNotAvailable,
+    /// Object Dictionary (OD) not set
     OdNotSet,
+    /// Process Data (PD) not set
     PdNotSet,
+    /// Invalid data received
     InvalidData,
+    /// Checksum validation failed
     InvalidChecksum,
+    /// Invalid M-sequence type
     InvalidMseqType,
+    /// Invalid read/write direction
     InvalidRwDirection,
+    /// Not ready for communication
     NotReady,
+    /// Invalid device operation mode
     InvalidDeviceOperationMode,
 }
 
+/// Result type for ISDU message buffer operations.
 pub type IsduMessageBufferResult<T> = Result<T, IsduMessageBufferError>;
 
+/// Message buffer for transmitting ISDU (Indexed Service Data Unit) messages.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TxIsduMessageBuffer {
     tx_buffer: Vec<u8, MAX_ISDU_LENGTH>,
     tx_buffer_ready: bool,
 }
 
+/// Message buffer for receiving ISDU (Indexed Service Data Unit) messages.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RxIsduMessageBuffer {
     rx_buffer: Vec<u8, MAX_ISDU_LENGTH>,
@@ -40,6 +99,7 @@ pub struct RxIsduMessageBuffer {
 }
 
 impl TxIsduMessageBuffer {
+    /// Creates a new instance of the TxIsduMessageBuffer.
     pub fn new() -> Self {
         Self {
             tx_buffer: Vec::new(),
@@ -47,23 +107,28 @@ impl TxIsduMessageBuffer {
         }
     }
 
+    /// Clears the message buffer.
     pub fn clear(&mut self) {
         self.tx_buffer.clear();
         self.tx_buffer_ready = false;
     }
 
+    /// Checks if the message buffer is ready for transmission.
     pub fn is_ready(&self) -> bool {
         self.tx_buffer_ready
     }
 
+    /// Returns the length of the message buffer.
     pub fn len(&self) -> usize {
         self.tx_buffer.len()
     }
 
+    /// Returns the message buffer as a slice.
     pub fn get_as_slice(&self) -> &[u8] {
         self.tx_buffer.as_slice()
     }
 
+    /// Compiles an ISDU write success response into the message buffer.
     pub fn compile_isdu_write_success_response(&mut self) {
         self.clear();
         const BUFFER: [u8; 3] = isdu_write_success_rsp();
@@ -71,6 +136,7 @@ impl TxIsduMessageBuffer {
         self.tx_buffer_ready = true;
     }
 
+    /// Compiles an ISDU busy response into the message buffer.
     pub fn compile_isdu_busy_response(&mut self) {
         self.clear();
         const BUFFER: [u8; 1] = isdu_busy_rsp();
@@ -78,6 +144,7 @@ impl TxIsduMessageBuffer {
         self.tx_buffer_ready = true;
     }
 
+    /// Compiles an ISDU no service response into the message buffer.
     pub fn compile_isdu_no_service_response(&mut self) {
         self.clear();
         const BUFFER: [u8; 1] = isdu_no_service_rsp();
@@ -85,6 +152,7 @@ impl TxIsduMessageBuffer {
         self.tx_buffer_ready = true;
     }
 
+    /// Compiles an ISDU read success response into the message buffer.
     pub fn compile_isdu_read_success_response(
         &mut self,
         length: u8,
@@ -100,6 +168,7 @@ impl TxIsduMessageBuffer {
         Ok(())
     }
 
+    /// Compiles an ISDU read failure response into the message buffer.
     pub fn compile_isdu_read_failure_response(
         &mut self,
         error_code: u8,
@@ -131,6 +200,7 @@ impl TxIsduMessageBuffer {
         Ok(())
     }
 
+    /// Compiles an ISDU write failure response into the message buffer.
     pub fn compile_isdu_write_failure_response(
         &mut self,
         error_code: u8,
@@ -193,6 +263,7 @@ impl IndexMut<usize> for TxIsduMessageBuffer {
 }
 
 impl RxIsduMessageBuffer {
+    /// Creates a new instance of the RxIsduMessageBuffer.
     pub fn new() -> Self {
         Self {
             rx_buffer: Vec::new(),
@@ -200,23 +271,28 @@ impl RxIsduMessageBuffer {
         }
     }
 
+    /// Clears the message buffer.
     pub fn clear(&mut self) {
         self.rx_buffer.clear();
         self.rx_buffer_ready = false;
     }
 
+    /// Returns the length of the message buffer.
     pub fn len(&self) -> usize {
         self.rx_buffer.len()
     }
 
+    /// Checks if the message buffer is ready for processing.
     pub fn is_ready(&self) -> bool {
         self.rx_buffer_ready
     }
 
+    /// Appends data to the message buffer.
     pub fn extend(&mut self, data: &[u8]) {
         let _ = self.rx_buffer.extend_from_slice(data);
     }
 
+    /// Marks the message buffer as ready for processing.
     pub fn get_as_slice(&self) -> &[u8] {
         self.rx_buffer.as_slice()
     }
@@ -271,7 +347,7 @@ impl RxIsduMessageBuffer {
         if self.rx_buffer.len() < 3 {
             return Err(IoLinkError::InvalidParameter);
         }
-        if calculate_checksum(self.rx_buffer.len() as u8, self.rx_buffer.as_slice()) != 0 {
+        if calculate_checksum(self.rx_buffer.len(), self.rx_buffer.as_slice()) != 0 {
             // Invalid checksum
             return Err(IoLinkError::ChecksumError);
         }
@@ -360,7 +436,7 @@ fn isdu_read_success_ext_len_rsp(
         .map_err(|_| IoLinkError::InvalidLength)?;
     buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?;
     let total_length = 3 + length as usize;
-    let chkpdu = calculate_checksum(total_length as u8, &buffer[0..total_length]);
+    let chkpdu = calculate_checksum(total_length, &buffer[0..total_length]);
     buffer.pop();
     buffer
         .push(chkpdu)
@@ -384,7 +460,7 @@ fn isdu_read_success_rsp(
         .map_err(|_| IoLinkError::InvalidLength)?;
     let total_length = 2 + length as usize; // 2 is for iservice + data
     buffer.push(0).map_err(|_| IoLinkError::InvalidLength)?;
-    let chkpdu = calculate_checksum(total_length as u8, &buffer[0..total_length]);
+    let chkpdu = calculate_checksum(total_length, &buffer[0..total_length]);
     buffer.pop();
     buffer
         .push(chkpdu)
@@ -405,7 +481,7 @@ const fn isdu_write_success_rsp() -> [u8; 3] {
     buffer
 }
 
-pub const fn isdu_busy_rsp() -> [u8; 1] {
+const fn isdu_busy_rsp() -> [u8; 1] {
     const BUSY_RSP_LEN: u8 = 1 + 0 + 0; // iservice + no data + no checksum
     let mut i_service = IsduService::new();
     i_service.set_i_service(IsduIServiceCode::NoService);
@@ -414,7 +490,7 @@ pub const fn isdu_busy_rsp() -> [u8; 1] {
     [buffer]
 }
 
-pub const fn isdu_no_service_rsp() -> [u8; 1] {
+const fn isdu_no_service_rsp() -> [u8; 1] {
     const NO_SERVICE_RSP_LEN_CODE: u8 = 0 + 0 + 0; // no iservice + no data + no checksum
     let mut i_service = IsduService::new();
     i_service.set_i_service(IsduIServiceCode::NoService);
@@ -423,7 +499,7 @@ pub const fn isdu_no_service_rsp() -> [u8; 1] {
     [buffer]
 }
 
-pub fn parse_read_request_with_index(
+fn parse_read_request_with_index(
     buffer: &Vec<u8, MAX_ISDU_LENGTH>,
 ) -> IoLinkResult<(IsduService, u16, u8)> {
     let i_service: IsduService = IsduService::from_bits(buffer[0]);
@@ -434,7 +510,7 @@ pub fn parse_read_request_with_index(
     Ok((i_service, index as u16, 0))
 }
 
-pub fn parse_read_request_with_index_subindex(
+fn parse_read_request_with_index_subindex(
     buffer: &Vec<u8, MAX_ISDU_LENGTH>,
 ) -> IoLinkResult<(IsduService, u16, u8)> {
     let i_service: IsduService = IsduService::from_bits(buffer[0]);
@@ -446,7 +522,7 @@ pub fn parse_read_request_with_index_subindex(
     Ok((i_service, index as u16, subindex))
 }
 
-pub fn parse_read_request_with_index_index_subindex(
+fn parse_read_request_with_index_index_subindex(
     buffer: &Vec<u8, MAX_ISDU_LENGTH>,
 ) -> IoLinkResult<(IsduService, u16, u8)> {
     let i_service: IsduService = IsduService::from_bits(buffer[0]);
@@ -458,7 +534,7 @@ pub fn parse_read_request_with_index_index_subindex(
     Ok((i_service, index, subindex))
 }
 
-pub fn parse_write_request_with_index(
+fn parse_write_request_with_index(
     buffer: &Vec<u8, MAX_ISDU_LENGTH>,
 ) -> IoLinkResult<(IsduService, u16, u8, &[u8])> {
     let i_service: IsduService = IsduService::from_bits(buffer[0]);
@@ -473,7 +549,7 @@ pub fn parse_write_request_with_index(
     Ok((i_service, index as u16, 0, &buffer[2..3 - length as usize]))
 }
 
-pub fn parse_write_request_with_index_subindex(
+fn parse_write_request_with_index_subindex(
     buffer: &Vec<u8, MAX_ISDU_LENGTH>,
 ) -> IoLinkResult<(
     IsduService,
@@ -511,7 +587,7 @@ pub fn parse_write_request_with_index_subindex(
     return Err(IoLinkError::InvalidData);
 }
 
-pub fn parse_write_request_with_index_index_subindex(
+fn parse_write_request_with_index_index_subindex(
     buffer: &Vec<u8, MAX_ISDU_LENGTH>,
 ) -> IoLinkResult<(
     IsduService,
@@ -535,10 +611,10 @@ pub fn parse_write_request_with_index_index_subindex(
     Ok((i_service, index, subindex, &buffer[5..5 + length as usize]))
 }
 
-pub const fn calculate_checksum(length: u8, data: &[u8]) -> u8 {
+const fn calculate_checksum(length: usize, data: &[u8]) -> u8 {
     let mut checkpdu = 0;
     let mut i = 0;
-    while i < length as usize {
+    while i < length {
         // Avoid out-of-bounds access
         if i < data.len() {
             checkpdu ^= data[i];
@@ -546,4 +622,10 @@ pub const fn calculate_checksum(length: u8, data: &[u8]) -> u8 {
         i += 1;
     }
     checkpdu
+}
+
+/// Calculates the checksum for testing purposes.
+#[cfg(any(test, feature = "std"))]
+pub fn calculate_checksum_for_testing(length: usize, data: &[u8]) -> u8 {
+    calculate_checksum(length, data)
 }

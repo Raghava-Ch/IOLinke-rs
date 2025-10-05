@@ -32,7 +32,7 @@ fn test_isdu_read_vendor_name() {
         // Vendor Name index 0x10, subindex 0x00
         let vendor_name_index = DeviceParametersIndex::VendorName.index();
         let vendor_name_subindex = DeviceParametersIndex::VendorName.subindex(SubIndex::VendorName);
-        const VENDOR_NAME: &'static str = derived_config::vendor_specifics::vendor_name();
+        const VENDOR_NAME: &'static str = derived_config::vendor_specifics::VENDOR_NAME;
         const VENDOR_NAME_LENGTH: u8 = VENDOR_NAME.len() as u8;
 
         let result = iolinke_test_utils::util_pre_op_test_isdu_sequence_read(
@@ -82,7 +82,7 @@ fn test_isdu_read_product_name() {
         let product_name_index = DeviceParametersIndex::ProductName.index();
         let product_name_subindex =
             DeviceParametersIndex::ProductName.subindex(SubIndex::ProductName);
-        const PRODUCT_NAME: &'static str = derived_config::vendor_specifics::product_name();
+        const PRODUCT_NAME: &'static str = derived_config::vendor_specifics::PRODUCT_NAME;
         const PRODUCT_NAME_LENGTH: u8 = PRODUCT_NAME.len() as u8;
 
         let result = iolinke_test_utils::util_pre_op_test_isdu_sequence_read(

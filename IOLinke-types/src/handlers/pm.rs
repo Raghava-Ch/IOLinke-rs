@@ -1,3 +1,30 @@
+//! # IO-Link Parameter Memory (PM) Handler Module
+//!
+//! This module provides types and logic for handling parameter memory operations in IO-Link devices.
+//! It defines enums and bitfields for representing Data Storage state, parameter indices, subindices,
+//! and validity checks, as well as methods for accessing and categorizing device parameters.
+//!
+//! ## Key Types
+//! - [`DsState`]: Enumerates Data Storage states.
+//! - [`StateProperty`]: Bitfield structure for Data Storage state property.
+//! - [`DeviceParametersIndex`]: Enumerates device parameter indices as per IO-Link specification.
+//! - [`DirectParameterPage1SubIndex`], [`DirectParameterPage2SubIndex`], [`DataStorageIndexSubIndex`]: Subindex enums for parameter access.
+//! - [`SubIndex`]: Enum for specifying subindices for parameter indices.
+//! - [`IndexCategory`]: Categorizes parameter indices by range.
+//!
+//! ## Key Methods
+//! - [`DeviceParametersIndex::from_index`]: Creates a parameter index from a raw value.
+//! - [`DeviceParametersIndex::index`]: Returns the raw index value.
+//! - [`DeviceParametersIndex::name`]: Returns the human-readable parameter name.
+//! - [`DeviceParametersIndex::category`]: Returns the parameter category.
+//!
+//! ## Specification Reference
+//! - IO-Link v1.1.4, Section B.8 (Index assignment of data objects)
+//! - Table B.8 – Index assignment of data objects
+//!
+//! This module is intended for use in IO-Link device implementations to manage parameter memory,
+//! access device parameters, and ensure compliance with index assignment and categorization.
+
 use bitfields::bitfield;
 use iolinke_macros::bitfield_support;
 
@@ -6,13 +33,18 @@ use iolinke_macros::bitfield_support;
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DsState {
+    /// Data Storage is inactive
     Inactive = 0b00,
+    /// Data Storage is active for upload
     Upload = 0b01,
+    /// Data Storage is active for download
     Download = 0b10,
+    /// Data Storage is locked
     Locked = 0b11,
 }
 
 impl DsState {
+    /// Creates a new `DsState` instance with the default value of `Inactive`.
     pub const fn new() -> Self {
         Self::Inactive
     }
@@ -42,6 +74,7 @@ pub struct StateProperty {
     pub ds_upload_flag: bool,
 }
 
+/// Result of parameter validity check
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidityCheckResult {
     /// Parameter is valid
@@ -52,43 +85,172 @@ pub enum ValidityCheckResult {
     YetToBeValidated,
 }
 
-/// Represents all possible device parameter indices as defined in the specification.
+/// Generates a comprehensive `DeviceParameterIndex` enum based on the IO-Link specification v1.1.4.
 ///
-/// This enum categorizes parameters into different ranges with specific purposes:
-/// - Standard parameters (0x0000-0x0030)
-/// - Profile-specific parameters (0x0031-0x003F)
-/// - Preferred device-specific parameters (0x0040-0x00FE)
-/// - Extended device-specific parameters (0x0100-0x3FFF)
-/// - Various profile-specific ranges (0x4000-0x4FFF)
-/// - Safety and wireless extensions (0x4200-0x42FF, 0x5000-0x50FF)
+/// This procedural macro creates a strongly-typed representation of all device parameter indices
+/// as defined in the IO-Link specification. It covers the complete range from 0x0000 to 0xFFFF,
+/// categorizing parameters into standard, profile-specific, and device-specific ranges.
+///
+/// ## Index Ranges and Categories
+///
+/// ### Standard Parameters (0x0000-0x0030)
+/// These are mandatory or conditional parameters that all IO-Link devices must support:
+///
+/// | Index  | Name                       | Access | Data Type         | M/O/C | Description                                         |
+/// |--------|----------------------------|--------|-------------------|-------|-----------------------------------------------------|
+/// | 0x0000 | Direct Parameter Page 1    | R      | RecordT           | M     | Redirected to page communication channel            |
+/// | 0x0001 | Direct Parameter Page 2    | R/W    | RecordT           | M     | Redirected to page communication channel            |
+/// | 0x0002 | System-Command             | W      | UIntegerT         | C     | Command code definition (1 octet)                   |
+/// | 0x0003 | Data-Storage-Index         | R/W    | RecordT           | M     | Set of data objects for storage                     |
+/// | 0x000C | Device-Access-Locks        | R/W    | RecordT           | O     | Standardized device locking functions (2 octets)    |
+/// | 0x000D | Profile-Characteristic     | R      | ArrayT<UIntegerT16>| C     | Reserved for Common Profile                         |
+/// | 0x000E | PDInput-Descriptor         | R      | ArrayT<OctetStringT3>| C  | Reserved for Common Profile                         |
+/// | 0x000F | PDOutput-Descriptor        | R      | ArrayT<OctetStringT3>| C  | Reserved for Common Profile                         |
+/// | 0x0010 | Vendor-Name                | R      | StringT           | M     | Vendor information (max 64 octets)                  |
+/// | 0x0011 | Vendor-Text                | R      | StringT           | O     | Additional vendor information (max 64 octets)       |
+/// | 0x0012 | Product-Name               | R      | StringT           | M     | Detailed product or type name (max 64 octets)       |
+/// | 0x0013 | ProductID                  | R      | StringT           | O     | Product or type identification (max 64 octets)      |
+/// | 0x0014 | Product-Text               | R      | StringT           | O     | Description of device function (max 64 octets)      |
+/// | 0x0015 | Serial-Number              | R      | StringT           | O     | Vendor specific serial number (max 16 octets)       |
+/// | 0x0016 | Hardware-Revision          | R      | StringT           | O     | Vendor specific format (max 64 octets)              |
+/// | 0x0017 | Firmware-Revision          | R      | StringT           | O     | Vendor specific format (max 64 octets)              |
+/// | 0x0018 | Application-Specific-Tag   | R/W    | StringT           | O     | Tag defined by user (16-32 octets)                  |
+/// | 0x0019 | Function-Tag               | R/W    | StringT           | C     | Reserved for Common Profile (max 32 octets)         |
+/// | 0x001A | Location-Tag               | R/W    | StringT           | C     | Reserved for Common Profile (max 32 octets)         |
+/// | 0x001B | Product-URI                | R      | StringT           | C     | Reserved for Common Profile (max 100 octets)        |
+/// | 0x0020 | ErrorCount                 | R      | UIntegerT         | O     | Errors since power-on or reset (2 octets)           |
+/// | 0x0024 | Device-Status              | R      | UIntegerT         | O     | Current status of the device (1 octet)              |
+/// | 0x0025 | Detailed-Device-Status     | R      | ArrayT<OctetStringT3>| O  | Detailed device status information                  |
+/// | 0x0028 | Process-DataInput          | R      | Device specific   | O     | Read last valid process data from PDin channel      |
+/// | 0x0029 | Process-DataOutput         | R      | Device specific   | O     | Read last valid process data from PDout channel     |
+/// | 0x0030 | Offset-Time                | R/W    | RecordT           | O     | Synchronization of device timing to M-sequence      |
+///
+/// ### Reserved Ranges
+/// The following ranges are reserved and should not be used:
+/// - 0x0004-0x000B: Reserved for exceptional operations
+/// - 0x001C-0x001F: Reserved
+/// - 0x0021-0x0023: Reserved
+/// - 0x0026-0x0027: Reserved
+/// - 0x002A-0x002F: Reserved
+/// - 0x00FF: Reserved
+/// - 0x5100-0xFFFF: Reserved
+///
+/// ### Profile-Specific Parameters (0x0031-0x003F)
+/// Reserved for device profiles and common profile extensions.
+///
+/// ### Preferred Device-Specific Parameters (0x0040-0x00FE)
+/// 8-bit range for device-specific parameters that are commonly used.
+///
+/// ### Extended Device-Specific Parameters (0x0100-0x3FFF)
+/// 16-bit range for extended device-specific functionality.
+///
+/// ### Device Profile Parameters (0x4000-0x41FF, 0x4300-0x4FFF)
+/// Reserved ranges for device profile specifications.
+///
+/// ### Safety System Extensions (0x4200-0x42FF)
+/// Reserved for safety system extensions as defined in [10].
+///
+/// ### Wireless System Extensions (0x5000-0x50FF)
+/// Reserved for wireless system extensions as defined in [11].
+///
+/// ## Provided Methods
+///
+/// The following methods are implemented for the `DeviceParametersIndex` enum:
+///
+/// - `from_index(index: u16) -> Option<Self>`: Creates a parameter index from a raw value.
+/// - `index(&self) -> u16`: Returns the raw index value.
+/// - `name(&self) -> &'static str`: Returns the human-readable parameter name.
+/// - `category(&self) -> IndexCategory`: Returns the parameter category.
+///
+/// ## Usage Example
+///
+/// ```rust
+/// use crate::handlers::pm::{DeviceParametersIndex, IndexCategory};
+///
+/// // Access standard parameters
+/// let vendor_name = DeviceParametersIndex::VendorName;
+/// assert_eq!(vendor_name.index(), 0x0010);
+/// assert_eq!(vendor_name.name(), "Vendor-Name");
+/// assert_eq!(vendor_name.category(), IndexCategory::Standard);
+///
+/// // Create from raw index
+/// let param = DeviceParametersIndex::from_index(0x0012).unwrap();
+/// assert_eq!(param, DeviceParametersIndex::ProductName);
+///
+/// // Handle device-specific parameters
+/// let custom_param = DeviceParametersIndex::PreferredIndex(0x50);
+/// assert_eq!(custom_param.index(), 0x50);
+/// assert_eq!(custom_param.category(), IndexCategory::PreferredIndex);
+/// ```
+///
+/// ## References
+///
+/// - IO-Link Specification v1.1.4, Section B.8 - Index assignment of data objects
+/// - Common Profile [7] for profile-specific parameters
+/// - Safety system extensions [10]
+/// - Wireless system extensions [11]
+///
+/// ## Notes
+///
+/// - All standard parameters with M (Mandatory) status must be implemented by IO-Link devices
+/// - Parameters with O (Optional) status may be implemented based on device capabilities
+/// - Parameters with C (Conditional) status are required when specific profiles are implemented
+/// - Reserved ranges should not be used for custom parameters to avoid conflicts
+/// - The macro automatically handles range validation and provides type-safe access to all valid indices
 #[repr(u16)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DeviceParametersIndex {
+    /// 0x0000: Redirected to page communication channel (Direct Parameter Page 1, RecordT, Mandatory)
     DirectParameterPage1 = 0x0000,
+    /// 0x0001: Redirected to page communication channel (Direct Parameter Page 2, RecordT, Mandatory)
     DirectParameterPage2 = 0x0001,
+    /// 0x0002: Command code definition (System-Command, UIntegerT, Conditional, 1 octet)
     SystemCommand = 0x0002,
+    /// 0x0003: Set of data objects for storage (Data-Storage-Index, RecordT, Mandatory)
     DataStorageIndex = 0x0003,
+    /// 0x000C: Standardized device locking functions (Device-Access-Locks, RecordT, Optional, 2 octets)
     DeviceAccessLocks = 0x000C,
+    /// 0x000D: Reserved for Common Profile (Profile-Characteristic, ArrayT<UIntegerT16>, Conditional)
     ProfileCharacteristic = 0x000D,
+    /// 0x000E: Reserved for Common Profile (PDInput-Descriptor, ArrayT<OctetStringT3>, Conditional)
     PDInputDescriptor = 0x000E,
+    /// 0x000F: Reserved for Common Profile (PDOutput-Descriptor, ArrayT<OctetStringT3>, Conditional)
     PDOutputDescriptor = 0x000F,
+    /// 0x0010: Vendor information (Vendor-Name, StringT, Mandatory, max 64 octets)
     VendorName = 0x0010,
+    /// 0x0011: Additional vendor information (Vendor-Text, StringT, Optional, max 64 octets)
     VendorText = 0x0011,
+    /// 0x0012: Detailed product or type name (Product-Name, StringT, Mandatory, max 64 octets)
     ProductName = 0x0012,
+    /// 0x0013: Product or type identification (ProductID, StringT, Optional, max 64 octets)
     ProductID = 0x0013,
+    /// 0x0014: Description of device function (Product-Text, StringT, Optional, max 64 octets)
     ProductText = 0x0014,
+    /// 0x0015: Vendor specific serial number (Serial-Number, StringT, Optional, max 16 octets)
     SerialNumber = 0x0015,
+    /// 0x0016: Vendor specific format (Hardware-Revision, StringT, Optional, max 64 octets)
     HardwareRevision = 0x0016,
+    /// 0x0017: Vendor specific format (Firmware-Revision, StringT, Optional, max 64 octets)
     FirmwareRevision = 0x0017,
+    /// 0x0018: Tag defined by user (Application-Specific-Tag, StringT, Optional, 16-32 octets)
     ApplicationSpecificTag = 0x0018,
+    /// 0x0019: Reserved for Common Profile (Function-Tag, StringT, Conditional, max 32 octets)
     FunctionTag = 0x0019,
+    /// 0x001A: Reserved for Common Profile (Location-Tag, StringT, Conditional, max 32 octets)
     LocationTag = 0x001A,
+    /// 0x001B: Reserved for Common Profile (Product-URI, StringT, Conditional, max 100 octets)
     ProductURI = 0x001B,
+    /// 0x0020: Errors since power-on or reset (ErrorCount, UIntegerT, Optional, 2 octets)
     ErrorCount = 0x0020,
+    /// 0x0024: Current status of the device (Device-Status, UIntegerT, Optional, 1 octet)
     DeviceStatus = 0x0024,
+    /// 0x0025: Detailed device status information (Detailed-Device-Status, ArrayT<OctetStringT3>, Optional)
     DetailedDeviceStatus = 0x0025,
+    /// 0x0028: Read last valid process data from PDin channel (Process-DataInput, Device specific, Optional)
     ProcessDataInput = 0x0028,
+    /// 0x0029: Read last valid process data from PDout channel (Process-DataOutput, Device specific, Optional)
     ProcessDataOutput = 0x0029,
+    /// 0x0030: Synchronization of device timing to M-sequence (Offset-Time, RecordT, Optional)
     OffsetTime = 0x0030,
     /// Profile-specific parameters range (0x0031-0x003F)
     ProfileSpecific(u16),
@@ -105,40 +267,90 @@ pub enum DeviceParametersIndex {
     /// Wireless system extensions parameters range (0x5000-0x50FF)
     WirelessSpecificIndex(u16),
 }
-/// Device parameter index as defined by the IO-Link Specification.
+
+/// Resolves IO-Link direct parameter identifiers to their corresponding addresses.
 ///
-/// This enum represents the standard and extended parameter indices used for accessing
-/// device parameters in IO-Link devices. The variants cover:
-/// - Standard parameters (0x0000-0x0030), such as direct parameter pages, system commands, device identification, and process data descriptors.
-/// - Profile-specific and device-specific parameter ranges, including:
-///   - ProfileSpecific: 0x0031-0x003F
-///   - PreferredIndex: 0x0040-0x00FE (8-bit preferred device-specific)
-///   - ExtendedIndex: 0x0100-0x3FFF (16-bit extended device-specific)
-///   - DeviceProfileIndex: 0x4000-0x41FF (device profile-specific)
-///   - SafetySpecificIndex: 0x4200-0x42FF (safety system extensions)
-///   - SecondaryDeviceProfileIndex: 0x4300-0x4FFF (secondary device profile-specific)
-///   - WirelessSpecificIndex: 0x5000-0x50FF (wireless system extensions)
+/// This function maps parameter names to their standardized IO-Link addresses according
+/// to the IO-Link specification v1.1. Direct parameters are organized into two pages:
 ///
-/// Use this enum to match or construct parameter indices for device parameter access,
-/// including vendor-specific and profile-specific extensions.
+/// ## Direct Parameter Page 1 (0x00-0x0F) - Standard Parameters
+///
+/// | Address | Parameter | Access | Description |
+/// |---------|-----------|--------|-------------|
+/// | 0x00u8 | `MasterCommand` | W | Master command to switch to operating states |
+/// | 0x01u8 | `MasterCycleTime` | R/W | Actual cycle duration used by Master |
+/// | 0x02u8 | `MinCycleTime` | R | Minimum cycle duration supported by Device |
+/// | 0x03u8 | `MSequenceCapability` | R | M-sequences and physical configuration options |
+/// | 0x04u8 | `RevisionID` | R/W | Protocol version ID (shall be 0x11) |
+/// | 0x05u8 | `ProcessDataIn` | R | Input data type and length (Device to Master) |
+/// | 0x06u8 | `ProcessDataOut` | R | Output data type and length (Master to Device) |
+/// | 0x07u8 | `VendorID1` | R | Vendor identification MSB |
+/// | 0x08u8 | `VendorID2` | R | Vendor identification LSB |
+/// | 0x09u8 | `DeviceID1` | R/W | Device identification Octet 2 (MSB) |
+/// | 0x0Au8 | `DeviceID2` | R/W | Device identification Octet 1 |
+/// | 0x0Bu8 | `DeviceID3` | R/W | Device identification Octet 0 (LSB) |
+/// | 0x0Cu8 | `FunctionID1` | R | Reserved (MSB) |
+/// | 0x0Du8 | `FunctionID2` | R | Reserved (LSB) |
+/// | 0x0Eu8 | `Reserved0E` | R | Reserved |
+/// | 0x0Fu8 | `SystemCommand` | W | Command interface for end user applications |
+///
+/// ## Direct Parameter Page 2 (0x10-0x1F) - Vendor Specific
+///
+/// Addresses 0x10-0x1F are reserved for vendor-specific parameters.
+///
+/// # Parameters
+///
+/// * `param_ident` - The parameter identifier as a string slice
+///
+/// # Returns
+///
+/// Returns the corresponding 8-bit address for the given parameter.
+///
+/// # Panics
+///
+/// Panics if the provided parameter identifier is not recognized.
+///
+/// # Examples
+///
+/// ```rust
+/// use crate::handlers::pm::DirectParameterPage1SubIndex;
+/// let addr = DirectParameterPage1SubIndex::VendorID1 as u8;
+/// assert_eq!(addr, 0x07u8);
+/// ```
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DirectParameterPage1SubIndex {
+    /// Master command to switch to operating states (W)
     MasterCommand = 0x00u8,
+    /// Actual cycle duration used by Master (R/W)
     MasterCycleTime = 0x01u8,
+    /// Minimum cycle duration supported by Device (R)
     MinCycleTime = 0x02u8,
+    /// M-sequences and physical configuration options (R)
     MSequenceCapability = 0x03u8,
+    /// Protocol version ID (shall be 0x11) (R/W)
     RevisionID = 0x04u8,
+    /// Input data type and length (Device to Master) (R)
     ProcessDataIn = 0x05u8,
+    /// Output data type and length (Master to Device) (R)
     ProcessDataOut = 0x06u8,
+    /// Vendor identification MSB (R)
     VendorID1 = 0x07u8,
+    /// Vendor identification LSB (R)
     VendorID2 = 0x08u8,
+    /// Device identification Octet 2 (MSB) (R/W)
     DeviceID1 = 0x09u8,
+    /// Device identification Octet 1 (R/W)
     DeviceID2 = 0x0Au8,
+    /// Device identification Octet 0 (LSB) (R/W)
     DeviceID3 = 0x0Bu8,
+    /// Reserved (MSB) (R)
     FunctionID1 = 0x0Cu8,
+    /// Reserved (LSB) (R)
     FunctionID2 = 0x0Du8,
+    /// Reserved (R)
     Reserved0E = 0x0Eu8,
+    /// Command interface for end user applications (W)
     SystemCommand = 0x0Fu8,
 }
 
@@ -154,7 +366,7 @@ pub enum DirectParameterPage1SubIndex {
 ///
 /// # Usage
 /// Use these variants to access or define vendor-specific parameters on Direct Parameter Page 2.
-/// For example, `DirectParameterPage2SubIndex::VendorSpecific10` corresponds to subindex 0x10.
+/// For example, `DirectParameterPage2SubIndex::VendorSpecific12` corresponds to subindex 0x10.
 ///
 /// # Example
 /// ```

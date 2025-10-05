@@ -142,6 +142,7 @@ macro_rules! log_state_transition {
     };
 }
 
+/// Log a state transition error.
 #[macro_export]
 macro_rules! log_state_transition_error {
     (

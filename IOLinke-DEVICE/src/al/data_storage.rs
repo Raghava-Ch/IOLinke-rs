@@ -11,7 +11,7 @@ use iolinke_types::{
 };
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
-pub use core::result::Result::{Ok, Err};
+pub use core::result::Result::{Err, Ok};
 
 use crate::al::{event_handler, parameter_manager};
 

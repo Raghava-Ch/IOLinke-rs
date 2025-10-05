@@ -1,45 +1,102 @@
+//! # IO-Link C Types Bindings
+//!
+//! This module provides C-compatible types and structures for representing IO-Link device parameters and communication settings,
+//! as defined in the IO-Link Specification v1.1.4 (Annex B.1). These types are designed for interoperability with C code and
+//! facilitate safe and efficient FFI between Rust and C environments.
+//!
+//! ## Overview
+//!
+//! The types in this module cover:
+//! - Device action and operation states
+//! - Communication result types and result unions
+//! - Device handle representation
+//! - Cycle time encoding and calculation
+//! - M-sequence capability and protocol revision identification
+//! - Process data input/output configuration
+//! - Device communication parameter grouping
+//!
+//! Each struct and enum is annotated with `#[repr(C)]` to ensure layout compatibility with C, and detailed documentation is provided
+//! for each type, referencing the relevant sections of the IO-Link specification.
+//!
+//! ## Specification Reference
+//!
+//! - IO-Link Specification v1.1.4, Annex B.1: Direct Parameter Page 1
+//! - Section B.1.1: Communication Parameters
+//! - Section B.1.3: Cycle Time
+//! - Section B.1.4: M-sequenceCapability, RevisionID
+//! - Section B.1.6: ProcessDataIn, ProcessDataOut
+//!
+//! ## Usage
+//!
+//! Use these types to encode, decode, and transfer IO-Link device parameters and communication settings between Rust and C code.
+//! The documentation for each type provides guidance on field usage and specification compliance.
 use iolinke_device::{SioMode, TransmissionRate};
 
-pub use core::result::{Result, Result::{Ok, Err}};
+pub use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
+/// Device action states.
 #[repr(C)]
 pub enum DeviceActionState {
+    /// No action is currently being performed.
     Busy,
+    /// An action is currently being performed.
     Done,
+    /// No device is present.
     NoDevice,
 }
 
+/// Result of an operation.
 #[repr(C)]
 pub enum OperationResult {
+    /// Operation completed successfully.
     Ok,
+    /// An error occurred during the operation.
     Error,
+    /// A parameter conflict was detected.
     ParameterConflict,
 }
 
+/// Type alias for IO-Link device handle.
 pub type IOLinkeDeviceHandle = i16; // Using i16 to match C's int16_t
 
-// SmResult<&DeviceCom>
-// SmResult<&DeviceIdent>
-// SmResult<()>
-
+/// Result types for system management operations.
 #[repr(C)]
 pub enum SmResultType {
+    /// Operation completed successfully.
     Ok,
+    /// An error occurred during the operation.
     Err,
+    /// Communication data for the device.
     DeviceCom,
+    /// Identification information for the device.
     DeviceIdent,
 }
 
 #[repr(C)]
+/// A union representing the result of a state machine operation.
+///
+/// This union can hold one of the following:
+/// - `device_com`: Communication data for the device.
+/// - `device_ident`: Identification information for the device.
+/// - `err_code`: Error code indicating the result of the operation.
 pub union SmResult {
+    /// Communication parameters for the device.
     pub device_com: DeviceCom,
+    /// Identification information for the device.
     pub device_ident: iolinke_device::DeviceIdent,
+    /// Error code for the operation.
     pub err_code: i8,
 }
 
+/// Wrapper struct combining the result type and the result union.
 #[repr(C)]
 pub struct SmResultWrapper {
+    /// The type of result.
     pub result_type: SmResultType,
+    /// The result data, which can be one of several types.
     pub result: SmResult,
 }
 

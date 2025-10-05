@@ -1,3 +1,31 @@
+//! # IO-Link System Management (SM) Handler Module
+//!
+//! This module defines traits and types for handling system management operations in IO-Link devices.
+//! It provides interfaces for requesting, confirming, and indicating system management actions such as
+//! device communication setup, identification, and mode changes. It also defines error types and configuration
+//! structures for device communication and operating modes.
+//!
+//! ## Key Traits
+//! - [`SystemManagementReq`]: Interface for system management requests.
+//! - [`SystemManagementCnf`]: Interface for system management confirmations.
+//! - [`SystemManagementInd`]: Interface for system management indications.
+//!
+//! ## Key Types
+//! - [`SmError`]: Enumerates system management error types.
+//! - [`SmResult`]: Result type for system management operations.
+//! - [`SioMode`]: Enumerates SIO mode configuration options.
+//! - [`DeviceMode`]: Enumerates device operating modes.
+//! - [`DeviceCom`]: Structure for device communication configuration.
+//! - [`IoLinkMode`]: Enumerates IO-Link communication modes.
+//!
+//! ## Specification Reference
+//! - IO-Link v1.1.4, Section 6.3 (System Management State Machine)
+//! - Section 7.3 (Device Identification and Communication)
+//! - Annex B.1 (Direct Parameter Page 1)
+//!
+//! This module is intended for use in IO-Link device implementations to manage system configuration,
+//! communication setup, and state transitions in compliance with the protocol.
+
 use crate::{
     frame::msequence::TransmissionRate,
     page::page1::{

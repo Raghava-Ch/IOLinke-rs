@@ -21,9 +21,12 @@ use iolinke_util::{
     log_state_transition, log_state_transition_error,
 };
 
-use core::result::{Result, Result::{Ok, Err}};
-use core::default::Default;
 use core::clone::Clone;
+use core::default::Default;
+use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
 use crate::{
     dl::{mode_handler, od_handler, pd_handler},

@@ -15,5 +15,4 @@
 //! - Section 5.3: C/Q Line Control and Timing
 //! - Annex A: Protocol Timing and Sequences
 
-pub mod hal;
 pub mod physical_layer;

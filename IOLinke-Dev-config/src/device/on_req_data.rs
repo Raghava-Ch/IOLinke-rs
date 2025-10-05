@@ -1,3 +1,16 @@
+//! Device On-Request Data Length Configuration
+//!
+//! This module provides constants and functions for determining the valid on-request data lengths
+//! for IO-Link devices in PREOPERATE and OPERATE modes, according to the IO-Link Specification (v1.1.4).
+//!
+//! It exposes submodules for each operating mode, with documentation and configuration notes
+//! for safe and standards-compliant device implementation.
+
+/// PREOPERATE mode configuration for IO-Link devices.
+///
+/// This module defines the valid on-request data lengths and their corresponding M-sequence types
+/// for the PREOPERATE mode. It ensures that only specification-compliant values are used and
+/// provides guidance for device developers.
 pub mod pre_operate {
 
     /// M-sequence types for the PREOPERATE mode as per IO-Link Specification (v1.1.4, Table A.8).
@@ -31,6 +44,11 @@ pub mod pre_operate {
     }
 }
 
+/// OPERATE mode configuration for IO-Link devices.
+///
+/// This module defines the valid on-request data lengths and their corresponding M-sequence types
+/// for the OPERATE mode. It ensures that only specification-compliant values are used and
+/// provides guidance for device developers.
 pub mod operate {
     /// M-sequence types for the OPERATE mode (per IO-Link Specification, Table A.10).
     ///

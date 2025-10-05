@@ -1,3 +1,25 @@
+//! # MinCycleTime Configuration Module
+//!
+//! This module provides constants and functions for configuring the Device's
+//! MinCycleTime parameter as specified in IO-Link Specification v1.1.4, Section B.1.3.
+//!
+//! The MinCycleTime parameter informs the IO-Link Master about the shortest cycle time
+//! supported by the Device. The encoding and valid ranges are defined in Table B.3 and
+//! Figure B.2 of the IO-Link specification.
+//!
+//! ## MinCycleTime Encoding (Figure B.2)
+//! - **Bits 0..=5**: Multiplier (0..=63)
+//! - **Bits 6..=7**: Time Base (0b00 = 0.1ms, 0b01 = 0.4ms, 0b10 = 1.6ms, 0b11 = Reserved)
+//!
+//! ## Valid Ranges (Table B.3)
+//! | Time Base | Multiplier Range | Cycle Time Range (ms) |
+//! |-----------|------------------|----------------------|
+//! | 0 (0.1ms) | 4..=63           | 0.4 ..= 6.3          |
+//! | 1 (0.4ms) | 0..=63           | 6.4 ..= 31.6         |
+//! | 2 (1.6ms) | 0..=63           | 32.0 ..= 132.8       |
+//!
+//! The Device must not indicate a MinCycleTime shorter than the calculated M-sequence time.
+
 /// # MinCycleTime Configuration Module
 ///
 /// This module provides constants and functions for configuring the Device's

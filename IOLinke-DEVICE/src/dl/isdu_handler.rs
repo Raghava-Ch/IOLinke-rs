@@ -16,9 +16,9 @@ use iolinke_util::frame_fromat::isdu::RxIsduMessageBuffer;
 use iolinke_util::frame_fromat::isdu::TxIsduMessageBuffer;
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
-use core::result::Result::{Ok, Err};
-use core::option::Option::Some;
 use core::default::Default;
+use core::option::Option::Some;
+use core::result::Result::{Err, Ok};
 
 use crate::services;
 use crate::{al, dl::message_handler};

@@ -1,10 +1,47 @@
-//! Mock physical layer implementation for testing IO-Link device stack
-
+//! # IO-Link Physical Layer Bindings
+//!
+//! This module provides Rust bindings and abstractions for the IO-Link Physical Layer (PL) as specified in the IO-Link Interface Specification v1.1.4.
+//! It defines the interface for configuring and interacting with the physical layer of IO-Link devices, including mode setting, data transfer, and timer management.
+//!
+//! ## Features
+//!
+//! - **Physical Layer Services:** Exposes FFI functions for PL_SetMode, PL_Transfer, PL_WakeUp, and timer operations, which must be implemented by the integrator for hardware-specific behavior.
+//! - **Indication Handlers:** Provides Rust functions to handle transfer and wake-up indications from the physical layer, forwarding events to the data link layer.
+//! - **Mock Implementation:** Includes a mock physical layer struct (`BindingPhysicalLayer`) for testing and integration purposes.
+//! - **Device State Management:** Integrates with the IO-Link device state machine to ensure correct operation sequencing and error handling.
+//!
+//! ## Usage
+//!
+//! - Implement the required FFI functions in your hardware abstraction layer.
+//! - Use the provided Rust handlers to process physical layer events and manage device communication.
+//! - Leverage the mock implementation for unit testing and simulation.
+//!
+//! ## Specification References
+//!
+//! - IO-Link Interface Spec v1.1.4 Section 5.2.2.1: PL_SetMode Service
+//! - IO-Link Interface Spec v1.1.4 Section 5.2.2.2: PL_WakeUp Service
+//! - IO-Link Interface Spec v1.1.4 Section 5.2.2.3: PL_Transfer Service
+//! - IO-Link Interface Spec v1.1.4 Section 5.3.3.3: Wake-up Sequence
+//!
+//! ## Safety
+//!
+//! Many functions in this module are marked `unsafe` due to their reliance on FFI and mutable static references. Care must be taken to ensure thread safety and correct device indexing when interacting with these APIs.
+//!
+//! ## Example
+//!
+//! ```rust,ignore
+//! let mut device = IoLinkDevice::new();
+//! device.pl_transfer_ind(0x55)?; // Handle received byte 0x55
+//! device.pl_wake_up_ind()?;      // Handle wake-up indication
+//! ```
 use crate::c::app::{BindingApplicationLayer, IOLINKE_DEVICES};
 use crate::c::types::{DeviceActionState, IOLinkeDeviceHandle};
 
-pub use core::result::{Result, Result::{Ok, Err}};
 use core::option::Option::Some;
+pub use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
 use iolinke_device::{IoLinkDevice, PhysicalLayerReq, Timer, TransmissionRate};
 use iolinke_types::custom::IoLinkResult;

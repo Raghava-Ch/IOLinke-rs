@@ -15,9 +15,15 @@ use iolinke_types::handlers::pm::{
 };
 use iolinke_util::{log_state_transition, log_state_transition_error};
 
-use core::result::{Result, Result::{Ok, Err}};
-use core::option::{Option, Option::{Some, None}};
 use core::convert::TryFrom;
+use core::option::{
+    Option,
+    Option::{None, Some},
+};
+use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
 use crate::al::ApplicationLayerReadWriteInd;
 use crate::al::data_storage;
@@ -190,7 +196,7 @@ pub enum ParameterManagerEvent {
     /// {[DownloadStore]}
     DownloadStore,
     /// {[Local Parameter]}
-    LocalParameter,
+    _LocalParameter,
     /// {[DataValid & DS_StoreRequest]}
     DataValidAndStoreRequest,
     /// {[DataValid & not DS_StoreRequest]}
@@ -206,7 +212,7 @@ pub enum ParameterManagerEvent {
     /// {[UploadStart]}
     UploadStart,
     /// {[UploadEnd or ParamBreak or DownloadEnd]}
-    UploadEndOrParamBreakOrDownloadEnd,
+    _UploadEndOrParamBreakOrDownloadEnd,
     /// {[DownloadEnd]}
     DownloadEnd,
     /// {[SysCmdReset]}
@@ -261,7 +267,7 @@ impl ParameterManager {
             (State::Idle, Event::DownloadStore) => (Transition::T2, State::ValidityCheck),
 
             // T3: Idle -> ValidityCheck on [Local Parameter]
-            (State::Idle, Event::LocalParameter) => (Transition::T3, State::ValidityCheck),
+            (State::Idle, Event::_LocalParameter) => (Transition::T3, State::ValidityCheck),
 
             // T4: ValidityCheck -> Idle on [DataValid & DS_StoreRequest]
             (State::ValidityCheck, Event::DataValidAndStoreRequest) => {
@@ -289,7 +295,7 @@ impl ParameterManager {
             (State::Idle, Event::UploadStart) => (Transition::T10, State::Upload),
 
             // T11: Upload -> Idle on [UploadEnd or ParamBreak or DownloadEnd]
-            (State::Upload, Event::UploadEndOrParamBreakOrDownloadEnd) => {
+            (State::Upload, Event::_UploadEndOrParamBreakOrDownloadEnd) => {
                 (Transition::T11, State::Idle)
             }
 
@@ -318,7 +324,7 @@ impl ParameterManager {
             (State::Upload, Event::DownloadStart) => (Transition::T19, State::Download),
 
             // T20: Idle -> Idle on [UploadEnd or ParamBreak or DownloadEnd]
-            (State::Idle, Event::UploadEndOrParamBreakOrDownloadEnd) => {
+            (State::Idle, Event::_UploadEndOrParamBreakOrDownloadEnd) => {
                 (Transition::T20, State::Idle)
             }
 
