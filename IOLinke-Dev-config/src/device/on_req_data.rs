@@ -56,7 +56,7 @@ pub mod operate {
     /// on-request data and process data (PDin and PDout). These combinations determine the M-sequence
     /// type that the Master and Device must use.
     ///
-    /// | OPERATE M-sequence code | On-request Data (Octets)   | PDin                     | PDout                    | M-sequence Type          |
+    /// | OPERATE M-sequence code  | On-request Data (Octets)  | PDin                     | PDout                    | M-sequence Type          |
     /// |--------------------------|---------------------------|--------------------------|--------------------------|--------------------------|
     /// | 0                        | 1                         | 0                        | 0                        | TYPE_0 (⚠️ see NOTE 1)   |
     /// | 1                        | 2                         | 0                        | 0                        | TYPE_1_2                 |

@@ -494,7 +494,7 @@ pub fn util_pre_op_test_isdu_sequence_write(
     subindex: Option<u8>,
     data: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    const OD_LENGTH_PER_FRAME: usize = derived_config::on_req_data::operate::od_length() as usize;
+    const OD_LENGTH_PER_FRAME: usize = derived_config::on_req_data::pre_operate::od_length() as usize;
 
     let isdu_write_request =
         frame_utils::isdu_frame::create_isdu_write_request(index, subindex, data);
