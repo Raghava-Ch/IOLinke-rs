@@ -289,7 +289,10 @@ impl DlControlReq for CommandHandler {
     /// Indicate a change in the Process Data (PD) qualifier status to the Device application.
     ///
     /// This method is called by the Master to convey the current control code.
-    fn dl_control_req(&mut self, control_code: handlers::command::DlControlCode) -> IoLinkResult<()> {
+    fn dl_control_req(
+        &mut self,
+        control_code: handlers::command::DlControlCode,
+    ) -> IoLinkResult<()> {
         let _ = self.process_event(CommandHandlerEvent::DlControlPdIn(control_code));
         Ok(())
     }

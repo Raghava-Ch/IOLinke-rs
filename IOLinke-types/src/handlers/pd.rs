@@ -35,7 +35,6 @@ pub const PD_INPUT_LENGTH: usize =
 pub const PD_OUTPUT_LENGTH: usize =
     dev_config::process_data::config_pd_out_length_in_bytes() as usize;
 
-
 /// Trait representing the DL_PDInputUpdate service handler.
 pub trait DlPDInputUpdate {
     /// DL_PDInputUpdate service trait for updating input data (Process Data from Device to Master)

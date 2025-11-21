@@ -8,7 +8,8 @@ members = [
     "IOLinke-Derived-config",
     "IOLinke-Dev-config",
     "IOLinke-Examples",
-    "IOLinke-Bindings",
+    "IOLinke-Bindings", 
+    "tasks/configuration",
 ]
 resolver = "2"
 
@@ -35,6 +36,10 @@ iolinke-test-utils = { path = "IOLinke-Test-utils", default-features = false }
 
 heapless = { version = "0.8.0" }
 bitfields = { version = "1.0.0" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_spanned = { version = "1.0.3" }
+toon-rust = "0.1.3"
+serde_json = { version = "1.0.145" }
 
 # Macro dependencies
 proc-macro2 = { version = "1.0" }

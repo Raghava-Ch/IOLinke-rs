@@ -99,7 +99,6 @@ pub trait DlWriteParamInd {
     fn dl_write_param_ind(&mut self, index: u8, data: u8) -> IoLinkResult<()>;
 }
 
-
 /// Trait representing Device Layer (DL) parameter response services for IO-Link communication.
 ///
 /// This trait defines methods for responding to parameter read and write requests
@@ -152,13 +151,12 @@ pub trait DlParamRsp {
     fn dl_write_param_rsp(&mut self) -> IoLinkResult<()>;
 }
 
-
 /// Trait for handling the DL_ReadParam.ind service primitive, which reads a parameter value from an IO-Link Device.
-/// 
+///
 /// Implementors of this trait provide the logic for accessing device parameters via the DL_ReadParam.ind service.
 /// This is typically used within the IO-Link communication stack to retrieve configuration or status information
 /// from a device by specifying the parameter address.
-/// 
+///
 /// See Table 17 – DL_ReadParam in the IO-Link specification for protocol details.
 pub trait DlReadParamInd {
     /// Handles the DL_ReadParam.ind service primitive for reading a parameter value from the Device.

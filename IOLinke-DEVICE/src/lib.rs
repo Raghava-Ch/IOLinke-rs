@@ -62,7 +62,7 @@ use al::services;
 pub use iolinke_macros::*;
 use iolinke_types::{
     custom::{IoLinkError, IoLinkResult},
-    handlers::{self, sm::SmResult, command::DlControlReq},
+    handlers::{self, command::DlControlReq, sm::SmResult},
     page::page1,
 };
 
@@ -78,9 +78,9 @@ mod pl;
 mod storage;
 mod system_management;
 
+pub use al::services::AlControlReq;
 pub use al::services::AlEventCnf;
 pub use al::services::ApplicationLayerServicesInd;
-pub use al::services::AlControlReq;
 pub use handlers::command::{DlControlCode, DlControlInd};
 pub use handlers::pl::Timer;
 pub use iolinke_types::frame::msequence::TransmissionRate;
