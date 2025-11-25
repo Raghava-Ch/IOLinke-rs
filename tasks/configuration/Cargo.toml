@@ -1,5 +1,5 @@
 [package]
-name = "iolinke-dev-config"
+name = "configuration"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -10,11 +10,8 @@ keywords.workspace = true
 categories.workspace = true
 description.workspace = true
 
-[lib]
-
 [dependencies]
-iolinke-macros = { workspace = true }
-
-[features]
-default = []
-std = []
+serde = { workspace = true }
+serde_spanned = { workspace = true }
+serde_json = { workspace = true }
+toon-rust = { workspace = true }

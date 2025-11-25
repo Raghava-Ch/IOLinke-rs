@@ -42,7 +42,8 @@ All services and interfaces are implemented according to the IO-Link Interface S
 
 use heapless::Vec;
 use iolinke_device::{
-    AlControlReq, AlEventCnf, ApplicationLayerServicesInd, DeviceCom, DeviceIdent, DeviceMode, DlControlCode, DlControlInd, IoLinkDevice
+    AlControlReq, AlEventCnf, ApplicationLayerServicesInd, DeviceCom, DeviceIdent, DeviceMode,
+    DlControlCode, DlControlInd, IoLinkDevice,
 };
 use iolinke_types::{
     custom::IoLinkResult,

@@ -157,8 +157,6 @@ pub mod storage_config {
     const DEVICE_ID_3_CONFIG_VALUE: u8 = config_values::device_id_3();
     const FUNCTION_ID_1_CONFIG_VALUE: u8 = config_values::function_id_1();
     const FUNCTION_ID_2_CONFIG_VALUE: u8 = config_values::function_id_2();
-    const VENDOR_NAME: &'static str = config_values::vendor_name();
-    const PRODUCT_NAME: &'static str = config_values::product_name();
 
     // The following macro invocation declares the parameter storage layout for the device.
     // Each tuple specifies:
@@ -193,7 +191,10 @@ pub mod storage_config {
         (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,     /* DATA_STORAGE_SIZE_SUBINDEX */ 0x03,             /* Default */  1,       0..0, ReadWrite,   u8, &[0]),
         (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,    /* PARAMETER_CHECKSUM_SUBINDEX */ 0x04,             /* Default */  1,       0..0, ReadWrite,   u8, &[0]),
         (/* DATA_STORAGE_INDEX_INDEX */ 0x0003,            /* INDEX_LIST_SUBINDEX */ 0x05,   /* INDEX_LIST_LENGTH */ 30,      0..29, ReadWrite,   u8, &[0; 30]),
-        (       /* VENDOR_NAME_INDEX */ 0x0010,           /* VENDOR_NAME_SUBINDEX */ 0x00,  /* VENDOR_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, VENDOR_NAME.as_bytes()),
-        (      /* PRODUCT_NAME_INDEX */ 0x0012,          /* PRODUCT_NAME_SUBINDEX */ 0x00, /* PRODUCT_NAME_LENGTH */  7,       0..6, ReadOnly,    u8, PRODUCT_NAME.as_bytes()),
+
+        /*CONFIG:VENDOR_PARAMS*/
+        (            /* Index */ 0x0010,         /* Subindex */ 0x00,               /* Length */ 7,        /* IndexRange */ 0..6,        /* Access */ ReadOnly,     /* Type */ StringT,  /* DefaultValue */ b"IOLinke"),
+        (            /* Index */ 0x0012,         /* Subindex */ 0x00,               /* Length */ 7,        /* IndexRange */ 0..6,        /* Access */ ReadOnly,     /* Type */ StringT,  /* DefaultValue */ b"IOLinke Stack"),
+        /*ENDCONFIG*/
     }
 }

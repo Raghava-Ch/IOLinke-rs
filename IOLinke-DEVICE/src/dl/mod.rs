@@ -416,7 +416,10 @@ impl DlModeInd for DataLinkLayer {
 }
 
 impl DlControlReq for DataLinkLayer {
-    fn dl_control_req(&mut self, control_code: handlers::command::DlControlCode) -> IoLinkResult<()> {
+    fn dl_control_req(
+        &mut self,
+        control_code: handlers::command::DlControlCode,
+    ) -> IoLinkResult<()> {
         self.command_handler.dl_control_req(control_code)
     }
 }

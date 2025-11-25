@@ -1,0 +1,27 @@
+IODevice:
+  PreOperate:
+    OdLength: 2
+
+  Operate:
+    OdLength: 32
+    PdInLength: Octet(3)
+    PdOutLength: Octet(4)
+
+  Timing:
+    MinCycleTime: 33.0
+
+  Vendor:
+    MajorRevisionID: 0x09
+    MinorRevisionID: 0x04
+    VendorID1: 0x01
+    VendorID2: 0x02
+    DeviceID1: 0x01
+    DeviceID2: 0x02
+    DeviceID3: 0x03
+    FunctionID1: 0x01
+    FunctionID2: 0x01
+    VendorName: "IOLinke"
+    ProductName: "IOLinke"
+    Storage[2]{Index: i,  Subindex: i,  Length: i,  IndexRange,     Access,    Type,  DefaultValue  }:
+                 0x0010,         0x00,          7,       0..6,    ReadOnly,  StringT, "IOLinke"
+                 0x0012,         0x00,          7,       0..6,    ReadOnly,  StringT, "IOLinke Stack"
