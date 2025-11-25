@@ -66,7 +66,7 @@
 /// - IO-Link v1.1.4 Annex B.1: Direct Parameter Page 1
 /// - Section B.1.4: RevisionID parameter
 pub const REVISION_ID: u8 = crate::revision_id!(
-    /*CONFIG:MAJOR_REVISION_ID*/ 0x09 /*ENDCONFIG*/,
+    /*CONFIG:MAJOR_REVISION_ID*/ 0x09, /*ENDCONFIG*/
     /*CONFIG:MINOR_REVISION_ID*/ 0x04 /*ENDCONFIG*/
 );
 
@@ -80,8 +80,8 @@ pub const REVISION_ID: u8 = crate::revision_id!(
 /// Note:
 /// - VendorIDs are assigned by the IO-Link community.
 pub const VENDOR_ID: [u8; 2] = [
-    /*CONFIG:VENDOR_ID_1*/ 0x01 /*ENDCONFIG*/,
-    /*CONFIG:VENDOR_ID_2*/ 0x02 /*ENDCONFIG*/,
+    /*CONFIG:VENDOR_ID_1*/ 0x01, /*ENDCONFIG*/
+    /*CONFIG:VENDOR_ID_2*/ 0x02, /*ENDCONFIG*/
 ];
 
 /// Device ID (DID) as specified in IO-Link v1.1.4 Annex B.1.9.
@@ -94,16 +94,16 @@ pub const VENDOR_ID: [u8; 2] = [
 /// # Specification Reference
 /// - IO-Link v1.1.4 Annex B.1.9: DeviceID (DID)
 pub const DEVICE_ID: [u8; 3] = [
-    /*CONFIG:DEVICE_ID_1*/ 0x01 /*ENDCONFIG*/,
-    /*CONFIG:DEVICE_ID_2*/ 0x02 /*ENDCONFIG*/,
-    /*CONFIG:DEVICE_ID_3*/ 0x03 /*ENDCONFIG*/,
+    /*CONFIG:DEVICE_ID_1*/ 0x01, /*ENDCONFIG*/
+    /*CONFIG:DEVICE_ID_2*/ 0x02, /*ENDCONFIG*/
+    /*CONFIG:DEVICE_ID_3*/ 0x03, /*ENDCONFIG*/
 ];
 
 /// Refer the specifications B.1.10 FunctionID (FID)
 /// This 2-octet value indicates the function of the device.
 pub const FUNCTION_ID: [u8; 2] = [
-    /*CONFIG:FUNCTION_ID_1*/ 0x01 /*ENDCONFIG*/,
-    /*CONFIG:FUNCTION_ID_2*/ 0x01 /*ENDCONFIG*/,
+    /*CONFIG:FUNCTION_ID_1*/ 0x01, /*ENDCONFIG*/
+    /*CONFIG:FUNCTION_ID_2*/ 0x01, /*ENDCONFIG*/
 ];
 
 /// Vendor Name as specified in IO-Link v1.1.4 Annex B.2.8.

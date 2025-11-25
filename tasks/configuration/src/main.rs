@@ -46,9 +46,13 @@ fn main() {
             parser.io_device.vendor.device_id_3,
             parser.io_device.vendor.function_id_1,
             parser.io_device.vendor.function_id_2,
-            parser.io_device.vendor.vendor_name,
-            parser.io_device.vendor.product_name,
+            &parser.io_device.vendor.vendor_name,
+            &parser.io_device.vendor.product_name,
         )
         .expect("Failed to write vendor specifics config");
+
+    config_writer
+        .write_vendor_parameter_storage_config(&parser.io_device.vendor.storage)
+        .expect("Failed to write vendor parameter storage config");
     println!("Configuration written to the stack project");
 }

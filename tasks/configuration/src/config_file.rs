@@ -67,6 +67,71 @@ pub struct Vendor {
     pub vendor_name: String,
     #[serde(rename = "ProductName")]
     pub product_name: String,
+    #[serde(rename = "Storage", default)]
+    pub storage: Vec<VendorStorageEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VendorStorageEntry {
+    #[serde(rename = "Index: i")]
+    pub index: String,
+    #[serde(rename = "Subindex: i")]
+    pub subindex: String,
+    #[serde(rename = "Length: i")]
+    pub length: u8,
+    #[serde(rename = "IndexRange")]
+    pub index_range: String,
+    #[serde(rename = "Access")]
+    pub access: String,
+    #[serde(rename = "Type")]
+    pub data_type: String,
+    #[serde(rename = "DefaultValue")]
+    pub default_value: String,
+}
+
+impl VendorStorageEntry {
+    pub fn to_macro_row(&self) -> String {
+        let index = self.index.trim();
+        let subindex = self.subindex.trim();
+        let range = self.index_range.trim();
+        let access = self.access.trim();
+        let data_type = self.data_type.trim();
+        let default_expr = self.formatted_default_value();
+        format!(
+            "(            /* Index */ {index},         /* Subindex */ {subindex},               /* Length */ {},        /* IndexRange */ {range},        /* Access */ {access},     /* Type */ {data_type},  /* DefaultValue */ {default_expr}),",
+            self.length
+        )
+    }
+
+    fn formatted_default_value(&self) -> String {
+        let raw = self.default_value.trim();
+        if raw.is_empty() {
+            return String::from("&[]");
+        }
+
+        match self.data_type.trim() {
+            "StringT" => {
+                if raw.starts_with("b\"") || raw.starts_with("B\"") {
+                    raw.to_string()
+                } else if raw.starts_with('"') && raw.ends_with('"') {
+                    format!("b{}", raw)
+                } else {
+                    let sanitized = raw.trim_matches('"');
+                    format!("b\"{}\"", sanitized)
+                }
+            }
+            _ => {
+                let value = raw.trim_matches('"');
+                if value.starts_with('&') {
+                    value.to_string()
+                } else if value.starts_with('[') && value.ends_with(']') {
+                    format!("&{value}")
+                } else {
+                    format!("&[{value}]")
+                }
+            }
+        }
+    }
 }
 
 impl Parser {

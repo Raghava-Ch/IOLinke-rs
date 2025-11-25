@@ -22,3 +22,6 @@ IODevice:
     FunctionID2: 0x01
     VendorName: "IOLinke"
     ProductName: "IOLinke"
+    Storage[2]{Index: i,  Subindex: i,  Length: i,  IndexRange,     Access,    Type,  DefaultValue  }:
+                 0x0010,         0x00,          7,       0..6,    ReadOnly,  StringT, "VENDOR_NAME"
+                 0x0012,         0x00,          7,       0..6,    ReadOnly,  StringT, "PRODUCT_NAME"
