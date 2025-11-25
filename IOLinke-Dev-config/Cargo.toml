@@ -13,6 +13,7 @@ description.workspace = true
 [lib]
 
 [dependencies]
+iolinke-macros = { workspace = true }
 
 [features]
 default = []
