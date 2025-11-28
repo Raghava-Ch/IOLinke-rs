@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sample IODD XML generated for integration tests; aligned with .temp.details/iodd_xsd_comprehensive.csv subset -->
+<IODDxmlns="https://www.io-link.com/IODD/2021/06">
+  <DocumentInfo>
+    <DocumentIdentifier>SampleDevice</DocumentIdentifier>
+    <Title>Sample Smart Sensor</Title>
+    <Version>1.0.0</Version>
+  </DocumentInfo>
+  <ProfileHeader>
+    <ProfileIdentification>IO-Link Smart Sensor</ProfileIdentification>
+  </ProfileHeader>
+  <DeviceIdentity>
+    <VendorId>123</VendorId>
+    <DeviceId>456</DeviceId>
+  </DeviceIdentity>
+</IODDxmlns>

@@ -1,0 +1,823 @@
+{
+  "meta": {
+    "title": "IODD Builder Reference Schema",
+    "version": "1.0.0",
+    "source": {
+      "csv": ".temp.details/iodd_xsd_comprehensive.csv",
+      "notes": "Curated subset describing 10 representative entities required by the renderer"
+    }
+  },
+  "hierarchy": [
+    {
+      "id": "DocumentInfo",
+      "label": "Document Info",
+      "entity": "DocumentInfo",
+      "multiplicity": { "min": 1, "max": 1 },
+      "children": [
+        {
+          "id": "ProfileHeader",
+          "label": "Profile Header",
+          "entity": "ProfileHeader",
+          "multiplicity": { "min": 1, "max": 1 },
+          "children": [
+            {
+              "id": "DeviceIdentity",
+              "label": "Device Identity",
+              "entity": "DeviceIdentity",
+              "multiplicity": { "min": 1, "max": 1 },
+              "children": [
+                {
+                  "id": "DeviceVariantCollection",
+                  "label": "Device Variants",
+                  "entity": "DeviceVariantCollection",
+                  "multiplicity": { "min": 1, "max": null },
+                  "children": [
+                    {
+                      "id": "DeviceVariant",
+                      "label": "Device Variant",
+                      "entity": "DeviceVariant",
+                      "multiplicity": { "min": 0, "max": null }
+                    }
+                  ]
+                },
+                {
+                  "id": "DatatypeCollection",
+                  "label": "Datatypes",
+                  "entity": "DatatypeCollection",
+                  "multiplicity": { "min": 1, "max": null },
+                  "children": [
+                    {
+                      "id": "Datatype",
+                      "label": "Datatype",
+                      "entity": "Datatype",
+                      "multiplicity": { "min": 0, "max": null }
+                    }
+                  ]
+                },
+                {
+                  "id": "VariableCollection",
+                  "label": "Variables",
+                  "entity": "VariableCollection",
+                  "multiplicity": { "min": 1, "max": null },
+                  "children": [
+                    {
+                      "id": "Variable",
+                      "label": "Variable",
+                      "entity": "Variable",
+                      "multiplicity": { "min": 0, "max": null }
+                    }
+                  ]
+                },
+                {
+                  "id": "ProcessDataCollection",
+                  "label": "Process Data",
+                  "entity": "ProcessDataCollection",
+                  "multiplicity": { "min": 0, "max": null },
+                  "children": [
+                    {
+                      "id": "ProcessData",
+                      "label": "Process Data",
+                      "entity": "ProcessData",
+                      "multiplicity": { "min": 0, "max": null }
+                    }
+                  ]
+                },
+                {
+                  "id": "UserInterface",
+                  "label": "User Interface",
+                  "entity": "UserInterface",
+                  "multiplicity": { "min": 0, "max": 1 },
+                  "children": [
+                    {
+                      "id": "MenuCollection",
+                      "label": "Menu Collection",
+                      "entity": "MenuCollection",
+                      "multiplicity": { "min": 0, "max": null },
+                      "children": [
+                        {
+                          "id": "Menu",
+                          "label": "Menu",
+                          "entity": "Menu",
+                          "multiplicity": { "min": 0, "max": null }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "ExternalTextCollection",
+                  "label": "External Texts",
+                  "entity": "ExternalTextCollection",
+                  "multiplicity": { "min": 0, "max": null },
+                  "children": [
+                    {
+                      "id": "ExternalText",
+                      "label": "External Text",
+                      "entity": "ExternalText",
+                      "multiplicity": { "min": 0, "max": null }
+                    }
+                  ]
+                },
+                {
+                  "id": "Stamp",
+                  "label": "Stamp",
+                  "entity": "Stamp",
+                  "multiplicity": { "min": 1, "max": 1 }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "entities": {
+    "DocumentInfo": {
+      "id": "DocumentInfo",
+      "label": "Document Information",
+      "documentation": "IODD root element meta-data.",
+      "fields": [
+        {
+          "id": "documentId",
+          "label": "Document Identifier",
+          "type": "string",
+          "required": true,
+          "pattern": "[A-Za-z0-9._-]+",
+          "checkerRules": ["DocumentInfo@documentId must be unique across exports"],
+          "help": "Identifier used when exporting the IODD XML."
+        },
+        {
+          "id": "title",
+          "label": "Title",
+          "type": "string",
+          "required": true,
+          "minLength": 3,
+          "maxLength": 120,
+          "optionalReason": "Required by IODD-Communication1.1.xsd",
+          "help": "Localized title shown in UI headers."
+        },
+        {
+          "id": "subtitle",
+          "label": "Subtitle",
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 180,
+          "help": "Optional subtitle for additional context."
+        },
+        {
+          "id": "version",
+          "label": "Document Version",
+          "type": "string",
+          "pattern": "\\d+\\.\\d+\\.\\d+",
+          "default": "1.0.0",
+          "help": "Semantic version of this IODD document."
+        },
+        {
+          "id": "ioddRelease",
+          "label": "IODD Specification Version",
+          "type": "enum",
+          "required": true,
+          "options": [
+            { "value": "1.1" },
+            { "value": "1.1.1" },
+            { "value": "1.1.2" }
+          ],
+          "help": "IODD schema version used while generating XML."
+        },
+        {
+          "id": "defaultLanguage",
+          "label": "Default Language",
+          "type": "enum",
+          "required": true,
+          "options": [
+            { "value": "en" },
+            { "value": "de" },
+            { "value": "fr" },
+            { "value": "zh" }
+          ],
+          "help": "Base language for text resources."
+        },
+        {
+          "id": "languages",
+          "label": "Supported Languages",
+          "type": "collection",
+          "item": {
+            "type": "enum",
+            "label": "Language",
+            "options": [
+              { "value": "en" },
+              { "value": "de" },
+              { "value": "fr" },
+              { "value": "zh" },
+              { "value": "it" },
+              { "value": "ja" }
+            ]
+          },
+          "minOccurs": 1,
+          "maxOccurs": null,
+          "help": "All languages available in this document."
+        },
+        {
+          "id": "revisionHistory",
+          "label": "Revision History",
+          "type": "collection",
+          "item": {
+            "type": "object",
+            "label": "Revision Entry",
+            "fields": [
+              {
+                "id": "date",
+                "label": "Date",
+                "type": "date",
+                "required": true
+              },
+              {
+                "id": "author",
+                "label": "Author",
+                "type": "string",
+                "required": true,
+                "maxLength": 80
+              },
+              {
+                "id": "description",
+                "label": "Description",
+                "type": "text",
+                "required": true,
+                "maxLength": 400
+              }
+            ]
+          },
+          "help": "Keep track of document revisions."
+        }
+      ]
+    },
+    "ProfileHeader": {
+      "id": "ProfileHeader",
+      "label": "Profile Header",
+      "documentation": "Profile-wide header data.",
+      "fields": [
+        {
+          "id": "profileIdentification",
+          "label": "Profile Identification",
+          "type": "string",
+          "required": true,
+          "maxLength": 60,
+          "help": "Unique identifier for the communication profile."
+        },
+        {
+          "id": "profileRevision",
+          "label": "Profile Revision",
+          "type": "string",
+          "pattern": "\\d+\\.\\d+",
+          "default": "1.0"
+        },
+        {
+          "id": "supportedFunctions",
+          "label": "Supported Functions",
+          "type": "collection",
+          "item": {
+            "type": "enum",
+            "label": "Function",
+            "options": [
+              { "value": "processData" },
+              { "value": "event" },
+              { "value": "parameter" }
+            ]
+          },
+          "help": "Enumerates optional profile features."
+        },
+        {
+          "id": "profileTextRef",
+          "label": "Profile Text Reference",
+          "type": "reference",
+          "reference": {
+            "entityId": "ExternalText",
+            "displayField": "textId"
+          },
+          "optionalReason": "Optional if default language already covers the profile name."
+        }
+      ]
+    },
+    "DeviceIdentity": {
+      "id": "DeviceIdentity",
+      "label": "Device Identity",
+      "documentation": "Describes the target device.",
+      "fields": [
+        {
+          "id": "vendorId",
+          "label": "Vendor ID",
+          "type": "integer",
+          "required": true,
+          "minInclusive": 1,
+          "maxInclusive": 65535
+        },
+        {
+          "id": "deviceId",
+          "label": "Device ID",
+          "type": "integer",
+          "required": true,
+          "minInclusive": 1,
+          "maxInclusive": 4294967295
+        },
+        {
+          "id": "deviceName",
+          "label": "Device Name",
+          "type": "string",
+          "required": true,
+          "maxLength": 120
+        },
+        {
+          "id": "deviceFamily",
+          "label": "Device Family",
+          "type": "enum",
+          "options": [
+            { "value": "sensor" },
+            { "value": "actuator" },
+            { "value": "hub" },
+            { "value": "rfid" }
+          ],
+          "help": "Used to pre-configure templates."
+        },
+        {
+          "id": "productIds",
+          "label": "Product References",
+          "type": "collection",
+          "minOccurs": 1,
+          "item": {
+            "type": "object",
+            "label": "Product",
+            "fields": [
+              { "id": "productId", "label": "Product ID", "type": "string", "required": true },
+              { "id": "orderCode", "label": "Order Code", "type": "string" }
+            ]
+          },
+          "help": "Mirrors ProductRef entries from the communication schema."
+        },
+        {
+          "id": "deviceIcon",
+          "label": "Device Icon",
+          "type": "file",
+          "help": "PNG icon reference, must meet connectionSymbol pattern."
+        },
+        {
+          "id": "deviceSymbol",
+          "label": "Device Symbol",
+          "type": "file",
+          "help": "High-resolution symbol image."
+        }
+      ]
+    },
+    "DeviceVariantCollection": {
+      "id": "DeviceVariantCollection",
+      "label": "Device Variant Collection",
+      "fields": [
+        {
+          "id": "variants",
+          "label": "Variants",
+          "type": "collection",
+          "minOccurs": 1,
+          "item": {
+            "type": "entity",
+            "entity": "DeviceVariant",
+            "label": "Device Variant"
+          },
+          "help": "All variants defined for the device."
+        }
+      ]
+    },
+    "DeviceVariant": {
+      "id": "DeviceVariant",
+      "label": "Device Variant",
+      "fields": [
+        {
+          "id": "variantId",
+          "label": "Variant ID",
+          "type": "string",
+          "required": true,
+          "pattern": "[A-Za-z0-9_-]+",
+          "checkerRules": ["DeviceVariant@variantId must be unique"],
+          "help": "Unique identifier for variant."
+        },
+        {
+          "id": "name",
+          "label": "Name",
+          "type": "string",
+          "required": true,
+          "maxLength": 120
+        },
+        {
+          "id": "isDefault",
+          "label": "Default Variant",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "id": "processDataRef",
+          "label": "Process Data Reference",
+          "type": "reference",
+          "reference": {
+            "entityId": "ProcessData",
+            "displayField": "name"
+          },
+          "optionalReason": "Optional for variants that do not expose process data."
+        },
+        {
+          "id": "supportedMenus",
+          "label": "Supported Menus",
+          "type": "collection",
+          "item": {
+            "type": "reference",
+            "label": "Menu",
+            "reference": {
+              "entityId": "Menu",
+              "displayField": "title"
+            }
+          }
+        }
+      ]
+    },
+    "DatatypeCollection": {
+      "id": "DatatypeCollection",
+      "label": "Datatype Collection",
+      "fields": [
+        {
+          "id": "datatypes",
+          "label": "Datatypes",
+          "type": "collection",
+          "item": {
+            "type": "entity",
+            "entity": "Datatype",
+            "label": "Datatype"
+          }
+        }
+      ]
+    },
+    "Datatype": {
+      "id": "Datatype",
+      "label": "Datatype",
+      "fields": [
+        {
+          "id": "datatypeId",
+          "label": "Datatype ID",
+          "type": "string",
+          "required": true,
+          "pattern": "[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "id": "baseType",
+          "label": "Base Type",
+          "type": "enum",
+          "required": true,
+          "options": [
+            { "value": "Boolean" },
+            { "value": "Integer" },
+            { "value": "String" }
+          ]
+        },
+        {
+          "id": "constraints",
+          "label": "Constraints",
+          "type": "object",
+          "sections": [
+            {
+              "id": "booleanOptions",
+              "label": "Boolean",
+              "type": "object",
+              "visibility": { "field": "baseType", "equals": "Boolean" },
+              "fields": [
+                {
+                  "id": "trueTextRef",
+                  "label": "True Text",
+                  "type": "reference",
+                  "reference": { "entityId": "ExternalText", "displayField": "textId" }
+                },
+                {
+                  "id": "falseTextRef",
+                  "label": "False Text",
+                  "type": "reference",
+                  "reference": { "entityId": "ExternalText", "displayField": "textId" }
+                }
+              ]
+            },
+            {
+              "id": "integerOptions",
+              "label": "Integer",
+              "type": "object",
+              "visibility": { "field": "baseType", "equals": "Integer" },
+              "fields": [
+                { "id": "min", "label": "Minimum", "type": "integer", "minInclusive": -32768, "maxInclusive": 32767 },
+                { "id": "max", "label": "Maximum", "type": "integer", "minInclusive": -32768, "maxInclusive": 32767 },
+                { "id": "unitTextRef", "label": "Unit Text", "type": "reference", "reference": { "entityId": "ExternalText", "displayField": "textId" } }
+              ]
+            },
+            {
+              "id": "stringOptions",
+              "label": "String",
+              "type": "object",
+              "visibility": { "field": "baseType", "equals": "String" },
+              "fields": [
+                { "id": "maxLength", "label": "Max Length", "type": "integer", "minInclusive": 1, "maxInclusive": 250 },
+                { "id": "pattern", "label": "Pattern", "type": "string" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "VariableCollection": {
+      "id": "VariableCollection",
+      "label": "Variable Collection",
+      "fields": [
+        {
+          "id": "variables",
+          "label": "Variables",
+          "type": "collection",
+          "item": {
+            "type": "entity",
+            "entity": "Variable",
+            "label": "Variable"
+          }
+        }
+      ]
+    },
+    "Variable": {
+      "id": "Variable",
+      "label": "Variable",
+      "fields": [
+        {
+          "id": "variableId",
+          "label": "Variable ID",
+          "type": "string",
+          "required": true,
+          "pattern": "[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "id": "nameTextRef",
+          "label": "Name Text",
+          "type": "reference",
+          "reference": { "entityId": "ExternalText", "displayField": "textId" }
+        },
+        {
+          "id": "datatypeRef",
+          "label": "Datatype",
+          "type": "reference",
+          "required": true,
+          "reference": { "entityId": "Datatype", "displayField": "datatypeId" }
+        },
+        {
+          "id": "defaultValue",
+          "label": "Default Value",
+          "type": "string",
+          "optionalReason": "Optional for write-only variables"
+        },
+        {
+          "id": "accessRights",
+          "label": "Access Rights",
+          "type": "enum",
+          "options": [
+            { "value": "RO" },
+            { "value": "WO" },
+            { "value": "RW" }
+          ],
+          "default": "RO"
+        }
+      ]
+    },
+    "ProcessDataCollection": {
+      "id": "ProcessDataCollection",
+      "label": "Process Data Collection",
+      "fields": [
+        {
+          "id": "processData",
+          "label": "Process Data Entries",
+          "type": "collection",
+          "item": {
+            "type": "entity",
+            "entity": "ProcessData",
+            "label": "Process Data"
+          }
+        }
+      ]
+    },
+    "ProcessData": {
+      "id": "ProcessData",
+      "label": "Process Data",
+      "fields": [
+        {
+          "id": "processDataId",
+          "label": "Process Data ID",
+          "type": "string",
+          "required": true,
+          "pattern": "PD_[A-Za-z0-9_]+"
+        },
+        {
+          "id": "name",
+          "label": "Name",
+          "type": "string",
+          "required": true,
+          "maxLength": 120
+        },
+        {
+          "id": "bitLength",
+          "label": "Bit Length",
+          "type": "integer",
+          "required": true,
+          "minInclusive": 1,
+          "maxInclusive": 2048,
+          "checkerRules": ["ProcessData.bitLength must be divisible by 8"],
+          "help": "Length in bits of the process data."
+        },
+        {
+          "id": "variableRef",
+          "label": "Variable Reference",
+          "type": "reference",
+          "required": true,
+          "reference": { "entityId": "Variable", "displayField": "variableId" }
+        },
+        {
+          "id": "channels",
+          "label": "Channels",
+          "type": "collection",
+          "item": {
+            "type": "object",
+            "label": "Channel",
+            "fields": [
+              { "id": "name", "label": "Name", "type": "string", "required": true },
+              { "id": "offset", "label": "Offset", "type": "integer", "required": true, "minInclusive": 0 },
+              { "id": "length", "label": "Length", "type": "integer", "required": true, "minInclusive": 1 },
+              { "id": "variableId", "label": "Variable", "type": "reference", "reference": { "entityId": "Variable", "displayField": "variableId" } }
+            ]
+          },
+          "help": "Process data channel definitions."
+        }
+      ]
+    },
+    "UserInterface": {
+      "id": "UserInterface",
+      "label": "User Interface",
+      "fields": [
+        {
+          "id": "menuCollection",
+          "label": "Menu Collection",
+          "type": "entity",
+          "entity": "MenuCollection"
+        }
+      ]
+    },
+    "MenuCollection": {
+      "id": "MenuCollection",
+      "label": "Menu Collection",
+      "fields": [
+        {
+          "id": "menus",
+          "label": "Menus",
+          "type": "collection",
+          "item": {
+            "type": "entity",
+            "entity": "Menu",
+            "label": "Menu"
+          },
+          "help": "Top level menu entries."
+        }
+      ]
+    },
+    "Menu": {
+      "id": "Menu",
+      "label": "Menu",
+      "fields": [
+        {
+          "id": "menuId",
+          "label": "Menu ID",
+          "type": "string",
+          "required": true,
+          "pattern": "MENU_[A-Za-z0-9_]+"
+        },
+        {
+          "id": "title",
+          "label": "Title",
+          "type": "reference",
+          "required": true,
+          "reference": { "entityId": "ExternalText", "displayField": "textId" }
+        },
+        {
+          "id": "children",
+          "label": "Children",
+          "type": "collection",
+          "item": {
+            "type": "entity",
+            "entity": "Menu",
+            "label": "Menu"
+          },
+          "optionalReason": "Optional for leaf nodes"
+        },
+        {
+          "id": "variableRef",
+          "label": "Variable",
+          "type": "reference",
+          "reference": { "entityId": "Variable", "displayField": "variableId" }
+        }
+      ]
+    },
+    "ExternalTextCollection": {
+      "id": "ExternalTextCollection",
+      "label": "External Text Collection",
+      "fields": [
+        {
+          "id": "texts",
+          "label": "Texts",
+          "type": "collection",
+          "item": {
+            "type": "entity",
+            "entity": "ExternalText",
+            "label": "Text"
+          },
+          "help": "Text resources for localization."
+        }
+      ]
+    },
+    "ExternalText": {
+      "id": "ExternalText",
+      "label": "External Text",
+      "fields": [
+        {
+          "id": "textId",
+          "label": "Text ID",
+          "type": "string",
+          "required": true,
+          "pattern": "TEXT_[A-Za-z0-9_]+"
+        },
+        {
+          "id": "language",
+          "label": "Language",
+          "type": "enum",
+          "required": true,
+          "options": [
+            { "value": "en" },
+            { "value": "de" },
+            { "value": "fr" },
+            { "value": "zh" }
+          ]
+        },
+        {
+          "id": "content",
+          "label": "Content",
+          "type": "text",
+          "required": true,
+          "maxLength": 400
+        }
+      ]
+    },
+    "Stamp": {
+      "id": "Stamp",
+      "label": "Stamp",
+      "fields": [
+        {
+          "id": "timestamp",
+          "label": "Timestamp",
+          "type": "date",
+          "required": true
+        },
+        {
+          "id": "author",
+          "label": "Author",
+          "type": "string",
+          "required": true
+        },
+        {
+          "id": "company",
+          "label": "Company",
+          "type": "string"
+        },
+        {
+          "id": "comments",
+          "label": "Comments",
+          "type": "text",
+          "maxLength": 240
+        }
+      ]
+    }
+  },
+  "crossReferencePolicies": [
+    {
+      "id": "variableRef",
+      "label": "Variable References",
+      "sourceEntity": "ProcessData",
+      "field": "variableRef",
+      "targetEntity": "Variable"
+    },
+    {
+      "id": "datatypeRef",
+      "label": "Datatype References",
+      "sourceEntity": "Variable",
+      "field": "datatypeRef",
+      "targetEntity": "Datatype"
+    },
+    {
+      "id": "menuVariable",
+      "label": "Menu Variables",
+      "sourceEntity": "Menu",
+      "field": "variableRef",
+      "targetEntity": "Variable"
+    }
+  ]
+}

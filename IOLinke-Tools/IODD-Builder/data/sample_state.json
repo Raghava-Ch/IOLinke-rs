@@ -1,0 +1,55 @@
+{
+  "DocumentInfo": {
+    "documentId": "SampleDevice",
+    "title": "Sample Smart Sensor",
+    "subtitle": "Factory reference",
+    "version": "1.0.0",
+    "ioddRelease": "1.1.2",
+    "defaultLanguage": "en",
+    "languages": ["en", "de"],
+    "revisionHistory": []
+  },
+  "ProfileHeader": {
+    "profileIdentification": "IO-Link Smart Sensor",
+    "profileRevision": "1.0",
+    "supportedFunctions": ["processData"],
+    "profileTextRef": null
+  },
+  "DeviceIdentity": {
+    "vendorId": 123,
+    "deviceId": 456,
+    "deviceName": "Smart Sensor",
+    "deviceFamily": "sensor",
+    "productIds": [
+      { "productId": "SS-123", "orderCode": "SS-123-01" }
+    ],
+    "deviceIcon": null,
+    "deviceSymbol": null
+  },
+  "DeviceVariantCollection": {
+    "variants": []
+  },
+  "DatatypeCollection": {
+    "datatypes": []
+  },
+  "VariableCollection": {
+    "variables": []
+  },
+  "ProcessDataCollection": {
+    "processData": []
+  },
+  "UserInterface": {
+    "menuCollection": {
+      "menus": []
+    }
+  },
+  "ExternalTextCollection": {
+    "texts": []
+  },
+  "Stamp": {
+    "timestamp": "2024-01-01",
+    "author": "QA",
+    "company": "IO-Link Inc.",
+    "comments": "Initial sample"
+  }
+}

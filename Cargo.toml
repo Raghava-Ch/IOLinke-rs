@@ -10,6 +10,7 @@ members = [
     "IOLinke-Examples",
     "IOLinke-Bindings", 
     "tasks/configuration",
+    "IOLinke-Tools/IODD-Builder/src-tauri",
 ]
 resolver = "2"
 
