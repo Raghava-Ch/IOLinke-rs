@@ -10,7 +10,7 @@ module.exports = {
       colors: {
         surface: {
           DEFAULT: "#0f172a",
-          foreground: "#f8fafc"
+          foreground: "#919293ff"
         }
       }
     }

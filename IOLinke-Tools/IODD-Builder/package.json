@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:ci": "playwright test --reporter=list",
+    "test:e2e:headed": "playwright test --headed",
     "tauri": "tauri"
   },
   "license": "MIT",
@@ -23,6 +26,7 @@
     "@sveltejs/adapter-static": "^3.0.6",
     "@sveltejs/kit": "^2.9.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@playwright/test": "^1.49.1",
     "@tauri-apps/cli": "^2",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",

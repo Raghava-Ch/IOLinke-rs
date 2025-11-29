@@ -72,6 +72,7 @@
 						value={resolvedValue}
 						path={[]}
 						rootValue={docState as unknown as Record<string, unknown>}
+						validationPrefix={node?.entity ?? null}
 						on:update={handleFormUpdate}
 					/>
 				{:else}

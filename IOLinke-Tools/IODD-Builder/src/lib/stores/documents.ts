@@ -65,3 +65,4 @@ export function updateEntity<K extends keyof RootDocumentState>(
     return next;
   });
 }
+
