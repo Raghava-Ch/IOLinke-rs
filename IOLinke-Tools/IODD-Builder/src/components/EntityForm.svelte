@@ -238,7 +238,38 @@
   function addCollectionItem(field: CollectionFieldSchema): void {
     if (readOnly) return;
     const items = getCollectionItems(field);
-    const appended = [...items, createDefaultValue(field.item)];
+    const defaultItem = createDefaultValue(field.item);
+
+    if (field.uniqueBy && field.item.type === "object" && defaultItem && typeof defaultItem === "object") {
+      const objectField = field.item as ObjectFieldSchema;
+      const uniqueField = field.uniqueBy;
+      const existingValues = new Set(
+        items
+          .map((entry) =>
+            entry && typeof entry === "object"
+              ? (entry as Record<string, unknown>)[uniqueField]
+              : undefined
+          )
+          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      );
+
+      const defaultsRecord = defaultItem as Record<string, unknown>;
+      const currentValue = defaultsRecord[uniqueField];
+
+      if (typeof currentValue !== "string" || existingValues.has(currentValue)) {
+        const nestedFields = [...(objectField.fields ?? []), ...(objectField.sections ?? [])];
+        const uniqueFieldSchema = nestedFields.find((nested) => nested.id === uniqueField);
+        if (uniqueFieldSchema?.type === "enum") {
+          const enumField = uniqueFieldSchema as EnumFieldSchema;
+          const candidate = enumField.options.find((option) => !existingValues.has(option.value));
+          if (candidate) {
+            defaultsRecord[uniqueField] = candidate.value;
+          }
+        }
+      }
+    }
+
+    const appended = [...items, defaultItem];
     const next = updateAtPath(formState, [field.id], appended);
     commit(next);
   }

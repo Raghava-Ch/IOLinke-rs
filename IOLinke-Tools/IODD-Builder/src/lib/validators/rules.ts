@@ -103,16 +103,47 @@ function validateCollection(
 ): void {
   const items = Array.isArray(value) ? value : [];
   if (field.minOccurs !== undefined && items.length < field.minOccurs) {
-    pushIssue(issues, "error", entity, path, `${field.label} requires at least ${field.minOccurs} entries.`);
+    const noun = field.minOccurs === 1 ? "entry" : "entries";
+    pushIssue(issues, "error", entity, path, `${field.label} requires at least ${field.minOccurs} ${noun}.`);
   }
   if (field.maxOccurs !== null && field.maxOccurs !== undefined && items.length > field.maxOccurs) {
-    pushIssue(issues, "error", entity, path, `${field.label} exceeds maximum of ${field.maxOccurs} entries.`);
+    const noun = field.maxOccurs === 1 ? "entry" : "entries";
+    pushIssue(issues, "error", entity, path, `${field.label} exceeds maximum of ${field.maxOccurs} ${noun}.`);
   }
 
   items.forEach((item, index) => {
     const itemPath = `${path}[${index}]`;
     validateField(field.item, item, entity, itemPath, rootState, issues);
   });
+
+  if (field.uniqueBy && field.item.type === "object") {
+    const objectField = field.item as ObjectFieldSchema;
+    const uniqueKey = field.uniqueBy;
+    const nestedFields = [...(objectField.fields ?? []), ...(objectField.sections ?? [])];
+    const uniqueFieldSchema = nestedFields.find((nested) => nested.id === uniqueKey);
+    const label = uniqueFieldSchema?.label ?? uniqueKey;
+    const seen = new Map<string, number>();
+
+    items.forEach((item, index) => {
+      if (!item || typeof item !== "object") return;
+      const value = (item as Record<string, unknown>)[uniqueKey];
+      if (typeof value !== "string" || value.trim().length === 0) {
+        pushIssue(issues, "error", entity, `${path}[${index}].${uniqueKey}`, `${label} is required.`);
+        return;
+      }
+      if (seen.has(value)) {
+        pushIssue(
+          issues,
+          "error",
+          entity,
+          `${path}[${index}].${uniqueKey}`,
+          `${label} must be unique within ${field.label}.`
+        );
+      } else {
+        seen.set(value, index);
+      }
+    });
+  }
 }
 
 function validateEntityField(

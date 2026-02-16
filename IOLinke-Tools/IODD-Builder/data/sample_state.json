@@ -9,6 +9,45 @@
     "languages": ["en", "de"],
     "revisionHistory": []
   },
+  "TransportLayers": {
+    "physicalLayers": [
+      {
+        "bitrate": "COM3",
+        "minCycleTime": 1000,
+        "sioSupported": true,
+        "mSequenceCapability": 4,
+        "connections": [
+          {
+            "connectionSymbol": "sample-con-pic.png",
+            "description": "TEXT_CONN_DESC",
+            "productRefs": [{ "productId": "SS-CON-01" }],
+            "wires": [
+              { "position": "Wire1", "color": "BN", "function": "L+" },
+              { "position": "Wire2", "color": "WH", "function": "C/Q" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "Test": {
+    "config1": [
+      {
+        "index": 16,
+        "testValue": "0x01,0x02"
+      }
+    ],
+    "config2": [],
+    "config3": [],
+    "config7": [
+      {
+        "index": 32,
+        "eventTriggers": [
+          { "appearValue": 1, "disappearValue": 0 }
+        ]
+      }
+    ]
+  },
   "ProfileHeader": {
     "profileIdentification": "IO-Link Smart Sensor",
     "profileRevision": "1.0",
@@ -44,7 +83,13 @@
     }
   },
   "ExternalTextCollection": {
-    "texts": []
+    "texts": [
+      {
+        "textId": "TEXT_CONN_DESC",
+        "language": "en",
+        "content": "Standard M12 connector description"
+      }
+    ]
   },
   "Stamp": {
     "timestamp": "2024-01-01",

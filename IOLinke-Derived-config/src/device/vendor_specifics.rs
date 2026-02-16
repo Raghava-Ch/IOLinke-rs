@@ -194,7 +194,7 @@ pub mod storage_config {
 
         /*CONFIG:VENDOR_PARAMS*/
         (            /* Index */ 0x0010,         /* Subindex */ 0x00,               /* Length */ 7,        /* IndexRange */ 0..6,        /* Access */ ReadOnly,     /* Type */ StringT,  /* DefaultValue */ b"IOLinke"),
-        (            /* Index */ 0x0012,         /* Subindex */ 0x00,               /* Length */ 7,        /* IndexRange */ 0..6,        /* Access */ ReadOnly,     /* Type */ StringT,  /* DefaultValue */ b"IOLinke Stack"),
+        (            /* Index */ 0x0012,         /* Subindex */ 0x00,               /* Length */ 13,        /* IndexRange */ 0..12,        /* Access */ ReadOnly,     /* Type */ StringT,  /* DefaultValue */ b"IOLinke Stack"),
         /*ENDCONFIG*/
     }
 }

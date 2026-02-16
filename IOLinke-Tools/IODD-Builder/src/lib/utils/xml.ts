@@ -2,11 +2,18 @@
 // Provides export + import routines used by toolbar actions and preview panel.
 
 import type {
+  ConnectionWire,
   DeviceVariant,
   ExternalText,
   Menu,
+  PhysicalLayer,
+  PhysicalLayerConnection,
   ProcessData,
   RootDocumentState,
+  Test,
+  TestConfig7Entry,
+  TestConfigEntry,
+  TestEventTrigger,
   Variable,
 } from "$lib/models/generated";
 
@@ -14,6 +21,8 @@ type DocumentLanguage = RootDocumentState["DocumentInfo"]["languages"][number];
 type SupportedFunction = NonNullable<RootDocumentState["ProfileHeader"]["supportedFunctions"]>[number];
 
 type PartialState = Partial<RootDocumentState>;
+
+const WIRE_POSITIONS: ConnectionWire["position"][] = ["Wire1", "Wire2", "Wire3", "Wire4", "Wire5"];
 
 const INDENT = "  ";
 
@@ -119,6 +128,156 @@ function renderText(entry: ExternalText, depth: number): string {
   return lines.join("\n");
 }
 
+function renderProductRefs(refs: NonNullable<PhysicalLayerConnection["productRefs"]>, depth: number): string[] {
+  const lines: string[] = [`${INDENT.repeat(depth)}<ProductRefs>`];
+  refs.forEach((ref) => {
+    lines.push(`${INDENT.repeat(depth + 1)}<ProductRef>`);
+    lines.push(renderElement("ProductId", ref.productId, depth + 2));
+    lines.push(`${INDENT.repeat(depth + 1)}</ProductRef>`);
+  });
+  lines.push(`${INDENT.repeat(depth)}</ProductRefs>`);
+  return lines;
+}
+
+function renderWire(wire: ConnectionWire, depth: number): string {
+  const tag = wire.position ?? "Wire";
+  const attributes: string[] = [];
+  if (wire.color) {
+    attributes.push(`color="${escapeXml(wire.color)}"`);
+  }
+  if (wire.function) {
+    attributes.push(`function="${escapeXml(wire.function)}"`);
+  }
+  const joined = attributes.length ? ` ${attributes.join(" ")}` : "";
+  return `${INDENT.repeat(depth)}<${tag}${joined} />`;
+}
+
+function renderConnection(connection: PhysicalLayerConnection, depth: number): string {
+  const lines: string[] = [`${INDENT.repeat(depth)}<Connection>`];
+  if (connection.connectionSymbol) {
+    lines.push(renderElement("ConnectionSymbol", connection.connectionSymbol, depth + 1));
+  }
+  if (connection.description) {
+    lines.push(renderElement("Description", connection.description, depth + 1));
+  }
+  if (connection.productRefs?.length) {
+    lines.push(...renderProductRefs(connection.productRefs, depth + 1));
+  }
+  if (connection.wires?.length) {
+    const sorted = [...connection.wires].sort((a, b) => {
+      const aIndex = WIRE_POSITIONS.indexOf(a.position ?? "Wire1");
+      const bIndex = WIRE_POSITIONS.indexOf(b.position ?? "Wire1");
+      return aIndex - bIndex;
+    });
+    sorted.forEach((wire) => {
+      lines.push(renderWire(wire, depth + 1));
+    });
+  }
+  lines.push(`${INDENT.repeat(depth)}</Connection>`);
+  return lines.join("\n");
+}
+
+function renderPhysicalLayer(layer: PhysicalLayer, depth: number): string {
+  const lines: string[] = [`${INDENT.repeat(depth)}<PhysicalLayer>`];
+  lines.push(renderElement("Bitrate", layer.bitrate, depth + 1));
+  if (layer.minCycleTime !== undefined) {
+    lines.push(renderElement("MinCycleTime", layer.minCycleTime, depth + 1));
+  }
+  lines.push(renderElement("SIOSupported", layer.sioSupported ? "true" : "false", depth + 1));
+  lines.push(renderElement("MSequenceCapability", layer.mSequenceCapability, depth + 1));
+  if (layer.connections?.length) {
+    lines.push(`${INDENT.repeat(depth + 1)}<Connections>`);
+    layer.connections.forEach((connection) => {
+      lines.push(renderConnection(connection, depth + 2));
+    });
+    lines.push(`${INDENT.repeat(depth + 1)}</Connections>`);
+  }
+  lines.push(`${INDENT.repeat(depth)}</PhysicalLayer>`);
+  return lines.join("\n");
+}
+
+function renderTestConfigElements(name: string, entries: TestConfigEntry[] | undefined, depth: number): string[] {
+  if (!entries || entries.length === 0) {
+    return [];
+  }
+  const lines: string[] = [];
+  entries.forEach((entry) => {
+    if (entry.index === undefined || entry.testValue === undefined || entry.testValue === null) {
+      return;
+    }
+    const testValue = String(entry.testValue).trim();
+    if (!testValue.length) {
+      return;
+    }
+    const indexValue = Number(entry.index);
+    if (!Number.isFinite(indexValue)) {
+      return;
+    }
+    lines.push(
+      `${INDENT.repeat(depth)}<${name} index="${indexValue}" testValue="${escapeXml(testValue)}" />`
+    );
+  });
+  return lines;
+}
+
+function renderTestConfig7Elements(entries: TestConfig7Entry[] | undefined, depth: number): string[] {
+  if (!entries || entries.length === 0) {
+    return [];
+  }
+  const lines: string[] = [];
+  entries.forEach((entry) => {
+    if (entry.index === undefined) {
+      return;
+    }
+    const indexValue = Number(entry.index);
+    if (!Number.isFinite(indexValue)) {
+      return;
+    }
+    const triggerLines: string[] = [];
+    (entry.eventTriggers ?? []).forEach((trigger) => {
+      if (
+        trigger.appearValue === undefined ||
+        trigger.disappearValue === undefined ||
+        !Number.isFinite(Number(trigger.appearValue)) ||
+        !Number.isFinite(Number(trigger.disappearValue))
+      ) {
+        return;
+      }
+      triggerLines.push(
+        `${INDENT.repeat(depth + 1)}<EventTrigger appearValue="${Number(trigger.appearValue)}" disappearValue="${Number(trigger.disappearValue)}" />`
+      );
+    });
+
+    if (triggerLines.length === 0) {
+      lines.push(`${INDENT.repeat(depth)}<Config7 index="${indexValue}" />`);
+      return;
+    }
+
+    lines.push(`${INDENT.repeat(depth)}<Config7 index="${indexValue}">`);
+    lines.push(...triggerLines);
+    lines.push(`${INDENT.repeat(depth)}</Config7>`);
+  });
+  return lines;
+}
+
+function renderTestSection(test: Test | undefined | null, depth: number): string[] {
+  if (!test) {
+    return [];
+  }
+  const configLines = [
+    ...renderTestConfigElements("Config1", test.config1, depth + 1),
+    ...renderTestConfigElements("Config2", test.config2, depth + 1),
+    ...renderTestConfigElements("Config3", test.config3, depth + 1),
+    ...renderTestConfig7Elements(test.config7, depth + 1),
+  ];
+
+  if (configLines.length === 0) {
+    return [];
+  }
+
+  return [`${INDENT.repeat(depth)}<Test>`, ...configLines, `${INDENT.repeat(depth)}</Test>`];
+}
+
 export function exportToXml(state: RootDocumentState): string {
   const lines: string[] = ['<?xml version="1.0" encoding="UTF-8"?>', '<IODD xmlns="https://www.io-link.com/IODD/2021/06">'];
 
@@ -153,6 +312,19 @@ export function exportToXml(state: RootDocumentState): string {
     lines.push(`${INDENT.repeat(2)}</RevisionHistory>`);
   }
   lines.push(`${INDENT}</DocumentInfo>`);
+
+  if (state.TransportLayers?.physicalLayers?.length) {
+    lines.push(`${INDENT}<TransportLayers>`);
+    state.TransportLayers.physicalLayers.forEach((layer) => {
+      lines.push(renderPhysicalLayer(layer, 2));
+    });
+    lines.push(`${INDENT}</TransportLayers>`);
+  }
+
+  const testLines = renderTestSection(state.Test, 1);
+  if (testLines.length) {
+    lines.push(...testLines);
+  }
 
   const profile = state.ProfileHeader;
   lines.push(`${INDENT}<ProfileHeader>`);
@@ -270,6 +442,7 @@ export function importFromXml(xml: string): PartialState {
 
     const documentInfoNode = doc.querySelector("DocumentInfo");
     const profileNode = doc.querySelector("ProfileHeader");
+    const transportNode = doc.querySelector("TransportLayers");
     const result: PartialState = {};
 
     if (documentInfoNode) {
@@ -288,6 +461,120 @@ export function importFromXml(xml: string): PartialState {
           author: revision.querySelector("Author")?.textContent ?? "",
           description: revision.querySelector("Description")?.textContent ?? "",
         })),
+      };
+    }
+
+    if (transportNode) {
+      result.TransportLayers = {
+        physicalLayers: Array.from(transportNode.querySelectorAll("PhysicalLayer")).map((layer) => {
+          const bitrate = (layer.querySelector("Bitrate")?.textContent ?? "COM1") as PhysicalLayer["bitrate"];
+          const minCycleText = layer.querySelector("MinCycleTime")?.textContent ?? "";
+          const parsedMinCycleTime = minCycleText.trim().length ? Number(minCycleText) : undefined;
+          const minCycleTime = parsedMinCycleTime !== undefined && !Number.isNaN(parsedMinCycleTime)
+            ? parsedMinCycleTime
+            : undefined;
+          const sioSupportedText = layer.querySelector("SIOSupported")?.textContent ?? "false";
+          const sioSupported = sioSupportedText === "true" || sioSupportedText === "1";
+          const mSequenceText = layer.querySelector("MSequenceCapability")?.textContent ?? "0";
+          const parsedMSequenceCapability = Number(mSequenceText);
+          const mSequenceCapability = Number.isNaN(parsedMSequenceCapability) ? 0 : parsedMSequenceCapability;
+          const connections = Array.from(layer.querySelectorAll("Connections > Connection")).map((connection) => {
+            const connectionSymbol = connection.querySelector("ConnectionSymbol")?.textContent ?? undefined;
+            const description = connection.querySelector("Description")?.textContent ?? undefined;
+            const productRefs = Array.from(connection.querySelectorAll("ProductRefs > ProductRef")).map((ref) => ({
+              productId: ref.querySelector("ProductId")?.textContent ?? "",
+            }));
+            const wires: ConnectionWire[] = [];
+            WIRE_POSITIONS.forEach((tag) => {
+              connection.querySelectorAll(tag).forEach((wireNode) => {
+                const colorAttr = wireNode.getAttribute("color") ?? undefined;
+                const functionAttr = wireNode.getAttribute("function") ?? undefined;
+                if (!colorAttr && !functionAttr) {
+                  return;
+                }
+                wires.push({
+                  position: tag,
+                  color: (colorAttr ?? "BK") as ConnectionWire["color"],
+                  function: (functionAttr ?? "Other") as ConnectionWire["function"],
+                });
+              });
+            });
+
+            const testNode = doc.querySelector("Test");
+            if (testNode) {
+              const parseConfig = (tag: string): TestConfigEntry[] =>
+                Array.from(testNode.querySelectorAll(tag))
+                  .map((element) => {
+                    const indexAttr = element.getAttribute("index");
+                    const testValueAttr = element.getAttribute("testValue");
+                    if (!indexAttr || !testValueAttr) {
+                      return null;
+                    }
+                    const index = Number(indexAttr);
+                    if (Number.isNaN(index)) {
+                      return null;
+                    }
+                    return { index, testValue: testValueAttr } as TestConfigEntry;
+                  })
+                  .filter((entry): entry is TestConfigEntry => entry !== null);
+
+              const config1 = parseConfig("Config1");
+              const config2 = parseConfig("Config2");
+              const config3 = parseConfig("Config3");
+              const config7 = Array.from(testNode.querySelectorAll("Config7"))
+                .map((element) => {
+                  const indexAttr = element.getAttribute("index");
+                  if (!indexAttr) {
+                    return null;
+                  }
+                  const index = Number(indexAttr);
+                  if (Number.isNaN(index)) {
+                    return null;
+                  }
+                  const eventTriggers = Array.from(element.querySelectorAll("EventTrigger"))
+                    .map((trigger) => {
+                      const appearAttr = trigger.getAttribute("appearValue");
+                      const disappearAttr = trigger.getAttribute("disappearValue");
+                      if (appearAttr === null || disappearAttr === null) {
+                        return null;
+                      }
+                      const appearValue = Number(appearAttr);
+                      const disappearValue = Number(disappearAttr);
+                      if (Number.isNaN(appearValue) || Number.isNaN(disappearValue)) {
+                        return null;
+                      }
+                      return { appearValue, disappearValue } as TestEventTrigger;
+                    })
+                    .filter((trigger): trigger is TestEventTrigger => trigger !== null);
+                  return { index, eventTriggers } as TestConfig7Entry;
+                })
+                .filter((entry): entry is TestConfig7Entry => entry !== null);
+
+              if (config1.length || config2.length || config3.length || config7.length) {
+                result.Test = {
+                  ...(config1.length ? { config1 } : {}),
+                  ...(config2.length ? { config2 } : {}),
+                  ...(config3.length ? { config3 } : {}),
+                  ...(config7.length ? { config7 } : {}),
+                } satisfies Test;
+              }
+            }
+            return {
+              connectionSymbol,
+              description,
+              productRefs: productRefs.length ? productRefs : undefined,
+              wires: wires.length ? wires : undefined,
+            } as PhysicalLayerConnection;
+          });
+
+          return {
+            bitrate,
+            minCycleTime,
+            sioSupported,
+            mSequenceCapability,
+            connections: connections.length ? connections : undefined,
+          } satisfies PhysicalLayer;
+        }),
       };
     }
 

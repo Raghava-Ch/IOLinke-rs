@@ -30,6 +30,79 @@ export interface ProductReference {
   orderCode?: string;
 }
 
+export interface TransportProductReference {
+  productId: string;
+}
+
+export type WirePosition = "Wire1" | "Wire2" | "Wire3" | "Wire4" | "Wire5";
+
+export type WireColor =
+  | "BK"
+  | "BN"
+  | "RD"
+  | "OG"
+  | "YE"
+  | "GN"
+  | "BU"
+  | "VT"
+  | "GY"
+  | "WH"
+  | "PK"
+  | "GD"
+  | "TQ"
+  | "SR";
+
+export type WireFunction = "NC" | "L+" | "L-" | "P24" | "N24" | "Other" | "C/Q";
+
+export interface ConnectionWire {
+  position: WirePosition;
+  color: WireColor;
+  function: WireFunction;
+}
+
+export interface PhysicalLayerConnection {
+  connectionSymbol?: string;
+  description?: string | null;
+  productRefs?: TransportProductReference[];
+  wires?: ConnectionWire[];
+}
+
+export type PhysicalLayerBitrate = "COM1" | "COM2" | "COM3";
+
+export interface PhysicalLayer {
+  bitrate: PhysicalLayerBitrate;
+  minCycleTime?: number;
+  sioSupported: boolean;
+  mSequenceCapability: number;
+  connections?: PhysicalLayerConnection[];
+}
+
+export interface TransportLayers {
+  physicalLayers: PhysicalLayer[];
+}
+
+export interface TestConfigEntry {
+  index: number;
+  testValue: string;
+}
+
+export interface TestEventTrigger {
+  appearValue: number;
+  disappearValue: number;
+}
+
+export interface TestConfig7Entry {
+  index: number;
+  eventTriggers: TestEventTrigger[];
+}
+
+export interface Test {
+  config1?: TestConfigEntry[];
+  config2?: TestConfigEntry[];
+  config3?: TestConfigEntry[];
+  config7?: TestConfig7Entry[];
+}
+
 export interface DeviceIdentity {
   vendorId: number;
   deviceId: number;
@@ -151,6 +224,8 @@ export interface Stamp {
 
 export interface RootDocumentState {
   DocumentInfo: DocumentInfo;
+  TransportLayers: TransportLayers;
+  Test: Test;
   ProfileHeader: ProfileHeader;
   DeviceIdentity: DeviceIdentity;
   DeviceVariantCollection: DeviceVariantCollection;

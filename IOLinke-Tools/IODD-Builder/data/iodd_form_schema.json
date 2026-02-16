@@ -41,6 +41,26 @@
                   ]
                 },
                 {
+                  "id": "TransportLayers",
+                  "label": "Transport Layers",
+                  "entity": "TransportLayers",
+                  "multiplicity": { "min": 0, "max": 1 },
+                  "children": [
+                    {
+                      "id": "PhysicalLayer",
+                      "label": "Physical Layer",
+                      "entity": "PhysicalLayer",
+                      "multiplicity": { "min": 0, "max": null }
+                    }
+                  ]
+                },
+                {
+                  "id": "Test",
+                  "label": "Test",
+                  "entity": "Test",
+                  "multiplicity": { "min": 0, "max": 1 }
+                },
+                {
                   "id": "DatatypeCollection",
                   "label": "Datatypes",
                   "entity": "DatatypeCollection",
@@ -248,6 +268,343 @@
             ]
           },
           "help": "Keep track of document revisions."
+        }
+      ]
+    },
+    "TransportLayers": {
+      "id": "TransportLayers",
+      "label": "Transport Layers",
+      "fields": [
+        {
+          "id": "physicalLayers",
+          "label": "Physical Layers",
+          "type": "collection",
+          "item": {
+            "type": "entity",
+            "entity": "PhysicalLayer",
+            "label": "Physical Layer"
+          },
+          "help": "IO-Link physical layers available for this device."
+        }
+      ]
+    },
+    "Test": {
+      "id": "Test",
+      "label": "Test",
+      "documentation": "Optional IO-Link device test metadata container derived from IOLinkTestT.",
+      "fields": [
+        {
+          "id": "config1",
+          "label": "Config 1",
+          "type": "collection",
+          "optionalReason": "IOLinkTestConfigT element with minOccurs=0.",
+          "help": "Optional configuration block for Index 1 test values.",
+          "minOccurs": 0,
+          "maxOccurs": 1,
+          "item": {
+            "type": "object",
+            "label": "Config 1 Entry",
+            "fields": [
+              {
+                "id": "index",
+                "label": "Index",
+                "type": "integer",
+                "required": true,
+                "minInclusive": 0,
+                "maxInclusive": 65535,
+                "help": "Unsigned short index (0-65535)."
+              },
+              {
+                "id": "testValue",
+                "label": "Test Value",
+                "type": "string",
+                "required": true,
+                "pattern": "(0x[0-9A-Fa-f][0-9A-Fa-f],)*0x[0-9A-Fa-f][0-9A-Fa-f]",
+                "help": "Comma-separated hex byte values (e.g., 0x01,0x02)."
+              }
+            ]
+          }
+        },
+        {
+          "id": "config2",
+          "label": "Config 2",
+          "type": "collection",
+          "optionalReason": "IOLinkTestConfigT element with minOccurs=0.",
+          "help": "Optional configuration block for Index 2 test values.",
+          "minOccurs": 0,
+          "maxOccurs": 1,
+          "item": {
+            "type": "object",
+            "label": "Config 2 Entry",
+            "fields": [
+              {
+                "id": "index",
+                "label": "Index",
+                "type": "integer",
+                "required": true,
+                "minInclusive": 0,
+                "maxInclusive": 65535,
+                "help": "Unsigned short index (0-65535)."
+              },
+              {
+                "id": "testValue",
+                "label": "Test Value",
+                "type": "string",
+                "required": true,
+                "pattern": "(0x[0-9A-Fa-f][0-9A-Fa-f],)*0x[0-9A-Fa-f][0-9A-Fa-f]",
+                "help": "Comma-separated hex byte values (e.g., 0x01,0x02)."
+              }
+            ]
+          }
+        },
+        {
+          "id": "config3",
+          "label": "Config 3",
+          "type": "collection",
+          "optionalReason": "IOLinkTestConfigT element with minOccurs=0.",
+          "help": "Optional configuration block for Index 3 test values.",
+          "minOccurs": 0,
+          "maxOccurs": 1,
+          "item": {
+            "type": "object",
+            "label": "Config 3 Entry",
+            "fields": [
+              {
+                "id": "index",
+                "label": "Index",
+                "type": "integer",
+                "required": true,
+                "minInclusive": 0,
+                "maxInclusive": 65535,
+                "help": "Unsigned short index (0-65535)."
+              },
+              {
+                "id": "testValue",
+                "label": "Test Value",
+                "type": "string",
+                "required": true,
+                "pattern": "(0x[0-9A-Fa-f][0-9A-Fa-f],)*0x[0-9A-Fa-f][0-9A-Fa-f]",
+                "help": "Comma-separated hex byte values (e.g., 0x01,0x02)."
+              }
+            ]
+          }
+        },
+        {
+          "id": "config7",
+          "label": "Config 7",
+          "type": "collection",
+          "optionalReason": "IOLinkTestConfig7T element with minOccurs=0.",
+          "help": "Optional configuration for event-triggered tests.",
+          "minOccurs": 0,
+          "maxOccurs": 1,
+          "item": {
+            "type": "object",
+            "label": "Config 7 Entry",
+            "fields": [
+              {
+                "id": "index",
+                "label": "Index",
+                "type": "integer",
+                "required": true,
+                "minInclusive": 0,
+                "maxInclusive": 65535,
+                "help": "Unsigned short index (0-65535)."
+              },
+              {
+                "id": "eventTriggers",
+                "label": "Event Triggers",
+                "type": "collection",
+                "minOccurs": 1,
+                "maxOccurs": 2,
+                "help": "Up to two event trigger definitions for Config 7.",
+                "item": {
+                  "type": "object",
+                  "label": "Event Trigger",
+                  "fields": [
+                    {
+                      "id": "appearValue",
+                      "label": "Appear Value",
+                      "type": "integer",
+                      "required": true,
+                      "minInclusive": 0,
+                      "maxInclusive": 255,
+                      "help": "Unsigned byte value (0-255) causing the event to appear."
+                    },
+                    {
+                      "id": "disappearValue",
+                      "label": "Disappear Value",
+                      "type": "integer",
+                      "required": true,
+                      "minInclusive": 0,
+                      "maxInclusive": 255,
+                      "help": "Unsigned byte value (0-255) causing the event to disappear."
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "PhysicalLayer": {
+      "id": "PhysicalLayer",
+      "label": "Physical Layer",
+      "fields": [
+        {
+          "id": "bitrate",
+          "label": "Bitrate",
+          "type": "enum",
+          "required": true,
+          "options": [
+            { "value": "COM1" },
+            { "value": "COM2" },
+            { "value": "COM3" }
+          ],
+          "help": "Select IO-Link COM mode."
+        },
+        {
+          "id": "minCycleTime",
+          "label": "Minimum Cycle Time (µs)",
+          "type": "integer",
+          "minInclusive": 1,
+          "maxInclusive": 132800,
+          "help": "Minimum communication cycle time in microseconds."
+        },
+        {
+          "id": "sioSupported",
+          "label": "SIO Supported",
+          "type": "boolean",
+          "required": true,
+          "help": "Indicates if SIO mode is supported."
+        },
+        {
+          "id": "mSequenceCapability",
+          "label": "M-Sequence Capability",
+          "type": "integer",
+          "required": true,
+          "minInclusive": 0,
+          "maxInclusive": 255,
+          "help": "Maximum M-sequence capability."
+        },
+        {
+          "id": "connections",
+          "label": "Connections",
+          "type": "collection",
+          "item": {
+            "type": "entity",
+            "entity": "PhysicalLayerConnection",
+            "label": "Connection"
+          },
+          "help": "Defined physical connections for this layer."
+        }
+      ]
+    },
+    "PhysicalLayerConnection": {
+      "id": "PhysicalLayerConnection",
+      "label": "Connection",
+      "fields": [
+        {
+          "id": "connectionSymbol",
+          "label": "Connection Symbol",
+          "type": "string",
+          "pattern": "([A-Za-z0-9_#]+-)+con-pic\\.png",
+          "help": "PNG filename of the connection symbol (e.g., sensor-con-pic.png)."
+        },
+        {
+          "id": "description",
+          "label": "Description",
+          "type": "reference",
+          "reference": {
+            "entityId": "ExternalText",
+            "displayField": "textId"
+          },
+          "optionalReason": "Optional textual description for the connection."
+        },
+        {
+          "id": "productRefs",
+          "label": "Product References",
+          "type": "collection",
+          "item": {
+            "type": "object",
+            "label": "Product Reference",
+            "fields": [
+              {
+                "id": "productId",
+                "label": "Product ID",
+                "type": "string",
+                "required": true
+              }
+            ]
+          },
+          "help": "Associated accessories or connectors."
+        },
+        {
+          "id": "wires",
+          "label": "Wires",
+          "type": "collection",
+          "minOccurs": 1,
+          "uniqueBy": "position",
+          "item": {
+            "type": "object",
+            "label": "Wire",
+            "fields": [
+              {
+                "id": "position",
+                "label": "Position",
+                "type": "enum",
+                "required": true,
+                "options": [
+                  { "value": "Wire1", "label": "Wire 1" },
+                  { "value": "Wire2", "label": "Wire 2" },
+                  { "value": "Wire3", "label": "Wire 3" },
+                  { "value": "Wire4", "label": "Wire 4" },
+                  { "value": "Wire5", "label": "Wire 5" }
+                ],
+                "help": "Matches IODD Wire1/Wire2 elements with fixed positions."
+              },
+              {
+                "id": "color",
+                "label": "Color",
+                "type": "enum",
+                "required": true,
+                "options": [
+                  { "value": "BK", "label": "Black (BK)" },
+                  { "value": "BN", "label": "Brown (BN)" },
+                  { "value": "RD", "label": "Red (RD)" },
+                  { "value": "OG", "label": "Orange (OG)" },
+                  { "value": "YE", "label": "Yellow (YE)" },
+                  { "value": "GN", "label": "Green (GN)" },
+                  { "value": "BU", "label": "Blue (BU)" },
+                  { "value": "VT", "label": "Violet (VT)" },
+                  { "value": "GY", "label": "Grey (GY)" },
+                  { "value": "WH", "label": "White (WH)" },
+                  { "value": "PK", "label": "Pink (PK)" },
+                  { "value": "GD", "label": "Gold (GD)" },
+                  { "value": "TQ", "label": "Turquoise (TQ)" },
+                  { "value": "SR", "label": "Silver (SR)" }
+                ],
+                "help": "IEC 60757 color code for the conductor insulation."
+              },
+              {
+                "id": "function",
+                "label": "Function",
+                "type": "enum",
+                "required": true,
+                "options": [
+                  { "value": "NC", "label": "NC" },
+                  { "value": "L+", "label": "L+" },
+                  { "value": "L-", "label": "L-" },
+                  { "value": "P24", "label": "P24" },
+                  { "value": "N24", "label": "N24" },
+                  { "value": "Other", "label": "Other" },
+                  { "value": "C/Q", "label": "C/Q" }
+                ],
+                "help": "Electrical function assigned to the conductor."
+              }
+            ]
+          },
+          "help": "Describe each conductor present in the connector."
         }
       ]
     },

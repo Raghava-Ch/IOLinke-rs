@@ -33,7 +33,7 @@ test.describe("Device Identity product references", () => {
     const removeButtons = page.getByRole("button", { name: "Remove" });
     await removeButtons.first().click();
 
-    const minOccursMessage = page.getByText("Product References requires at least 1 entries.");
+    const minOccursMessage = page.getByText("Product References requires at least 1 entry.");
     await expect(minOccursMessage).toBeVisible();
 
     await page.getByRole("button", { name: "Add Product References" }).click();
@@ -42,5 +42,29 @@ test.describe("Device Identity product references", () => {
     await replacementProductIdInput.blur();
 
     await expect(minOccursMessage).toBeHidden();
+  });
+
+  test("device identity updates metadata fields", async ({ page }) => {
+    const deviceIdInput = page.getByLabel("Device ID", { exact: true });
+    await deviceIdInput.fill("789");
+    await deviceIdInput.blur();
+    await expect(deviceIdInput).toHaveValue("789");
+
+    const deviceFamilySelect = page.getByLabel("Device Family", { exact: true });
+    await deviceFamilySelect.selectOption("actuator");
+    await expect(deviceFamilySelect).toHaveValue("actuator");
+
+    const orderCodeInput = page.getByLabel("Order Code", { exact: true }).first();
+    await orderCodeInput.fill("SS-999-99");
+    await orderCodeInput.blur();
+    await expect(orderCodeInput).toHaveValue("SS-999-99");
+
+    const deviceIconInput = page.getByLabel("Device Icon", { exact: true });
+    await deviceIconInput.fill("sensor-icon.png");
+    await expect(deviceIconInput).toHaveValue("sensor-icon.png");
+
+    const deviceSymbolInput = page.getByLabel("Device Symbol", { exact: true });
+    await deviceSymbolInput.fill("sensor-symbol.png");
+    await expect(deviceSymbolInput).toHaveValue("sensor-symbol.png");
   });
 });

@@ -76,6 +76,7 @@ export interface CollectionFieldSchema extends BaseFieldSchema {
   item: FieldSchema;
   minOccurs?: number;
   maxOccurs?: number | null;
+  uniqueBy?: string;
 }
 
 export interface EntityFieldSchema extends BaseFieldSchema {
