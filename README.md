@@ -40,7 +40,7 @@ IOLinke-Device provides a production-ready (Work in progress), embedded-first IO
 - For embedded targets: appropriate target toolchain installed
 
 ### Configuation
-Edit the [IOLinke-Dev-config/device_config.toon](device_config.toon) file to configure your device parameters, memory layout, and hardware-specific settings. This configuration will be validated and used to generate optimized stack code.
+Edit the [IOLinke-Dev-config/device_config.toon](IOLinke-Dev-config/device_config.toon) file to configure your device parameters, memory layout, and hardware-specific settings. This configuration will be validated and used to generate optimized stack code.
 
 To validate it against the IO-Link specification, And update the stack source code run:
 ```bash
@@ -115,7 +115,7 @@ The workspace follows a layered architecture designed for compliance with IO-Lin
 
 - **Layered Protocol Stack**: Each crate corresponds to a specific layer or aspect of the IO-Link protocol, from physical layer abstraction to application layer interfaces.
 - **Modular Design**: Crates are loosely coupled and can be developed, tested, and updated independently.
-- **Configuration Driven**: Device behavior and capabilities are configured via the `IOLinke-Dev-config/device_config.toon` file, enabling easy adaptation to different hardware and application requirements.
+- **Configuration Driven**: Device behavior and capabilities are configured via the [IOLinke-Dev-config/device_config.toon](IOLinke-Dev-config/device_config.toon) file, enabling easy adaptation to different hardware and application requirements.
 - **Testing and Validation**: Extensive testing utilities and example implementations facilitate validation of protocol compliance and interoperability.
 
 Refer to individual crate documentation for detailed architecture and API information.
