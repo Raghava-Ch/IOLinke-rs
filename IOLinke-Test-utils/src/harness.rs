@@ -129,11 +129,10 @@ impl TestHarness {
 
     /// Reads an indexed parameter via ISDU in **PreOperate** mode.
     ///
-    /// The device must already be in the PreOperate state (call [`enter_preoperate`] first).
+    /// The device must already be in the PreOperate state
+    /// (call [`TestHarness::enter_preoperate`] first).
     ///
     /// Returns the raw application-data bytes (ISDU service header stripped).
-    ///
-    /// [`enter_preoperate`]: TestHarness::enter_preoperate
     pub fn isdu_read_preoperate(
         &self,
         index: u16,
@@ -144,11 +143,10 @@ impl TestHarness {
 
     /// Writes an indexed parameter via ISDU in **PreOperate** mode.
     ///
-    /// The device must already be in the PreOperate state (call [`enter_preoperate`] first).
+    /// The device must already be in the PreOperate state
+    /// (call [`TestHarness::enter_preoperate`] first).
     ///
     /// The write is considered successful when the device acknowledges with `WriteSuccess`.
-    ///
-    /// [`enter_preoperate`]: TestHarness::enter_preoperate
     pub fn isdu_write_preoperate(
         &self,
         index: u16,
@@ -166,11 +164,10 @@ impl TestHarness {
 
     /// Reads an indexed parameter via ISDU in **Operate** mode.
     ///
-    /// The device must already be in the Operate state (call [`enter_operate`] first).
+    /// The device must already be in the Operate state
+    /// (call [`TestHarness::enter_operate`] first).
     ///
     /// Returns the raw application-data bytes (ISDU service header stripped).
-    ///
-    /// [`enter_operate`]: TestHarness::enter_operate
     pub fn isdu_read_operate(
         &self,
         index: u16,
@@ -181,11 +178,10 @@ impl TestHarness {
 
     /// Writes an indexed parameter via ISDU in **Operate** mode.
     ///
-    /// The device must already be in the Operate state (call [`enter_operate`] first).
+    /// The device must already be in the Operate state
+    /// (call [`TestHarness::enter_operate`] first).
     ///
     /// The write is considered successful when the device acknowledges with `WriteSuccess`.
-    ///
-    /// [`enter_operate`]: TestHarness::enter_operate
     pub fn isdu_write_operate(
         &self,
         index: u16,

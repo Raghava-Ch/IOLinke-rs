@@ -543,6 +543,7 @@ fn parse_write_request_with_index(
     }
     let length = i_service.length();
     // length = total frame bytes = I-Service(1) + Index(1) + Data(N) + CHKPDU(1) = N + 3
+    // The CHKPDU byte is included in the received buffer and in the length field.
     // Valid standard lengths: 3 (no data) .. 15.
     if !(3..=15).contains(&length) {
         return Err(IoLinkError::InvalidData);
@@ -579,7 +580,8 @@ fn parse_write_request_with_index_subindex(
             &buffer[4..4 + ext_len as usize],
         ));
     }
-    // Standard-length format: length = total frame bytes
+    // Standard-length format: length = total frame bytes (CHKPDU is the last byte and
+    // is already present in the buffer at the time of parsing).
     // = I-Service(1) + Index(1) + Subindex(1) + Data(N) + CHKPDU(1) = N + 4
     // Valid standard lengths: 4 (no data) .. 15.
     if !(4..=15).contains(&length) {
