@@ -28,18 +28,24 @@ pub fn read_min_cycle_time(
     poll_response_rx: &Receiver<ThreadMessage>,
     device_mode: TestDeviceMode,
 ) -> CycleTime {
-    // Create read request for MinCycleTime
     let (rx_buffer, expected_bytes) = if device_mode == TestDeviceMode::Startup {
         let rx_buffer =
             frame_utils::create_startup_read_request(direct_parameter_address!(MinCycleTime));
         const EXPECTED_BYTES: u8 = 2;
         (rx_buffer, EXPECTED_BYTES)
-    } else {
+    } else if device_mode == TestDeviceMode::Preoperate {
         let rx_buffer =
             frame_utils::create_preop_read_request(direct_parameter_address!(MinCycleTime));
         const EXPECTED_BYTES: u8 = derived_config::on_req_data::pre_operate::od_length() + 1 /* CKS Byte */;
         (rx_buffer, EXPECTED_BYTES)
-    }; // for read cycle startup and preop builds to the same frame
+    } else {
+        let rx_buffer =
+            frame_utils::create_op_read_request(direct_parameter_address!(MinCycleTime));
+        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length()
+            + derived_config::process_data::pd_in::config_length_in_bytes()
+            + 1 /* CKS Byte */;
+        (rx_buffer, EXPECTED_BYTES)
+    };
 
     // Wait for response from the MockPhysicalLayer
     let mut response_data =
@@ -103,16 +109,22 @@ pub fn read_revision_id(
     poll_response_rx: &Receiver<ThreadMessage>,
     device_mode: TestDeviceMode,
 ) -> RevisionId {
-    // Create read request for MinCycleTime
     let (rx_buffer, expected_bytes) = if device_mode == TestDeviceMode::Startup {
         let rx_buffer =
             frame_utils::create_startup_read_request(direct_parameter_address!(RevisionID));
         const EXPECTED_BYTES: u8 = 2 /* OD + CKS Bytes */;
         (rx_buffer, EXPECTED_BYTES)
-    } else {
+    } else if device_mode == TestDeviceMode::Preoperate {
         let rx_buffer =
             frame_utils::create_preop_read_request(direct_parameter_address!(RevisionID));
         const EXPECTED_BYTES: u8 = derived_config::on_req_data::pre_operate::od_length() + 1 /* CKS Byte */;
+        (rx_buffer, EXPECTED_BYTES)
+    } else {
+        let rx_buffer =
+            frame_utils::create_op_read_request(direct_parameter_address!(RevisionID));
+        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length()
+            + derived_config::process_data::pd_in::config_length_in_bytes()
+            + 1 /* CKS Byte */;
         (rx_buffer, EXPECTED_BYTES)
     };
 
@@ -136,16 +148,22 @@ pub fn read_process_data_in(
     poll_response_rx: &Receiver<ThreadMessage>,
     device_mode: TestDeviceMode,
 ) -> ProcessDataIn {
-    // Create read request for MinCycleTime
     let (rx_buffer, expected_bytes) = if device_mode == TestDeviceMode::Startup {
         let rx_buffer =
             frame_utils::create_startup_read_request(direct_parameter_address!(ProcessDataIn));
         const EXPECTED_BYTES: u8 = 2 /* OD + CKS Bytes */;
         (rx_buffer, EXPECTED_BYTES)
-    } else {
+    } else if device_mode == TestDeviceMode::Preoperate {
         let rx_buffer =
             frame_utils::create_preop_read_request(direct_parameter_address!(ProcessDataIn));
         const EXPECTED_BYTES: u8 = derived_config::on_req_data::pre_operate::od_length() + 1 /* CKS Byte */;
+        (rx_buffer, EXPECTED_BYTES)
+    } else {
+        let rx_buffer =
+            frame_utils::create_op_read_request(direct_parameter_address!(ProcessDataIn));
+        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length()
+            + derived_config::process_data::pd_in::config_length_in_bytes()
+            + 1 /* CKS Byte */;
         (rx_buffer, EXPECTED_BYTES)
     };
 
@@ -171,16 +189,22 @@ pub fn read_process_data_out(
     poll_response_rx: &Receiver<ThreadMessage>,
     device_mode: TestDeviceMode,
 ) -> ProcessDataOut {
-    // Create read request for MinCycleTime
     let (rx_buffer, expected_bytes) = if device_mode == TestDeviceMode::Startup {
         let rx_buffer =
             frame_utils::create_startup_read_request(direct_parameter_address!(ProcessDataOut));
         const EXPECTED_BYTES: u8 = 2 /* OD + CKS Bytes */;
         (rx_buffer, EXPECTED_BYTES)
-    } else {
+    } else if device_mode == TestDeviceMode::Preoperate {
         let rx_buffer =
             frame_utils::create_preop_read_request(direct_parameter_address!(ProcessDataOut));
         const EXPECTED_BYTES: u8 = derived_config::on_req_data::pre_operate::od_length() + 1 /* CKS Byte */;
+        (rx_buffer, EXPECTED_BYTES)
+    } else {
+        let rx_buffer =
+            frame_utils::create_op_read_request(direct_parameter_address!(ProcessDataOut));
+        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length()
+            + derived_config::process_data::pd_in::config_length_in_bytes()
+            + 1 /* CKS Byte */;
         (rx_buffer, EXPECTED_BYTES)
     };
 
@@ -206,16 +230,22 @@ pub fn read_vendor_id_1(
     poll_response_rx: &Receiver<ThreadMessage>,
     device_mode: TestDeviceMode,
 ) -> u8 {
-    // Create read request for MinCycleTime
     let (rx_buffer, expected_bytes) = if device_mode == TestDeviceMode::Startup {
         let rx_buffer =
             frame_utils::create_startup_read_request(direct_parameter_address!(VendorID1));
         const EXPECTED_BYTES: u8 = 2 /* OD + CKS Bytes */;
         (rx_buffer, EXPECTED_BYTES)
-    } else {
+    } else if device_mode == TestDeviceMode::Preoperate {
         let rx_buffer =
             frame_utils::create_preop_read_request(direct_parameter_address!(VendorID1));
         const EXPECTED_BYTES: u8 = derived_config::on_req_data::pre_operate::od_length() + 1 /* CKS Byte */;
+        (rx_buffer, EXPECTED_BYTES)
+    } else {
+        let rx_buffer =
+            frame_utils::create_op_read_request(direct_parameter_address!(VendorID1));
+        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length()
+            + derived_config::process_data::pd_in::config_length_in_bytes()
+            + 1 /* CKS Byte */;
         (rx_buffer, EXPECTED_BYTES)
     };
 
@@ -241,16 +271,22 @@ pub fn read_vendor_id_2(
     poll_response_rx: &Receiver<ThreadMessage>,
     device_mode: TestDeviceMode,
 ) -> u8 {
-    // Create read request for VendorID2
     let (rx_buffer, expected_bytes) = if device_mode == TestDeviceMode::Startup {
         let rx_buffer =
             frame_utils::create_startup_read_request(direct_parameter_address!(VendorID2));
         const EXPECTED_BYTES: u8 = 2 /* OD + CKS Bytes */;
         (rx_buffer, EXPECTED_BYTES)
-    } else {
+    } else if device_mode == TestDeviceMode::Preoperate {
         let rx_buffer =
             frame_utils::create_preop_read_request(direct_parameter_address!(VendorID2));
         const EXPECTED_BYTES: u8 = derived_config::on_req_data::pre_operate::od_length() + 1 /* CKS Byte */;
+        (rx_buffer, EXPECTED_BYTES)
+    } else {
+        let rx_buffer =
+            frame_utils::create_op_read_request(direct_parameter_address!(VendorID2));
+        const EXPECTED_BYTES: u8 = derived_config::on_req_data::operate::od_length()
+            + derived_config::process_data::pd_in::config_length_in_bytes()
+            + 1 /* CKS Byte */;
         (rx_buffer, EXPECTED_BYTES)
     };
 

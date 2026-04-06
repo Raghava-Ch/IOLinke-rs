@@ -24,7 +24,7 @@
 
 use std::sync::mpsc::{Receiver, Sender};
 
-use iolinke_device::CycleTime;
+use iolinke_device::{CycleTime, MsequenceCapability, ProcessDataIn, ProcessDataOut, RevisionId};
 
 use crate::{
     page_params,
@@ -79,7 +79,6 @@ impl TestHarness {
     /// Drives the device from Startup through PreOperate and into Operate.
     pub fn enter_operate(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.enter_preoperate()?;
-        std::thread::sleep(std::time::Duration::from_millis(699));
         util_test_change_operation_mode(
             &self.poll_tx,
             &self.poll_response_rx,
@@ -91,5 +90,35 @@ impl TestHarness {
     /// Reads the `MinCycleTime` direct parameter in the given device mode.
     pub fn read_min_cycle_time(&self, mode: TestDeviceMode) -> CycleTime {
         page_params::read_min_cycle_time(&self.poll_tx, &self.poll_response_rx, mode)
+    }
+
+    /// Reads the `MSequenceCapability` direct parameter in the given device mode.
+    pub fn read_m_sequence_capability(&self, mode: TestDeviceMode) -> MsequenceCapability {
+        page_params::read_m_sequence_capability(&self.poll_tx, &self.poll_response_rx, mode)
+    }
+
+    /// Reads the `RevisionID` direct parameter in the given device mode.
+    pub fn read_revision_id(&self, mode: TestDeviceMode) -> RevisionId {
+        page_params::read_revision_id(&self.poll_tx, &self.poll_response_rx, mode)
+    }
+
+    /// Reads the `ProcessDataIn` direct parameter in the given device mode.
+    pub fn read_process_data_in(&self, mode: TestDeviceMode) -> ProcessDataIn {
+        page_params::read_process_data_in(&self.poll_tx, &self.poll_response_rx, mode)
+    }
+
+    /// Reads the `ProcessDataOut` direct parameter in the given device mode.
+    pub fn read_process_data_out(&self, mode: TestDeviceMode) -> ProcessDataOut {
+        page_params::read_process_data_out(&self.poll_tx, &self.poll_response_rx, mode)
+    }
+
+    /// Reads the first byte of the `VendorID` direct parameter in the given device mode.
+    pub fn read_vendor_id_1(&self, mode: TestDeviceMode) -> u8 {
+        page_params::read_vendor_id_1(&self.poll_tx, &self.poll_response_rx, mode)
+    }
+
+    /// Reads the second byte of the `VendorID` direct parameter in the given device mode.
+    pub fn read_vendor_id_2(&self, mode: TestDeviceMode) -> u8 {
+        page_params::read_vendor_id_2(&self.poll_tx, &self.poll_response_rx, mode)
     }
 }

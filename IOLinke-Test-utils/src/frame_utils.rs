@@ -105,17 +105,30 @@ pub fn setup_device_configuration(
 }
 
 /// Performs the startup sequence for the device
+///
+/// Drives state transitions deterministically by calling `poll()` directly
+/// (while holding the device mutex) instead of relying on sleep durations
+/// and background-thread scheduling.
+///
+/// Protocol steps
+/// 1. `pl_wake_up_ind()` fires, mode handler records T1 (Idle → EstablishCom).
+/// 2. Several `poll()` calls execute T1 → activates the message handler.
+/// 3. `successful_com(Com3)` fires, mode handler records T2 (EstablishCom → Startup).
+/// 4. Several `poll()` calls execute T2 → activates OD and command handlers.
 pub fn perform_startup_sequence(
     io_link_device: &Arc<Mutex<IoLinkDevice<MockPhysicalLayer, MockApplicationLayer>>>,
 ) {
-    {
-        let mut io_link_device_lock = io_link_device.lock().unwrap();
-        let _ = io_link_device_lock.pl_wake_up_ind();
+    let mut dev = io_link_device.lock().unwrap();
+    let _ = dev.pl_wake_up_ind();
+    // Drive T1 (Idle → EstablishCom, activates message handler).
+    for _ in 0..20 {
+        let _ = dev.poll();
     }
-    std::thread::sleep(std::time::Duration::from_millis(1));
-    let mut io_link_device_lock = io_link_device.lock().unwrap();
-    let _ = io_link_device_lock.successful_com(TransmissionRate::Com3);
-    std::thread::sleep(std::time::Duration::from_millis(1));
+    let _ = dev.successful_com(TransmissionRate::Com3);
+    // Drive T2 (EstablishCom → Startup, activates OD + command handlers).
+    for _ in 0..20 {
+        let _ = dev.poll();
+    }
 }
 
 /// Creates a read request message for testing
