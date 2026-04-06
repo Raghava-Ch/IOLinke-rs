@@ -542,11 +542,14 @@ fn parse_write_request_with_index(
         return Err(IoLinkError::InvalidParameter);
     }
     let length = i_service.length();
-    if !(2..=15).contains(&length) {
+    // length = total frame bytes = I-Service(1) + Index(1) + Data(N) + CHKPDU(1) = N + 3
+    // Valid standard lengths: 3 (no data) .. 15.
+    if !(3..=15).contains(&length) {
         return Err(IoLinkError::InvalidData);
     }
-    let index = buffer[1];
-    Ok((i_service, index as u16, 0, &buffer[2..3 - length as usize]))
+    let index = *buffer.get(1).ok_or(IoLinkError::InvalidParameter)?;
+    let data_bytes = (length as usize) - 3; // subtract I-Service, Index, CHKPDU
+    Ok((i_service, index as u16, 0, &buffer[2..2 + data_bytes]))
 }
 
 fn parse_write_request_with_index_subindex(
@@ -559,32 +562,33 @@ fn parse_write_request_with_index_subindex(
 )> {
     let isdu_service_bits = buffer.get(0).ok_or(IoLinkError::InvalidParameter)?;
     let i_service: IsduService = IsduService::from_bits(*isdu_service_bits);
-    let mut length = i_service.length();
+    let length = i_service.length();
     if length > 15 {
         return Err(IoLinkError::InvalidLength);
     }
     if length == 1 {
-        length = *buffer.get(1).ok_or(IoLinkError::InvalidParameter)?;
+        // Extended-length format: I-Service(length=1) + ExtLen + Index + Subindex + Data(ExtLen) + CHKPDU
+        // ExtLen holds the number of data bytes directly.
+        let ext_len = *buffer.get(1).ok_or(IoLinkError::InvalidParameter)?;
         let index = *buffer.get(2).ok_or(IoLinkError::InvalidParameter)?;
         let subindex = *buffer.get(3).ok_or(IoLinkError::InvalidParameter)?;
         return Ok((
             i_service,
             index as u16,
             subindex,
-            &buffer[4..4 + length as usize],
+            &buffer[4..4 + ext_len as usize],
         ));
     }
-    if !(2..=15).contains(&length) {
-        let index = *buffer.get(1).ok_or(IoLinkError::InvalidParameter)?;
-        let subindex = *buffer.get(2).ok_or(IoLinkError::InvalidParameter)?;
-        return Ok((
-            i_service,
-            index as u16,
-            subindex,
-            &buffer[3..3 + length as usize],
-        ));
+    // Standard-length format: length = total frame bytes
+    // = I-Service(1) + Index(1) + Subindex(1) + Data(N) + CHKPDU(1) = N + 4
+    // Valid standard lengths: 4 (no data) .. 15.
+    if !(4..=15).contains(&length) {
+        return Err(IoLinkError::InvalidData);
     }
-    return Err(IoLinkError::InvalidData);
+    let index = *buffer.get(1).ok_or(IoLinkError::InvalidParameter)? as u16;
+    let subindex = *buffer.get(2).ok_or(IoLinkError::InvalidParameter)?;
+    let data_bytes = (length as usize) - 4; // subtract I-Service, Index, Subindex, CHKPDU
+    Ok((i_service, index, subindex, &buffer[3..3 + data_bytes]))
 }
 
 fn parse_write_request_with_index_index_subindex(

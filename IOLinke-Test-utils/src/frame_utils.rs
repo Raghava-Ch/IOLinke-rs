@@ -685,17 +685,39 @@ pub mod isdu_frame {
 
     // 0x0010 0x00
     pub fn create_isdu_write_request(index: u16, sub_index: Option<u8>, data: &[u8]) -> Vec<u8> {
-        // {I-Service(0x9), Length(0x3), Index, CHKPDU} ^
-        // {I-Service(0xA), Length(0x4), Index, Subindex, CHKPDU} ^
-        // {I-Service(0xB), Length(0x5), Index, Index, Subindex, CHKPDU}
+        // ISDU write request frame formats (IO-Link v1.1.4, Section A.3.3):
+        //
+        // WriteRequestIndex          (I-Service 0x9): [I-Service, Index, Data..., CHKPDU]
+        //   total = data.len() + 3  (I-Service + Index + CHKPDU)
+        //
+        // WriteRequestIndexSubindex  (I-Service 0xA): [I-Service, Index, Subindex, Data..., CHKPDU]
+        //   total = data.len() + 4  (I-Service + Index + Subindex + CHKPDU)
+        //
+        // WriteRequestIndexIndexSubindex (I-Service 0xB):
+        //                                [I-Service, IndexLow, IndexHigh, Subindex, Data..., CHKPDU]
+        //   total = data.len() + 5  (I-Service + 2×Index + Subindex + CHKPDU)
+        //
+        // When total > 15 the 4-bit length field cannot hold the value; the spec reserves
+        // length=1 as an "extended length" indicator and the actual total is placed in the
+        // next byte (extended-length byte).
         let index_1 = (index & 0xFF) as u8;
         let index_2 = (index >> 8) as u8;
         let isdu_request_buffer = if index <= 0xFF && sub_index.is_none() {
+            // Frame: [I-Service, Index, Data..., CHKPDU]
+            let total_len = data.len() + 3;
+            let (isdu_service_length, ext_length) = if total_len > 15 {
+                (1u8, Some(total_len as u8))
+            } else {
+                (total_len as u8, None)
+            };
             let mut isdu_service = IsduService::new();
             isdu_service.set_i_service(IsduIServiceCode::WriteRequestIndex);
-            isdu_service.set_length(0x03);
+            isdu_service.set_length(isdu_service_length);
             let mut rx_buffer = Vec::new();
             rx_buffer.push(isdu_service.into_bits());
+            if let Some(ext) = ext_length {
+                rx_buffer.push(ext);
+            }
             rx_buffer.push(index_1);
             rx_buffer.extend_from_slice(data);
             rx_buffer.push(0); // CHKPDU
@@ -704,19 +726,20 @@ pub mod isdu_frame {
             rx_buffer.push(checkpdu);
             rx_buffer
         } else if index <= 0xFF && sub_index.is_some() {
-            let isdu_service_length = if data.len() > 15 { 1 } else { data.len() as u8 };
+            // Frame: [I-Service, Index, Subindex, Data..., CHKPDU]
+            let total_len = data.len() + 4;
+            let (isdu_service_length, ext_length) = if total_len > 15 {
+                (1u8, Some(total_len as u8))
+            } else {
+                (total_len as u8, None)
+            };
             let mut isdu_service = IsduService::new();
             isdu_service.set_i_service(IsduIServiceCode::WriteRequestIndexSubindex);
             isdu_service.set_length(isdu_service_length);
-            let isdu_service_ext_length = if data.len() > 15 {
-                Some(data.len() as u8)
-            } else {
-                None
-            };
             let mut rx_buffer = Vec::new();
             rx_buffer.push(isdu_service.into_bits());
-            if isdu_service_ext_length.is_some() {
-                rx_buffer.push(isdu_service_ext_length.unwrap());
+            if let Some(ext) = ext_length {
+                rx_buffer.push(ext);
             }
             rx_buffer.push(index_1);
             rx_buffer.push(sub_index.unwrap());
@@ -727,11 +750,21 @@ pub mod isdu_frame {
             rx_buffer.push(checkpdu);
             rx_buffer
         } else if index > 0xFF && sub_index.is_some() {
+            // Frame: [I-Service, IndexLow, IndexHigh, Subindex, Data..., CHKPDU]
+            let total_len = data.len() + 5;
+            let (isdu_service_length, ext_length) = if total_len > 15 {
+                (1u8, Some(total_len as u8))
+            } else {
+                (total_len as u8, None)
+            };
             let mut isdu_service = IsduService::new();
             isdu_service.set_i_service(IsduIServiceCode::WriteRequestIndexIndexSubindex);
-            isdu_service.set_length(0x05);
+            isdu_service.set_length(isdu_service_length);
             let mut rx_buffer = Vec::new();
             rx_buffer.push(isdu_service.into_bits());
+            if let Some(ext) = ext_length {
+                rx_buffer.push(ext);
+            }
             rx_buffer.push(index_1);
             rx_buffer.push(index_2);
             rx_buffer.push(sub_index.unwrap());

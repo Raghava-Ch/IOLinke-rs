@@ -23,6 +23,7 @@
 //! - Test bodies contain zero mentions of `mpsc`, `poll_tx`, or frame bytes.
 
 use std::sync::mpsc::{Receiver, Sender};
+use std::vec::Vec;
 
 use iolinke_device::{CycleTime, MsequenceCapability, ProcessDataIn, ProcessDataOut, RevisionId};
 
@@ -30,6 +31,8 @@ use crate::{
     page_params,
     test_environment::setup_test_environment,
     test_sequences::{
+        util_op_test_isdu_sequence_read, util_op_test_isdu_sequence_write,
+        util_pre_op_test_isdu_sequence_read, util_pre_op_test_isdu_sequence_write,
         util_test_change_operation_mode, util_test_preop_sequence, util_test_startup_sequence,
     },
     types::{TestDeviceMode, ThreadMessage},
@@ -120,5 +123,81 @@ impl TestHarness {
     /// Reads the second byte of the `VendorID` direct parameter in the given device mode.
     pub fn read_vendor_id_2(&self, mode: TestDeviceMode) -> u8 {
         page_params::read_vendor_id_2(&self.poll_tx, &self.poll_response_rx, mode)
+    }
+
+    // ── ISDU ─────────────────────────────────────────────────────────────────
+
+    /// Reads an indexed parameter via ISDU in **PreOperate** mode.
+    ///
+    /// The device must already be in the PreOperate state (call [`enter_preoperate`] first).
+    ///
+    /// Returns the raw application-data bytes (ISDU service header stripped).
+    ///
+    /// [`enter_preoperate`]: TestHarness::enter_preoperate
+    pub fn isdu_read_preoperate(
+        &self,
+        index: u16,
+        subindex: Option<u8>,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        util_pre_op_test_isdu_sequence_read(&self.poll_tx, &self.poll_response_rx, index, subindex)
+    }
+
+    /// Writes an indexed parameter via ISDU in **PreOperate** mode.
+    ///
+    /// The device must already be in the PreOperate state (call [`enter_preoperate`] first).
+    ///
+    /// The write is considered successful when the device acknowledges with `WriteSuccess`.
+    ///
+    /// [`enter_preoperate`]: TestHarness::enter_preoperate
+    pub fn isdu_write_preoperate(
+        &self,
+        index: u16,
+        subindex: Option<u8>,
+        data: &[u8],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        util_pre_op_test_isdu_sequence_write(
+            &self.poll_tx,
+            &self.poll_response_rx,
+            index,
+            subindex,
+            data,
+        )
+    }
+
+    /// Reads an indexed parameter via ISDU in **Operate** mode.
+    ///
+    /// The device must already be in the Operate state (call [`enter_operate`] first).
+    ///
+    /// Returns the raw application-data bytes (ISDU service header stripped).
+    ///
+    /// [`enter_operate`]: TestHarness::enter_operate
+    pub fn isdu_read_operate(
+        &self,
+        index: u16,
+        subindex: Option<u8>,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        util_op_test_isdu_sequence_read(&self.poll_tx, &self.poll_response_rx, index, subindex)
+    }
+
+    /// Writes an indexed parameter via ISDU in **Operate** mode.
+    ///
+    /// The device must already be in the Operate state (call [`enter_operate`] first).
+    ///
+    /// The write is considered successful when the device acknowledges with `WriteSuccess`.
+    ///
+    /// [`enter_operate`]: TestHarness::enter_operate
+    pub fn isdu_write_operate(
+        &self,
+        index: u16,
+        subindex: Option<u8>,
+        data: &[u8],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        util_op_test_isdu_sequence_write(
+            &self.poll_tx,
+            &self.poll_response_rx,
+            index,
+            subindex,
+            data,
+        )
     }
 }
