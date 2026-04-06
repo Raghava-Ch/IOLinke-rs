@@ -267,6 +267,15 @@ impl<
     /// }
     /// ```
     pub fn poll(&mut self) -> IoLinkResult<()> {
+        // Deliver any timers that fired since the last poll cycle.
+        // The physical layer collects and clears all expiry flags; we route
+        // each one to the correct DL sub-handler before advancing any state
+        // machine, so timer-triggered transitions are always processed in the
+        // same cycle that the timer fires.
+        for timer in self.physical_layer.pl_collect_elapsed_timers() {
+            self.data_link_layer.dl_timer_elapsed(timer);
+        }
+
         // Poll all state machines in dependency order
         self.application_layer.poll(&mut self.data_link_layer)?;
         self.data_link_layer.poll(
@@ -277,6 +286,26 @@ impl<
         self.system_management
             .poll(&mut self.application_layer, &mut self.physical_layer)?;
         Ok(())
+    }
+
+    /// Delivers a timer-expiry notification from an external source (e.g. a
+    /// hardware ISR or a RTOS timer callback) directly into the device stack.
+    ///
+    /// On embedded targets where the physical layer cannot poll its own
+    /// timer flags (because the ISR fires asynchronously), this method lets
+    /// higher-level code inject the event.  The test harness does **not** need
+    /// to call this — timer delivery is handled automatically inside [`poll`].
+    ///
+    /// # Parameters
+    ///
+    /// * `timer` - The timer that has elapsed.
+    ///
+    /// # Specification Reference
+    ///
+    /// - IO-Link v1.1.4 Table 45: DL-mode handler transitions (Tdsio)
+    /// - IO-Link v1.1.4 Table 47: Message handler transitions
+    pub fn pl_timer_elapsed_ind(&mut self, timer: Timer) {
+        self.data_link_layer.dl_timer_elapsed(timer);
     }
 
     /// Handles Physical Layer transfer indication with received byte data.

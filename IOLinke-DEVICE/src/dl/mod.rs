@@ -21,7 +21,7 @@
 //! - Section 7.4: Message Handling and Transmission
 //! - Annex A: Protocol Details and Timing
 use crate::{al, services};
-use crate::{pl, system_management};
+use crate::{pl, pl::physical_layer::IoLinkTimer, system_management};
 use iolinke_types::custom::IoLinkResult;
 use iolinke_types::frame;
 use iolinke_types::handlers;
@@ -107,6 +107,34 @@ impl DataLinkLayer {
     /// * `Err(IoLinkError)` if an error occurred
     pub fn successful_com(&mut self, transmission_rate: frame::msequence::TransmissionRate) {
         let _ = self.mode_handler.successful_com(transmission_rate);
+    }
+
+    /// Deliver a timer-expiry event to the appropriate DL sub-handler.
+    ///
+    /// This is called by [`crate::IoLinkDevice::poll`] after the physical
+    /// layer reports that a hardware or software timer has elapsed.  Each
+    /// timer is routed to the handler that owns it:
+    ///
+    /// | Timer            | Owner          | Effect                             |
+    /// |------------------|----------------|------------------------------------|
+    /// | `Tdsio`          | Mode Handler   | Triggers T10 (EstablishCom → Idle) |
+    /// | `MaxCycleTime`   | Message Handler| Triggers T10 (Idle → Idle / error) |
+    /// | `MaxUARTframeTime` / `MaxUARTFrameTime` | Message Handler | Triggers T9 (GetMessage → Idle) |
+    ///
+    /// # Specification Reference
+    ///
+    /// - IO-Link v1.1.4 Table 45: DL-mode handler state transitions (Tdsio / T10)
+    /// - IO-Link v1.1.4 Table 47: Message handler state transitions (T9, T10)
+    pub fn dl_timer_elapsed(&mut self, timer: handlers::pl::Timer) {
+        use handlers::pl::Timer;
+        match timer {
+            Timer::Tdsio => {
+                self.mode_handler.timer_elapsed(timer);
+            }
+            Timer::MaxCycleTime | Timer::MaxUARTFrameTime | Timer::MaxUARTframeTime => {
+                let _ = self.message_handler.timer_elapsed(timer);
+            }
+        }
     }
 
     /// Polls all data link layer components to advance their state.

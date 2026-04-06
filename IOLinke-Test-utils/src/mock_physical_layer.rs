@@ -85,37 +85,6 @@ impl MockPhysicalLayer {
         self.rx_data.clear();
         self.rx_data.extend_from_slice(data);
     }
-
-    pub fn timer_expired(&mut self, timer: Timer) {
-        println!("Timer expired: {:?}", timer);
-        // Here you can add any specific logic needed when a timer expires
-        // For example, triggering state transitions or error handling
-    }
-
-    /// Check if any timers have expired and call timer_expired for them
-    pub fn check_timers(&mut self) {
-        let expired_timers = {
-            let mut timers = self.timers.lock().unwrap();
-            let mut expired_timers = Vec::new();
-            let mut i = 0;
-
-            // Find expired timers
-            while i < timers.len() {
-                if timers[i].is_expired() {
-                    expired_timers.push(timers[i].timer_id);
-                    timers.remove(i);
-                } else {
-                    i += 1;
-                }
-            }
-            expired_timers
-        };
-
-        // Call timer_expired for each expired timer (after releasing the lock)
-        for timer_id in expired_timers {
-            self.timer_expired(timer_id);
-        }
-    }
 }
 
 /// Transfer the received data to the IO-Link device
@@ -175,5 +144,26 @@ impl PhysicalLayerReq for MockPhysicalLayer {
         let timer_state = MockTimerState::new(timer, duration_us);
         timers.push(timer_state);
         Ok(())
+    }
+
+    /// Scans all active timers, removes any that have elapsed, and returns
+    /// their identifiers.  Called once per `IoLinkDevice::poll()` cycle so
+    /// that expired timers are delivered to the DL state machines in the
+    /// same iteration that the deadline fires — no channel round-trip needed.
+    fn pl_collect_elapsed_timers(&mut self) -> heapless::Vec<Timer, 4> {
+        let mut timers = self.timers.lock().unwrap();
+        let mut expired: heapless::Vec<Timer, 4> = heapless::Vec::new();
+        let mut i = 0;
+        while i < timers.len() {
+            if timers[i].is_expired() {
+                // Capacity is 4 (one per Timer variant); silently ignore if
+                // somehow more than 4 expire at once (should never happen).
+                let _ = expired.push(timers[i].timer_id);
+                timers.remove(i);
+            } else {
+                i += 1;
+            }
+        }
+        expired
     }
 }

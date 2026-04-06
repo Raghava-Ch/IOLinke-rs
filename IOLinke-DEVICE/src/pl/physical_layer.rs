@@ -25,6 +25,8 @@ use iolinke_types::{
 
 use core::result::Result::{Err, Ok};
 
+extern crate heapless;
+
 // use embedded_hal::digital::{InputPin, OutputPin};
 
 /// Physical Layer Interface for low-level UART/PHY access.
@@ -413,5 +415,32 @@ pub trait PhysicalLayerReq {
         // TODO: "Implement timer restart logic");
 
         Ok(())
+    }
+
+    /// Collects and clears all timers that have elapsed since the last call.
+    ///
+    /// This method is called every `poll()` cycle.  Implementations should
+    /// atomically read and clear all hardware or software timer-expiry flags
+    /// so that each expiry is reported exactly once.
+    ///
+    /// On embedded targets the implementation reads the hardware timer ISR
+    /// flags and resets them.  In the test mock it compares `Instant::now()`
+    /// against the programmed deadline.
+    ///
+    /// The default implementation returns an empty collection (no timers
+    /// running / no expiry flags to check).
+    ///
+    /// # Returns
+    ///
+    /// Every [`handlers::pl::Timer`] that fired since the last call.
+    /// At most one entry per distinct timer identifier.
+    ///
+    /// # Specification Reference
+    ///
+    /// - IO-Link v1.1.4 Table 42: Wake-up procedure and retry characteristics
+    /// - Annex A.3.7: Cycle time (MaxCycleTime)
+    /// - Table 47: Internal items (MaxUARTframeTime, Tdsio)
+    fn pl_collect_elapsed_timers(&mut self) -> heapless::Vec<handlers::pl::Timer, 4> {
+        heapless::Vec::new()
     }
 }
