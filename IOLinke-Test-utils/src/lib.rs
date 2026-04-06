@@ -6,6 +6,7 @@
 
 // Re-export all submodules
 pub mod frame_utils;
+pub mod harness;
 pub mod mock_app_layer;
 pub mod mock_physical_layer;
 pub mod page_params;
@@ -22,6 +23,7 @@ pub use frame_utils::{
     create_startup_write_request, perform_startup_sequence, setup_device_configuration,
     validate_checksum, validate_device_frame_checksum,
 };
+pub use harness::TestHarness;
 pub use mock_physical_layer::{MockPhysicalLayer, MockTimerState};
 pub use page_params::{
     read_m_sequence_capability, read_min_cycle_time, read_process_data_in, read_process_data_out,

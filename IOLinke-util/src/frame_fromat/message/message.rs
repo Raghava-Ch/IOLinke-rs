@@ -930,3 +930,42 @@ macro_rules! clear_checksum_bits_0_to_5 {
         ($byte) & 0b11000000u8
     };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 1 — Unit tests
+//
+// Philosophy: these tests are pure functions.  No threads, no channels, no
+// mock devices.  Each test calls one function and asserts one outcome.
+// They run in microseconds and require zero external state.
+//
+// Naming convention: <noun>_<scenario>_<expected_outcome>
+// ─────────────────────────────────────────────────────────────────────────────
+#[cfg(test)]
+mod tests {
+    use super::{DeviceOperationMode, MessageBufferError, TxMessageBuffer, MAX_TX_FRAME_SIZE};
+
+    /// Verifies the IO-Link checksum algorithm (spec §A.1.6) against a known
+    /// byte vector.
+    ///
+    /// Derivation:
+    ///   seed              = 0x52
+    ///   XOR with [0x40, 0x00] → 0x52 ^ 0x40 ^ 0x00 = 0x12 = 0b0001_0010
+    ///   After 6-bit fold  → 0x35
+    #[test]
+    fn checksum_known_sequence_returns_correct_byte() {
+        let data = [0x40u8, 0x00u8];
+        assert_eq!(super::calculate_checksum(data.len(), &data), 0x35);
+    }
+
+    /// Verifies that calling `insert_pd` in Startup mode (which has no process
+    /// data) is correctly rejected with `InvalidDeviceOperationMode`.
+    #[test]
+    fn insert_pd_in_startup_mode_returns_invalid_mode_error() {
+        let mut tx = TxMessageBuffer::<MAX_TX_FRAME_SIZE>::new();
+        let result = tx.insert_pd(&[0xAB], DeviceOperationMode::Startup);
+        assert!(
+            matches!(result, Err(MessageBufferError::InvalidDeviceOperationMode)),
+            "expected Err(InvalidDeviceOperationMode)"
+        );
+    }
+}
