@@ -47,7 +47,7 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    /// Initialises the mock device, applies device configuration, and starts
+    /// Initializes the mock device, applies device configuration, and starts
     /// the background polling thread.
     pub fn new() -> Self {
         let (poll_tx, poll_response_rx) = setup_test_environment();

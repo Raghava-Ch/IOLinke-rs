@@ -945,7 +945,7 @@ mod tests {
     use super::{DeviceOperationMode, MessageBufferError, TxMessageBuffer, MAX_TX_FRAME_SIZE};
 
     /// Verifies the IO-Link checksum algorithm (spec §A.1.6) against a known
-    /// byte vector.
+    /// byte sequence.
     ///
     /// Derivation:
     ///   seed              = 0x52
